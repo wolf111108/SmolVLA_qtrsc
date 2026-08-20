@@ -1,0 +1,75 @@
+# ============================================================
+# VLA_tcs2 .gitignore
+# 策略: 代码/配置/轻量文本结果进入 git；
+#       大文件(checkpoint/视频/数据集/conda环境)不进 git，走单独迁移通道
+# ============================================================
+
+### Python ###
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+.python-version
+
+### 测试/缓存 ###
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.cache/
+
+### IDE / 编辑器 ###
+.vscode/
+.idea/
+*.swp
+
+### 日志 ###
+*.log
+logs/
+nohup.out
+
+### 实验输出（大文件，视频为主） ###
+# 评测视频不进 git（可用单独脚本/网盘迁移）
+outputs/**/videos/
+outputs/**/recordings/
+outputs/**/*.mp4
+# smoke test 目录整体不进 git
+outputs/*_smoke/
+outputs/*_smoke*/
+# 空的实验配置目录占位
+configs/experiments/.gitkeep
+
+### checkpoints（约 1-2GB，不进 git） ###
+checkpoints/
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+
+### HF / 数据集缓存（绝不应该在项目内） ###
+.cache/
+hf_cache/
+libero/assets/
+
+### 嵌套 git 仓库（迁移方案 B：通过 git bundle / tar 单独迁移） ###
+lerobot/
+lerobot_current/
+
+### 迁移/备份产物 ###
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+rsync_*.txt
+manifest_*.txt
+
+### jemalloc/编译残留 ###
+*.prof
+core

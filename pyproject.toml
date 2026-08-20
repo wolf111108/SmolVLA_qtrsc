@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vla-tcs2"
+version = "0.1.0"
+description = "VLA quantization, statistics and hardware proxy framework"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+where = ["src"]
