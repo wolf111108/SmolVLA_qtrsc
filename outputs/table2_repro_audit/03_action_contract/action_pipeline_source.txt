@@ -1,0 +1,146 @@
+src/lerobot/rollout/context.py:39:from lerobot.policies import get_policy_class, make_pre_post_processors
+src/lerobot/rollout/context.py:501:    preprocessor, postprocessor = make_pre_post_processors(
+src/lerobot/processor/factory.py:36:from .normalize_processor import NormalizerProcessorStep, UnnormalizerProcessorStep
+src/lerobot/processor/factory.py:96:    unnormalize: UnnormalizerProcessorStep
+src/lerobot/processor/factory.py:125:        unnormalize=UnnormalizerProcessorStep(
+src/lerobot/processor/factory.py:174:        output_steps=[s.unnormalize, s.to_cpu],
+src/lerobot/processor/migrate_policy_normalization.py:28:    - A postprocessor that unnormalizes outputs (actions) for inference.
+src/lerobot/processor/migrate_policy_normalization.py:41:Note: This script now uses the modern `make_pre_post_processors` and `make_policy_config`
+src/lerobot/processor/migrate_policy_normalization.py:61:from lerobot.policies import get_policy_class, make_policy_config, make_pre_post_processors
+src/lerobot/processor/migrate_policy_normalization.py:86:        "unnormalize_outputs.buffer_",
+src/lerobot/processor/migrate_policy_normalization.py:89:        "unnormalize.",  # Must come after unnormalize_* patterns
+src/lerobot/processor/migrate_policy_normalization.py:93:        "unnormalize_outputs.",
+src/lerobot/processor/migrate_policy_normalization.py:95:        "unnormalize_targets.",
+src/lerobot/processor/migrate_policy_normalization.py:269:        "unnormalize_outputs.",
+src/lerobot/processor/migrate_policy_normalization.py:272:        "unnormalize.",
+src/lerobot/processor/migrate_policy_normalization.py:613:    print("Creating preprocessor and postprocessor using make_pre_post_processors...")
+src/lerobot/processor/migrate_policy_normalization.py:614:    preprocessor, postprocessor = make_pre_post_processors(policy_cfg=policy_config, dataset_stats=stats)
+src/lerobot/processor/migrate_policy_normalization.py:693:- **Extracted patterns**: `normalize_inputs.*`, `unnormalize_outputs.*`, `normalize.*`, `unnormalize.*`, `input_normalizer.*`, `output_normalizer.*`
+src/lerobot/processor/__init__.py:31:    identity_transition,
+src/lerobot/processor/__init__.py:69:from .normalize_processor import NormalizerProcessorStep, UnnormalizerProcessorStep, hotswap_stats
+src/lerobot/processor/__init__.py:117:    "identity_transition",
+src/lerobot/processor/__init__.py:181:    "UnnormalizerProcessorStep",
+src/lerobot/processor/normalize_processor.py:499:@ProcessorStepRegistry.register(name="unnormalizer_processor")
+src/lerobot/processor/normalize_processor.py:500:class UnnormalizerProcessorStep(_NormalizationMixin, ProcessorStep):
+src/lerobot/processor/normalize_processor.py:518:    ) -> UnnormalizerProcessorStep:
+src/lerobot/processor/normalize_processor.py:520:        Creates an `UnnormalizerProcessorStep` using statistics from a `LeRobotDataset`.
+src/lerobot/processor/normalize_processor.py:529:            A new instance of `UnnormalizerProcessorStep`.
+src/lerobot/processor/normalize_processor.py:566:    statistics of any `NormalizerProcessorStep` or `UnnormalizerProcessorStep` it
+src/lerobot/processor/converters.py:411:def identity_transition(transition: EnvTransition) -> EnvTransition:
+src/lerobot/processor/converters.py:413:    An identity function for transitions, returning the input unchanged.
+src/lerobot/utils/rotation.py:55:            # For very small angles, use identity quaternion
+src/lerobot/utils/rotation.py:231:        Composition of a rotation with its inverse results in an identity transformation.
+src/lerobot/async_inference/policy_server.py:42:from lerobot.policies import get_policy_class, make_pre_post_processors
+src/lerobot/async_inference/policy_server.py:157:        self.preprocessor, self.postprocessor = make_pre_post_processors(
+src/lerobot/scripts/lerobot_eval.py:82:    make_env_pre_post_processors,
+src/lerobot/scripts/lerobot_eval.py:87:from lerobot.policies import PreTrainedPolicy, make_policy, make_pre_post_processors
+src/lerobot/scripts/lerobot_eval.py:776:    preprocessor, postprocessor = make_pre_post_processors(
+src/lerobot/scripts/lerobot_eval.py:783:    env_preprocessor, env_postprocessor = make_env_pre_post_processors(env_cfg=cfg.env, policy_cfg=cfg.policy)
+src/lerobot/scripts/lerobot_teleoperate.py:201:                # given that it is the identity processor as default
+src/lerobot/scripts/lerobot_train.py:72:from lerobot.envs import close_envs, make_env, make_env_pre_post_processors
+src/lerobot/scripts/lerobot_train.py:75:from lerobot.policies import PreTrainedPolicy, make_policy, make_pre_post_processors
+src/lerobot/scripts/lerobot_train.py:218:            # TODO(rcadene): policy.unnormalize_outputs(out_dict)
+src/lerobot/scripts/lerobot_train.py:515:            "unnormalizer_processor": {
+src/lerobot/scripts/lerobot_train.py:526:            postprocessor_overrides["unnormalizer_processor"]["stats"] = processor_dataset_stats
+src/lerobot/scripts/lerobot_train.py:543:        preprocessor, postprocessor = make_pre_post_processors(
+src/lerobot/scripts/lerobot_train.py:608:            env_preprocessor, env_postprocessor = make_env_pre_post_processors(
+src/lerobot/scripts/lerobot_record.py:402:    # Fall back to identity pipelines when the caller doesn't supply processors.
+src/lerobot/distributed/utils.py:49:    module; a version canary pins that identity.
+src/lerobot/rl/algorithms/base.py:134:        Implementations MUST keep the identity of any ``nn.Parameter`` that an
+src/lerobot/rl/actor.py:88:from lerobot.policies import make_policy, make_pre_post_processors
+src/lerobot/rl/actor.py:284:    preprocessor, postprocessor = make_pre_post_processors(
+src/lerobot/rl/learner.py:85:from lerobot.policies import make_policy, make_pre_post_processors
+src/lerobot/rl/learner.py:335:    preprocessor, postprocessor = make_pre_post_processors(
+src/lerobot/rl/gym_manipulator.py:53:    identity_transition,
+src/lerobot/rl/gym_manipulator.py:404:            steps=env_pipeline_steps, to_transition=identity_transition, to_output=identity_transition
+src/lerobot/rl/gym_manipulator.py:406:            steps=action_pipeline_steps, to_transition=identity_transition, to_output=identity_transition
+src/lerobot/rl/gym_manipulator.py:526:        steps=env_pipeline_steps, to_transition=identity_transition, to_output=identity_transition
+src/lerobot/rl/gym_manipulator.py:528:        steps=action_pipeline_steps, to_transition=identity_transition, to_output=identity_transition
+src/lerobot/envs/factory.py:37:def make_env_pre_post_processors(
+src/lerobot/envs/__init__.py:22:from .factory import make_env, make_env_config, make_env_pre_post_processors
+src/lerobot/envs/__init__.py:36:    "make_env_pre_post_processors",
+src/lerobot/envs/configs.py:127:        """Return (preprocessor, postprocessor) for this env. Default: identity."""
+src/lerobot/policies/factory.py:131:    This provides type hints for the optional arguments passed to `make_pre_post_processors`,
+src/lerobot/policies/factory.py:150:def make_pre_post_processors(
+src/lerobot/policies/eo1/processor_eo1.py:254:        steps.unnormalize,
+src/lerobot/policies/smolvla/modeling_smolvla.py:92:def unnormalize(x, min_val, max_val):
+src/lerobot/policies/smolvla/modeling_smolvla.py:109:    value = unnormalize(value, min_val=0.01844, max_val=0.05800)
+src/lerobot/policies/smolvla/modeling_smolvla.py:129:    value = unnormalize(value, min_val=0.4, max_val=1.5)
+src/lerobot/policies/smolvla/modeling_smolvla.py:138:    value = unnormalize(value, min_val=-0.6213, max_val=1.4910)
+src/lerobot/policies/smolvla/processor_smolvla.py:79:        steps.unnormalize,
+src/lerobot/policies/groot/configuration_groot.py:261:    # NormalizerProcessorStep/UnnormalizerProcessorStep, so this mapping is intentionally
+src/lerobot/policies/groot/processor_groot.py:369:# standard NormalizerProcessorStep/UnnormalizerProcessorStep or generic relative/absolute action steps.
+src/lerobot/policies/groot/processor_groot.py:377:        "unnormalizer_processor",
+src/lerobot/policies/groot/processor_groot.py:491:    # Drop the standard normalizer/unnormalizer override keys lerobot-train emits unconditionally:
+src/lerobot/policies/groot/processor_groot.py:2012:        """Return the latest unnormalized state split by checkpoint modality key."""
+src/lerobot/policies/groot/processor_groot.py:2241:def _unnormalize_min_max(action: np.ndarray, min_v: np.ndarray, max_v: np.ndarray) -> np.ndarray:
+src/lerobot/policies/groot/processor_groot.py:2303:    N1.7 predicts checkpoint-order action groups. This step unnormalizes each
+src/lerobot/policies/groot/processor_groot.py:2390:            decoded_groups[key] = _unnormalize_min_max(normalized, min_v, max_v)
+src/lerobot/policies/groot/processor_groot.py:2463:@ProcessorStepRegistry.register(name="groot_action_unpack_unnormalize_v2")
+src/lerobot/policies/groot/processor_groot.py:2580:# ``groot_action_unpack_unnormalize_v1``, silently loading the v2 step whose action-chunk
+src/lerobot/policies/groot/processor_groot.py:2586:    "groot_action_unpack_unnormalize_v1",
+src/lerobot/policies/__init__.py:21:from .factory import get_policy_class, make_policy, make_policy_config, make_pre_post_processors
+src/lerobot/policies/__init__.py:76:    "make_pre_post_processors",
+src/lerobot/policies/pi0_fast/processor_pi0_fast.py:131:    # Pi0Fast order: relative → normalize → tokenize → model → unnormalize → absolute
+src/lerobot/policies/pi0_fast/processor_pi0_fast.py:161:        steps.unnormalize,
+src/lerobot/policies/pi05/memory.py:135:    identity, so ``T == 1`` reduces to stock SigLIP spatial attention by
+src/lerobot/policies/pi05/processor_pi05.py:141:    # OpenPI order: raw → relative → normalize → model → unnormalize → absolute
+src/lerobot/policies/pi05/processor_pi05.py:163:        steps.unnormalize,
+src/lerobot/policies/multi_task_dit/processor_multi_task_dit.py:79:        steps.unnormalize,
+src/lerobot/policies/fastwam/processor_fastwam.py:108:        steps.unnormalize,
+src/lerobot/policies/wall_x/processor_wall_x.py:73:        steps.unnormalize,
+src/lerobot/policies/vla_jepa/processor_vla_jepa.py:29:    UnnormalizerProcessorStep,
+src/lerobot/policies/vla_jepa/processor_vla_jepa.py:56:    This ensures the unnormalizer receives an exact binary value, which is
+src/lerobot/policies/vla_jepa/processor_vla_jepa.py:57:    required when the model was trained with gripper in identity (mask=False)
+src/lerobot/policies/vla_jepa/processor_vla_jepa.py:125:    # NOTE: unlike the default policy unnormalizer (output features only), VLA-JEPA
+src/lerobot/policies/vla_jepa/processor_vla_jepa.py:126:    # unnormalizes over BOTH input and output features.
+src/lerobot/policies/vla_jepa/processor_vla_jepa.py:128:        UnnormalizerProcessorStep(
+src/lerobot/policies/vqbet/vqbet_utils.py:743:        # l2norm for cosine sim, otherwise identity
+src/lerobot/policies/vqbet/vqbet_utils.py:789:            maybe_detach = torch.detach if not self.learnable_codebook or freeze_codebook else identity
+src/lerobot/policies/vqbet/vqbet_utils.py:928:def identity(t):
+src/lerobot/policies/vqbet/vqbet_utils.py:1178:        self.transform_input = identity
+src/lerobot/policies/xvla/processor_xvla.py:75:        steps.unnormalize,
+src/lerobot/policies/pi0/processor_pi0.py:135:    # OpenPI order: raw → relative → normalize → model → unnormalize → absolute
+src/lerobot/policies/pi0/processor_pi0.py:152:        steps.unnormalize,
+src/lerobot/policies/lingbot_va/processor_lingbot_va.py:18:``[-1, 1]`` actions back to physical units with the built-in ``UnnormalizerProcessorStep``
+src/lerobot/policies/lingbot_va/processor_lingbot_va.py:31:    UnnormalizerProcessorStep,
+src/lerobot/policies/lingbot_va/processor_lingbot_va.py:59:        UnnormalizerProcessorStep(
+src/lerobot/policies/evo1/processor_evo1.py:36:    UnnormalizerProcessorStep,
+src/lerobot/policies/evo1/processor_evo1.py:313:    into the (un)normalizer via the generic override path in make_pre_post_processors. Those stats
+src/lerobot/policies/evo1/processor_evo1.py:326:        if isinstance(step, UnnormalizerProcessorStep):
+src/lerobot/policies/evo1/processor_evo1.py:366:            (idx + 1 for idx, step in enumerate(steps) if isinstance(step, UnnormalizerProcessorStep)),
+src/lerobot/policies/evo1/processor_evo1.py:401:        UnnormalizerProcessorStep(
+src/lerobot/policies/molmoact2/processor_molmoact2.py:49:    UnnormalizerProcessorStep,
+src/lerobot/policies/molmoact2/processor_molmoact2.py:637:@ProcessorStepRegistry.register(name="molmoact2_masked_unnormalizer")
+src/lerobot/policies/molmoact2/processor_molmoact2.py:639:class MolmoAct2MaskedUnnormalizerProcessorStep(_MolmoAct2MaskedNormalizationMixin, UnnormalizerProcessorStep):
+src/lerobot/policies/molmoact2/processor_molmoact2.py:1191:        MolmoAct2MaskedUnnormalizerProcessorStep(
+src/lerobot/policies/molmoact2/molmoact2_hf_model/modeling_molmoact2.py:996:    def unnormalize(self, x: Any) -> Any:
+src/lerobot/policies/molmoact2/molmoact2_hf_model/modeling_molmoact2.py:1058:    def unnormalize_action(self, action: Any, norm_tag: str) -> Any:
+src/lerobot/policies/molmoact2/molmoact2_hf_model/modeling_molmoact2.py:1060:        return action if normalizer is None else normalizer.unnormalize(action)
+src/lerobot/policies/molmoact2/molmoact2_hf_model/modeling_molmoact2.py:4417:        actions = stats.unnormalize_action(actions, norm_tag)
+src/lerobot/rewards/topreward/configuration_topreward.py:45:    runtime — the model identity is :attr:`vlm_name` (an HF Hub id).
+src/lerobot/rewards/topreward/processor_topreward.py:280:    the identity since TOPReward outputs a single reward tensor.
+src/lerobot/rewards/classifier/processor_classifier.py:48:    2. Applying an identity step, as no unnormalization is needed for the output logits.
+src/lerobot/rewards/robometer/processor_robometer.py:313:    postprocessor is the identity since Robometer outputs a single reward
+src/lerobot/motors/motors_bus.py:883:    def _unnormalize(self, ids_values: dict[int, float]) -> dict[int, int]:
+src/lerobot/motors/motors_bus.py:887:        unnormalized_values = {}
+src/lerobot/motors/motors_bus.py:899:                unnormalized_values[id_] = int(((bounded_val + 100) / 200) * (max_ - min_) + min_)
+src/lerobot/motors/motors_bus.py:903:                unnormalized_values[id_] = int((bounded_val / 100) * (max_ - min_) + min_)
+src/lerobot/motors/motors_bus.py:907:                unnormalized_values[id_] = int((val * max_res / 360) + mid)
+src/lerobot/motors/motors_bus.py:911:        return unnormalized_values
+src/lerobot/motors/motors_bus.py:1092:            int_value = self._unnormalize({id_: value})[id_]
+src/lerobot/motors/motors_bus.py:1253:            int_ids_values = self._unnormalize(raw_ids_values)
+src/lerobot/envs/vlabench.py:451:    def step(self, action: np.ndarray) -> tuple[RobotObservation, float, bool, bool, dict[str, Any]]:
+src/lerobot/envs/robocasa.py:283:    def step(self, action: np.ndarray) -> tuple[RobotObservation, float, bool, bool, dict[str, Any]]:
+src/lerobot/envs/libero.py:90:def get_libero_dummy_action():
+src/lerobot/envs/libero.py:352:            raw_obs, _, _, _ = self._env.step(get_libero_dummy_action())
+src/lerobot/envs/libero.py:366:    def step(self, action: np.ndarray) -> tuple[RobotObservation, float, bool, bool, dict[str, Any]]:
+src/lerobot/envs/libero.py:374:        raw_obs, reward, done, info = self._env.step(action)
+src/lerobot/envs/metaworld.py:233:    def step(self, action: np.ndarray) -> tuple[RobotObservation, float, bool, bool, dict[str, Any]]:
+src/lerobot/envs/metaworld.py:253:        raw_obs, reward, done, truncated, info = self._env.step(action)
+src/lerobot/envs/robotwin.py:494:    def step(self, action: np.ndarray) -> tuple[RobotObservation, float, bool, bool, dict[str, Any]]:
+src/lerobot/envs/robotwin.py:506:                self._env.step(action)
+src/lerobot/envs/robomme.py:133:    def step(self, action):
+src/lerobot/envs/robomme.py:134:        obs, reward, terminated, truncated, info = self._env.step(action)
+src/lerobot/envs/utils.py:226:    def step(self, action):
+src/lerobot/envs/utils.py:300:    def step(self, actions):

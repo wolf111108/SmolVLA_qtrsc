@@ -1,0 +1,124 @@
+src/lerobot/envs/vlabench.py:117:    metadata = {"render_modes": ["rgb_array"], "render_fps": 10}
+src/lerobot/envs/robocasa.py:37:ACTION_DIM = 12  # base_motion(4) + control_mode(1) + ee_pos(3) + ee_rot(3) + gripper(1)
+src/lerobot/envs/robocasa.py:110:            "Set `--env.episode_length=<steps>` explicitly."
+src/lerobot/envs/robocasa.py:117:    Layout: base_motion(4) + control_mode(1) + ee_pos(3) + ee_rot(3) + gripper(1)
+src/lerobot/envs/robocasa.py:121:        "action.control_mode": flat_action[4:5],
+src/lerobot/envs/robocasa.py:136:    metadata = {"render_modes": ["rgb_array"], "render_fps": 20}
+src/lerobot/envs/robocasa.py:149:        episode_length: int | None = None,
+src/lerobot/envs/robocasa.py:170:        self._max_episode_steps = episode_length if episode_length is not None else _get_task_horizon(task)
+src/lerobot/envs/robocasa.py:327:    episode_length: int | None,
+src/lerobot/envs/robocasa.py:348:            episode_length=episode_length,
+src/lerobot/envs/robocasa.py:362:    episode_length: int | None = None,
+src/lerobot/envs/robocasa.py:423:            episode_length=episode_length,
+src/lerobot/envs/libero.py:62:# LIBERO-plus's own suite.get_task_init_states() (we reimplement it here so we
+src/lerobot/envs/libero.py:67:def get_task_init_states(task_suite: Any, i: int, is_libero_plus: bool = False) -> np.ndarray:
+src/lerobot/envs/libero.py:69:    filename = Path(task.init_states_file)
+src/lerobot/envs/libero.py:70:    root = Path(get_libero_path("init_states"))
+src/lerobot/envs/libero.py:73:        init_states_path = root / task.problem_folder / filename.name
+src/lerobot/envs/libero.py:74:        return torch.load(init_states_path, weights_only=False)  # nosec B614
+src/lerobot/envs/libero.py:79:        init_states_path = root / "libero_newobj" / task.problem_folder / filename.name
+src/lerobot/envs/libero.py:80:        init_states = torch.load(init_states_path, weights_only=False)  # nosec B614
+src/lerobot/envs/libero.py:81:        return init_states.reshape(1, -1)
+src/lerobot/envs/libero.py:86:    init_states_path = root / task.problem_folder / stripped
+src/lerobot/envs/libero.py:87:    return torch.load(init_states_path, weights_only=False)  # nosec B614
+src/lerobot/envs/libero.py:108:    metadata = {"render_modes": ["rgb_array"], "render_fps": 80}
+src/lerobot/envs/libero.py:115:        episode_length: int | None = None,
+src/lerobot/envs/libero.py:123:        init_states: bool = True,
+src/lerobot/envs/libero.py:127:        num_steps_wait: int = 10,
+src/lerobot/envs/libero.py:128:        control_freq: int = 20,
+src/lerobot/envs/libero.py:129:        control_mode: str = "relative",
+src/lerobot/envs/libero.py:131:        hard_reset: bool = True,
+src/lerobot/envs/libero.py:134:        if control_freq <= 0:
+src/lerobot/envs/libero.py:135:            raise ValueError(f"control_freq must be positive, got {control_freq}")
+src/lerobot/envs/libero.py:136:        if not hard_reset and not init_states:
+src/lerobot/envs/libero.py:137:            raise ValueError("hard_reset=False requires init_states=True")
+src/lerobot/envs/libero.py:146:        self.init_states = init_states
+src/lerobot/envs/libero.py:162:        self.num_steps_wait = num_steps_wait
+src/lerobot/envs/libero.py:163:        self.control_freq = control_freq
+src/lerobot/envs/libero.py:164:        self.hard_reset = hard_reset
+src/lerobot/envs/libero.py:166:        self.episode_length = episode_length
+src/lerobot/envs/libero.py:168:        self._init_states = (
+src/lerobot/envs/libero.py:169:            get_task_init_states(task_suite, self.task_id, is_libero_plus=self.is_libero_plus)
+src/lerobot/envs/libero.py:170:            if self.init_states
+src/lerobot/envs/libero.py:173:        self._reset_stride = n_envs  # when performing a reset, append `_reset_stride` to `init_state_id`.
+src/lerobot/envs/libero.py:175:        self.init_state_id = self.episode_index  # tie each sub-env to a fixed init state
+src/lerobot/envs/libero.py:191:            if self.episode_length is None
+src/lerobot/envs/libero.py:192:            else self.episode_length
+src/lerobot/envs/libero.py:194:        self.control_mode = control_mode
+src/lerobot/envs/libero.py:271:            control_freq=self.control_freq,
+src/lerobot/envs/libero.py:274:            hard_reset=self.hard_reset,
+src/lerobot/envs/libero.py:344:        if self.init_states and self._init_states is not None:
+src/lerobot/envs/libero.py:345:            raw_obs = self._env.set_init_state(self._init_states[self.init_state_id % len(self._init_states)])
+src/lerobot/envs/libero.py:346:            self.init_state_id += self._reset_stride  # Change init_state_id when reset
+src/lerobot/envs/libero.py:351:        for _ in range(self.num_steps_wait):
+src/lerobot/envs/libero.py:354:        if self.control_mode == "absolute":
+src/lerobot/envs/libero.py:357:        elif self.control_mode == "relative":
+src/lerobot/envs/libero.py:361:            raise ValueError(f"Invalid control mode: {self.control_mode}")
+src/lerobot/envs/libero.py:410:    episode_length: int | None,
+src/lerobot/envs/libero.py:411:    init_states: bool,
+src/lerobot/envs/libero.py:413:    control_mode: str,
+src/lerobot/envs/libero.py:426:            init_states=init_states,
+src/lerobot/envs/libero.py:427:            episode_length=episode_length,
+src/lerobot/envs/libero.py:430:            control_mode=control_mode,
+src/lerobot/envs/libero.py:450:    init_states: bool = True,
+src/lerobot/envs/libero.py:452:    control_mode: str = "relative",
+src/lerobot/envs/libero.py:453:    episode_length: int | None = None,
+src/lerobot/envs/libero.py:481:        f"Creating LIBERO envs | suites={suite_names} | n_envs(per task)={n_envs} | init_states={init_states}"
+src/lerobot/envs/libero.py:506:                episode_length=episode_length,
+src/lerobot/envs/libero.py:511:                init_states=init_states,
+src/lerobot/envs/libero.py:513:                control_mode=control_mode,
+src/lerobot/envs/configs.py:58:    fps: int = 30
+src/lerobot/envs/configs.py:151:    fps: int = 50
+src/lerobot/envs/configs.py:152:    episode_length: int = 400
+src/lerobot/envs/configs.py:187:            "max_episode_steps": self.episode_length,
+src/lerobot/envs/configs.py:195:    fps: int = 10
+src/lerobot/envs/configs.py:196:    episode_length: int = 300
+src/lerobot/envs/configs.py:233:            "max_episode_steps": self.episode_length,
+src/lerobot/envs/configs.py:294:    control_mode: str = "gamepad"
+src/lerobot/envs/configs.py:325:    fps: int = 20  # Must match robosuite's default control_freq (20 Hz)
+src/lerobot/envs/configs.py:326:    episode_length: int | None = None
+src/lerobot/envs/configs.py:330:    init_states: bool = True
+src/lerobot/envs/configs.py:331:    hard_reset: bool = True
+src/lerobot/envs/configs.py:355:    control_mode: str = "relative"  # or "absolute"
+src/lerobot/envs/configs.py:358:        if self.fps <= 0:
+src/lerobot/envs/configs.py:359:            raise ValueError(f"fps must be positive, got {self.fps}")
+src/lerobot/envs/configs.py:360:        if not self.hard_reset and not self.init_states:
+src/lerobot/envs/configs.py:361:            raise ValueError("hard_reset=False requires init_states=True")
+src/lerobot/envs/configs.py:421:            "control_freq": self.fps,
+src/lerobot/envs/configs.py:422:            "hard_reset": self.hard_reset,
+src/lerobot/envs/configs.py:438:            init_states=self.init_states,
+src/lerobot/envs/configs.py:441:            control_mode=self.control_mode,
+src/lerobot/envs/configs.py:442:            episode_length=self.episode_length,
+src/lerobot/envs/configs.py:458:    fps: int = 80
+src/lerobot/envs/configs.py:459:    episode_length: int = 400
+src/lerobot/envs/configs.py:513:    fps: int = 20
+src/lerobot/envs/configs.py:514:    episode_length: int | None = None
+src/lerobot/envs/configs.py:579:            episode_length=self.episode_length,
+src/lerobot/envs/configs.py:588:    fps: int = 10
+src/lerobot/envs/configs.py:589:    episode_length: int = 500
+src/lerobot/envs/configs.py:631:            "max_episode_steps": self.episode_length,
+src/lerobot/envs/configs.py:653:    episode_length: int = 300
+src/lerobot/envs/configs.py:767:    fps: int = 25
+src/lerobot/envs/configs.py:768:    episode_length: int = 1200
+src/lerobot/envs/configs.py:841:            episode_length=self.episode_length,
+src/lerobot/envs/configs.py:860:    fps: int = 10
+src/lerobot/envs/configs.py:861:    episode_length: int = 300
+src/lerobot/envs/configs.py:904:            episode_length=self.episode_length,
+src/lerobot/envs/metaworld.py:79:    metadata = {"render_modes": ["rgb_array"], "render_fps": 80}
+src/lerobot/envs/robotwin.py:348:    metadata = {"render_modes": ["rgb_array"], "render_fps": 25}
+src/lerobot/envs/robotwin.py:358:        episode_length: int = DEFAULT_EPISODE_LENGTH,
+src/lerobot/envs/robotwin.py:381:        self.episode_length = episode_length
+src/lerobot/envs/robotwin.py:382:        self._max_episode_steps = episode_length  # lerobot_eval.rollout reads this
+src/lerobot/envs/robotwin.py:517:        truncated = self._step_count >= self.episode_length
+src/lerobot/envs/robotwin.py:561:    episode_length: int,
+src/lerobot/envs/robotwin.py:574:            episode_length=episode_length,
+src/lerobot/envs/robotwin.py:588:    episode_length: int = DEFAULT_EPISODE_LENGTH,
+src/lerobot/envs/robotwin.py:605:        episode_length: Max steps before truncation.
+src/lerobot/envs/robotwin.py:639:            episode_length=episode_length,
+src/lerobot/envs/robomme.py:52:    metadata = {"render_modes": ["rgb_array"], "render_fps": 10}
+src/lerobot/envs/robomme.py:201:    episode_length: int,
+src/lerobot/envs/robomme.py:214:            max_steps=episode_length,
+src/lerobot/envs/robomme.py:227:    episode_length: int = 300,
+src/lerobot/envs/robomme.py:263:                episode_length=episode_length,
+src/lerobot/envs/utils.py:192:    `max(episode_lengths)` iterations to complete work that only needs
+src/lerobot/envs/utils.py:193:    `mean(episode_lengths)`.
