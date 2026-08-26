@@ -1,0 +1,47 @@
+{
+  "per_task": [
+    {
+      "task_group": "push-v3",
+      "task_id": 0,
+      "metrics": {
+        "sum_rewards": [
+          227.89699914039952
+        ],
+        "max_rewards": [
+          10.0
+        ],
+        "successes": [
+          true
+        ],
+        "video_paths": [
+          "/home/lfwang/VLA_tcs2/outputs/metaworld_smoke_push_origcfg/videos/push-v3_0/eval_episode_0.mp4"
+        ],
+        "predicted_video_paths": []
+      }
+    }
+  ],
+  "per_group": {
+    "push-v3": {
+      "avg_sum_reward": 227.89699914039952,
+      "avg_max_reward": 10.0,
+      "pc_success": 100.0,
+      "n_episodes": 1,
+      "video_paths": [
+        "/home/lfwang/VLA_tcs2/outputs/metaworld_smoke_push_origcfg/videos/push-v3_0/eval_episode_0.mp4"
+      ],
+      "predicted_video_paths": []
+    }
+  },
+  "overall": {
+    "avg_sum_reward": 227.89699914039952,
+    "avg_max_reward": 10.0,
+    "pc_success": 100.0,
+    "n_episodes": 1,
+    "eval_s": 23.592350959777832,
+    "eval_ep_s": 23.59235143661499,
+    "video_paths": [
+      "/home/lfwang/VLA_tcs2/outputs/metaworld_smoke_push_origcfg/videos/push-v3_0/eval_episode_0.mp4"
+    ],
+    "predicted_video_paths": []
+  }
+}

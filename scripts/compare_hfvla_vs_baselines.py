@@ -30,27 +30,27 @@ MODELS = {
     "hfvla": {
         "label": "HuggingFaceVLA/smolvla_libero (official ref)",
         "tag": "32 层 / 0.5 宽 / 500M-Instruct / 8D state + image/image2",
-        "suites": {s: f"hfvla_libero_{s}/eval_info.json" for s in SUITES},
+        "suites": {s: f"libero/hfvla_libero_{s}/eval_info.json" for s in SUITES},
     },
     "lerobot": {
         "label": "lerobot/smolvla_libero (A)",
         "tag": "16 层 / 0.75 宽 / full finetune ~25k",
         "suites": {
-            "libero_spatial": "baseline_smolvla450m_libero_spatial/eval_info.json",
-            "libero_object": "lerobot_smolvla_libero_libero_object/eval_info.json",
-            "libero_goal": "lerobot_smolvla_libero_libero_goal/eval_info.json",
-            "libero_10": "lerobot_smolvla_libero_libero_10/eval_info.json",
+            "libero_spatial": "libero/baseline_smolvla450m_libero_spatial/eval_info.json",
+            "libero_object": "libero/lerobot_smolvla_libero_libero_object/eval_info.json",
+            "libero_goal": "libero/lerobot_smolvla_libero_libero_goal/eval_info.json",
+            "libero_10": "libero/lerobot_smolvla_libero_libero_10/eval_info.json",
         },
     },
     "k1000dai": {
         "label": "k1000dai/smolvla_libero_finetune (D)",
         "tag": "16 层 / 0.75 宽 / 100k / batch64",
-        "suites": {s: f"k1000dai_ft100k_{s}/eval_info.json" for s in SUITES},
+        "suites": {s: f"libero/k1000dai_ft100k_{s}/eval_info.json" for s in SUITES},
     },
     "tiantianx": {
         "label": "tiantianx/smolvla_libero (C)",
         "tag": "16 层 / 0.75 宽 / 100k / expert-only",
-        "suites": {s: f"tiantianx_smolvla_libero_{s}/eval_info.json" for s in SUITES},
+        "suites": {s: f"libero/tiantianx_smolvla_libero_{s}/eval_info.json" for s in SUITES},
     },
 }
 

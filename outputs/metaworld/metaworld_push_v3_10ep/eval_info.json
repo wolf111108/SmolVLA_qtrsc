@@ -1,0 +1,101 @@
+{
+  "per_task": [
+    {
+      "task_group": "push-v3",
+      "task_id": 0,
+      "metrics": {
+        "sum_rewards": [
+          227.89699914039952,
+          32.219206426079836,
+          179.67062872112274,
+          29.239561252530944,
+          146.3131033091018,
+          263.23235077582854,
+          60.187802740278016,
+          214.66797516701783,
+          176.83691973127762,
+          258.39949489545313
+        ],
+        "max_rewards": [
+          10.0,
+          10.0,
+          0.8640576221125933,
+          10.0,
+          0.6973632974046585,
+          10.0,
+          10.0,
+          10.0,
+          10.0,
+          10.0
+        ],
+        "successes": [
+          true,
+          true,
+          false,
+          true,
+          false,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "video_paths": [
+          "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_0.mp4",
+          "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_1.mp4",
+          "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_2.mp4",
+          "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_3.mp4",
+          "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_4.mp4",
+          "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_5.mp4",
+          "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_6.mp4",
+          "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_7.mp4",
+          "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_8.mp4",
+          "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_9.mp4"
+        ],
+        "predicted_video_paths": []
+      }
+    }
+  ],
+  "per_group": {
+    "push-v3": {
+      "avg_sum_reward": 158.866404215909,
+      "avg_max_reward": 8.156142091951725,
+      "pc_success": 80.0,
+      "n_episodes": 10,
+      "video_paths": [
+        "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_0.mp4",
+        "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_1.mp4",
+        "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_2.mp4",
+        "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_3.mp4",
+        "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_4.mp4",
+        "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_5.mp4",
+        "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_6.mp4",
+        "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_7.mp4",
+        "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_8.mp4",
+        "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_9.mp4"
+      ],
+      "predicted_video_paths": []
+    }
+  },
+  "overall": {
+    "avg_sum_reward": 158.866404215909,
+    "avg_max_reward": 8.156142091951725,
+    "pc_success": 80.0,
+    "n_episodes": 10,
+    "eval_s": 440.53232884407043,
+    "eval_ep_s": 44.053233122825624,
+    "video_paths": [
+      "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_0.mp4",
+      "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_1.mp4",
+      "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_2.mp4",
+      "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_3.mp4",
+      "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_4.mp4",
+      "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_5.mp4",
+      "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_6.mp4",
+      "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_7.mp4",
+      "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_8.mp4",
+      "/home/lfwang/VLA_tcs2/outputs/metaworld_push_v3_10ep/videos/push-v3_0/eval_episode_9.mp4"
+    ],
+    "predicted_video_paths": []
+  }
+}

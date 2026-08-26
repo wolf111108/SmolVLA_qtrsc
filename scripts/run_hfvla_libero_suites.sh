@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # HuggingFaceVLA/smolvla_libero (官方 current reference, 32 层/0.5 宽) 在全部四个 LIBERO suite 上的 evaluation
 # 用法: bash run_hfvla_libero_suites.sh
-# 输出: ~/VLA_tcs2/outputs/hfvla_libero_<suite>/eval_info.json
+# 输出: ~/VLA_tcs2/outputs/libero/hfvla_libero_<suite>/eval_info.json
 #
 # 与 run_lerobot_libero_suites.sh / run_tiantianx_libero_suites.sh 的区别:
 # - POLICY 换成 HuggingFaceVLA/smolvla_libero (32 层 / 0.5 宽, official current contract)
@@ -24,13 +24,13 @@ cd "$HOME/VLA_tcs2/lerobot_current"
 POLICY="HuggingFaceVLA/smolvla_libero"
 SEED=1000
 BASE_OUT="$HOME/VLA_tcs2/outputs"
-LOGDIR="$BASE_OUT/hfvla_libero_multisuite_logs"
+LOGDIR="$BASE_OUT/libero/logs"
 mkdir -p "$LOGDIR"
 
 SUITES=("libero_spatial" "libero_object" "libero_goal" "libero_10")
 
 for SUITE in "${SUITES[@]}"; do
-    OUT="$BASE_OUT/hfvla_libero_${SUITE}"
+    OUT="$BASE_OUT/libero/hfvla_libero_${SUITE}"
     if [[ -f "$OUT/eval_info.json" ]]; then
         echo "[skip] $SUITE 已有结果: $OUT/eval_info.json"
         continue
@@ -58,7 +58,7 @@ from pathlib import Path
 
 base = Path.home() / "VLA_tcs2/outputs"
 for suite in ["libero_spatial", "libero_object", "libero_goal", "libero_10"]:
-    f = base / f"hfvla_libero_{suite}/eval_info.json"
+    f = base / f"libero/hfvla_libero_{suite}/eval_info.json"
     if not f.exists():
         print(f"{suite}: 未完成")
         continue

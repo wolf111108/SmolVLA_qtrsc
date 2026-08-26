@@ -36,21 +36,21 @@ MODELS = {
     "tiantianx": {
         "label": "tiantianx/smolvla_libero",
         "tag": "C: paper-like (16/0.75, 100k, expert-only)",
-        "suites": {s: f"tiantianx_smolvla_libero_{s}/eval_info.json" for s in SUITES},
+        "suites": {s: f"libero/tiantianx_smolvla_libero_{s}/eval_info.json" for s in SUITES},
     },
     "lerobot": {
         "label": "lerobot/smolvla_libero",
         "tag": "A: legacy (16/0.75, ~25k, full finetune)",
         "suites": {
-            "libero_spatial": "baseline_smolvla450m_libero_spatial/eval_info.json",
-            "libero_object": "lerobot_smolvla_libero_libero_object/eval_info.json",
-            "libero_goal": "lerobot_smolvla_libero_libero_goal/eval_info.json",
-            "libero_10": "lerobot_smolvla_libero_libero_10/eval_info.json",
+            "libero_spatial": "libero/baseline_smolvla450m_libero_spatial/eval_info.json",
+            "libero_object": "libero/lerobot_smolvla_libero_libero_object/eval_info.json",
+            "libero_goal": "libero/lerobot_smolvla_libero_libero_goal/eval_info.json",
+            "libero_10": "libero/lerobot_smolvla_libero_libero_10/eval_info.json",
         },
     },
 }
 
-OUT_PATH = Path(__file__).resolve().parent.parent / "outputs" / "tiantianx_vs_lerobot_libero.md"
+OUT_PATH = Path(__file__).resolve().parent.parent / "outputs" / "reports" / "tiantianx_vs_lerobot_libero.md"
 
 
 def load_suite(base: Path, rel: str):

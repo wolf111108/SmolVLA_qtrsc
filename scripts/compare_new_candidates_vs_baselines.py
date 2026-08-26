@@ -30,31 +30,31 @@ MODELS = {
     "hfvla_ckpts100k": {
         "label": "HuggingFaceVLA/smolvla_libero_ckpts@100k",
         "tag": "官方 16/0.75, pi/libero 数据, DEPRECIATED 但 recipe 贴论文",
-        "suites": {s: f"hfvla_ckpts100k_{s}/eval_info.json" for s in SUITES},
+        "suites": {s: f"libero/hfvla_ckpts100k_{s}/eval_info.json" for s in SUITES},
     },
     "k1000dai_ft100k": {
         "label": "k1000dai/smolvla_libero_finetune",
         "tag": "社区 16/0.75, 100k steps, batch64, from smolvla_base",
-        "suites": {s: f"k1000dai_ft100k_{s}/eval_info.json" for s in SUITES},
+        "suites": {s: f"libero/k1000dai_ft100k_{s}/eval_info.json" for s in SUITES},
     },
     "tiantianx": {
         "label": "tiantianx/smolvla_libero (C)",
         "tag": "paper-like 社区复现, 100k, expert-only",
-        "suites": {s: f"tiantianx_smolvla_libero_{s}/eval_info.json" for s in SUITES},
+        "suites": {s: f"libero/tiantianx_smolvla_libero_{s}/eval_info.json" for s in SUITES},
     },
     "lerobot": {
         "label": "lerobot/smolvla_libero (A)",
         "tag": "legacy 社区, ~25k, full finetune",
         "suites": {
-            "libero_spatial": "baseline_smolvla450m_libero_spatial/eval_info.json",
-            "libero_object": "lerobot_smolvla_libero_libero_object/eval_info.json",
-            "libero_goal": "lerobot_smolvla_libero_libero_goal/eval_info.json",
-            "libero_10": "lerobot_smolvla_libero_libero_10/eval_info.json",
+            "libero_spatial": "libero/baseline_smolvla450m_libero_spatial/eval_info.json",
+            "libero_object": "libero/lerobot_smolvla_libero_libero_object/eval_info.json",
+            "libero_goal": "libero/lerobot_smolvla_libero_libero_goal/eval_info.json",
+            "libero_10": "libero/lerobot_smolvla_libero_libero_10/eval_info.json",
         },
     },
 }
 
-OUT_MD = Path(__file__).resolve().parent.parent / "outputs" / "new_candidates_vs_baselines.md"
+OUT_MD = Path(__file__).resolve().parent.parent / "outputs" / "reports" / "new_candidates_vs_baselines.md"
 OUT_LOG = Path(__file__).resolve().parent.parent / "logs" / f"{date.today().isoformat()}_new_candidates_libero_benchmark.md"
 
 
@@ -167,7 +167,7 @@ def main():
             "smoke 失败的模型自动跳过, 不阻塞另一个。",
             "",
             "## 结果",
-            "(跑完后由 compare_new_candidates_vs_baselines.py 生成, 见 outputs/new_candidates_vs_baselines.md)",
+            "(跑完后由 compare_new_candidates_vs_baselines.py 生成, 见 outputs/reports/new_candidates_vs_baselines.md)",
             "",
             "## 结论与下一步",
             "- 待回填: 哪个候选最接近论文 87.3%; 决定量化 baseline 最终选型。",

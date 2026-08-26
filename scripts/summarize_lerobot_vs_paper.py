@@ -31,14 +31,14 @@ SUITE_LABEL = {
 # suite -> eval_info.json 候选路径(按优先级)
 CANDIDATES = {
     "libero_spatial": [
-        "baseline_smolvla450m_libero_spatial/eval_info.json",
+        "libero/baseline_smolvla450m_libero_spatial/eval_info.json",
     ],
-    "libero_object": ["lerobot_smolvla_libero_libero_object/eval_info.json"],
-    "libero_goal": ["lerobot_smolvla_libero_libero_goal/eval_info.json"],
-    "libero_10": ["lerobot_smolvla_libero_libero_10/eval_info.json"],
+    "libero_object": ["libero/lerobot_smolvla_libero_libero_object/eval_info.json"],
+    "libero_goal": ["libero/lerobot_smolvla_libero_libero_goal/eval_info.json"],
+    "libero_10": ["libero/lerobot_smolvla_libero_libero_10/eval_info.json"],
 }
 
-OUT_PATH = Path(__file__).resolve().parent.parent / "outputs" / "lerobot_smolvla_libero_vs_paper.md"
+OUT_PATH = Path(__file__).resolve().parent.parent / "outputs" / "reports" / "lerobot_smolvla_libero_vs_paper.md"
 
 
 def load_suite(base: Path, suite: str, override: str | None):
