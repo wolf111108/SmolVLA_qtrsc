@@ -1,9 +1,0 @@
-src/lerobot/scripts/lerobot_train.py:192:    # with gradient_accumulation_steps == 1 it is a transparent no-op.
-src/lerobot/scripts/lerobot_train.py:193:    with accelerator.accumulate(policy):
-src/lerobot/scripts/lerobot_train.py:232:            optimizer.step()
-src/lerobot/scripts/lerobot_train.py:598:    # `samples_per_step x gradient_accumulation_steps` samples per update.
-src/lerobot/scripts/lerobot_train.py:600:    effective_batch_size = samples_per_step * cfg.accelerator.gradient_accumulation.steps
-src/lerobot/scripts/lerobot_train.py:616:            f"x {cfg.accelerator.gradient_accumulation.steps} grad accum = {effective_batch_size} "
-src/lerobot/scripts/lerobot_train.py:726:    for _ in range(step, cfg.steps):
-src/lerobot/common/train_utils.py:155:        "grad_accum_steps": cfg.accelerator.gradient_accumulation.steps,
-src/lerobot/common/train_utils.py:411:            cfg.accelerator.gradient_accumulation.steps,

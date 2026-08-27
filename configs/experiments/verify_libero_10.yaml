@@ -1,4 +1,6 @@
-output_dir: outputs/experiments/smolvla_fp_baseline
+# 验证用 config：libero_10（FP baseline，不量化，Long suite）
+output_dir: outputs/verify_libero/libero_10
+
 model:
   type: smolvla
   path: lerobot/smolvla_libero
@@ -7,9 +9,11 @@ model:
   overrides:
     n_action_steps: 10
     num_steps: 10
+
 quantization:
   enabled: false
   scale_dir: scales/smolvla_int8
+
 calibration:
   dataset_repo_id: HuggingFaceVLA/libero
   dataset_revision: v3.0
@@ -17,12 +21,13 @@ calibration:
   batch_size: 8
   frame_stride: 4
   seed: 42
+
 evaluation:
   env:
     type: libero
-    task: libero_spatial
+    task: libero_10
     max_parallel_tasks: 1
-  n_episodes: 10
+  n_episodes: 50
   batch_size: 1
   use_async_envs: false
   seed: 1000

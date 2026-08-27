@@ -34,14 +34,11 @@ htmlcov/
 *.log
 nohup.out
 
-### 实验输出（大文件，视频为主） ###
-# 评测视频不进 git（可用单独脚本/网盘迁移）
-outputs/**/videos/
-outputs/**/recordings/
-outputs/**/*.mp4
-# smoke test 目录整体不进 git
-outputs/*_smoke/
-outputs/*_smoke*/
+### 实验输出（大文件，整体不进 git） ###
+outputs/
+
+### 工作日志（不进 git） ###
+doc/logs/
 
 ### checkpoints（约 1-2GB，不进 git） ###
 checkpoints/
