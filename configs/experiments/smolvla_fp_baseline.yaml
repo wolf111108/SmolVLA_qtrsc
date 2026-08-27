@@ -1,0 +1,48 @@
+# VLA-TCS2 FP baseline（不量化）：验证量化工程 eval 链路与 lerobot-eval 等价
+# 用法:
+#   conda activate smolvla_eval
+#   cd ~/VLA_tcs2
+#   python main.py --config configs/experiments/smolvla_fp_baseline.yaml
+#
+# 对比目标: outputs/table2_repro_audit/06_simulator/mj332_A_libero_spatial/eval_info.json
+#   (lerobot-eval 跑的 A 类 spatial，n_action_steps=10, seed=1000)
+# 期望: 本工程 spatial 结果应与之一致（验证 eval 等价性）
+
+output_dir: outputs/experiments/smolvla_fp_baseline
+
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10   # 与你已有的 mj332 A 类 spatial 脚本保持一致
+    num_steps: 10
+
+# 关闭量化 -> 走 raw 浮点基线，验证 eval 等价性
+quantization:
+  enabled: false
+  scale_dir: scales/smolvla_int8
+
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8
+  batch_size: 8
+  frame_stride: 4
+  seed: 42
+
+evaluation:
+  env:
+    type: libero
+    task: libero_spatial
+    max_parallel_tasks: 1
+  n_episodes: 10
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  # A 类 checkpoint 需要 camera 重命名
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2

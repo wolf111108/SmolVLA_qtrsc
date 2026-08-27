@@ -1,0 +1,60 @@
+# VLA-TCS2 示例实验配置：SmolVLA int8 量化（A 类 baseline 开发路径）
+# 用法:
+#   python main.py --config configs/experiments/smolvla_int8.yaml            # 校准 + 评测
+#   python main.py --config configs/experiments/smolvla_int8.yaml --skip-calibration   # 复用 scale
+#   python main.py --config configs/experiments/smolvla_int8.yaml --skip-evaluation    # 只校准
+
+output_dir: outputs/experiments/smolvla_int8
+
+model:
+  type: smolvla
+  # A 类 baseline: lerobot/smolvla_libero (69.2%, 16 层/0.75 宽/0.45B)
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 1
+    num_steps: 10
+
+quantization:
+  enabled: true
+  scale_dir: scales/smolvla_int8
+  # 是否把 attention 的 QK/PV matmul 也量化（默认关闭，先跑 Linear-only）
+  quantize_matmul: false
+  # 顶层量化参数（Linear/MatMul 共用默认值）
+  outlier_ratio: 0.0
+  dynamic_activation: false
+  mixed_precision: false
+  linear:
+    enabled: true
+    include:
+      - "*"
+    exclude:
+      # 视觉编码器先排除（量化敏感层，后续单独实验）
+      - "*vision_model*"
+      - "*connector*"
+  calibration_policy:
+    default: auto
+
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8
+  batch_size: 8
+  frame_stride: 4
+  seed: 42
+
+evaluation:
+  env:
+    type: libero
+    task: libero_spatial
+    max_parallel_tasks: 1
+  n_episodes: 10
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  # A 类 checkpoint 需要 image -> camera1 / image2 -> camera2 重命名
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2
