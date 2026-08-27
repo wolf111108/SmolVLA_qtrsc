@@ -3,7 +3,7 @@
 # 目的：验证 MuJoCo 版本降级后，A 类四 suite 是否显著提升（对照 3.8.1 下的 S81/O60/G77/L59, 平均69.2%）
 #
 # 用法: 在 smolvla_eval_mj332 环境执行: bash run_phase6_mj332_A_foursuite.sh
-# 输出: ~/VLA_tcs2/outputs/table2_repro_audit/06_simulator/mj332_A_<suite>/eval_info.json
+# 输出: ~/VLA_tcs2/outputs/table2_repro_audit/06_simulator/mj332_A_na10_ep10_<suite>/eval_info.json
 #
 # 注意:
 # - 必须先 conda activate smolvla_eval_mj332 (mujoco 3.3.2)
@@ -19,13 +19,13 @@ POLICY="lerobot/smolvla_libero"
 SEED=1000
 RENAME_MAP='{"observation.images.image":"observation.images.camera1","observation.images.image2":"observation.images.camera2"}'
 BASE_OUT="$HOME/VLA_tcs2/outputs/table2_repro_audit/06_simulator"
-LOGDIR="$BASE_OUT/mj332_A_logs"
+LOGDIR="$BASE_OUT/mj332_A_na10_ep10_logs"
 mkdir -p "$LOGDIR"
 
 SUITES=("libero_spatial" "libero_object" "libero_goal" "libero_10")
 
 for SUITE in "${SUITES[@]}"; do
-    OUT="$BASE_OUT/mj332_A_${SUITE}"
+    OUT="$BASE_OUT/mj332_A_na10_ep10_${SUITE}"
     if [[ -f "$OUT/eval_info.json" ]]; then
         echo "[skip] $SUITE 已有结果: $OUT/eval_info.json"
         continue
@@ -37,7 +37,7 @@ for SUITE in "${SUITES[@]}"; do
         --policy.num_steps=10 \
         --env.type=libero \
         --env.task="$SUITE" \
-        --eval.n_episodes=50 \
+        --eval.n_episodes=10 \
         --eval.batch_size=1 \
         --env.max_parallel_tasks=1 \
         --rename_map="$RENAME_MAP" \
@@ -54,7 +54,7 @@ from pathlib import Path
 
 base = Path.home() / "VLA_tcs2/outputs/table2_repro_audit/06_simulator"
 for suite in ["libero_spatial", "libero_object", "libero_goal", "libero_10"]:
-    f = base / f"mj332_A_{suite}/eval_info.json"
+    f = base / f"mj332_A_na10_ep10_{suite}/eval_info.json"
     if not f.exists():
         print(f"{suite}: 未完成")
         continue
