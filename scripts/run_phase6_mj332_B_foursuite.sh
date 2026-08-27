@@ -6,11 +6,11 @@
 #   HuggingFaceVLA/smolvla_libero — 32 层 / 0.5 宽 / 500M-Instruct / 8D state + image/image2
 #   该 checkpoint config 与 LIBERO processor 完全一致，无需 rename_map
 #
-# 用法: 在 smolvla_eval_mj332 环境执行: bash run_phase6_mj332_B_foursuite.sh
+# 用法: 在 smolvla_eval 环境执行: bash run_phase6_mj332_B_foursuite.sh
 # 输出: ~/VLA_tcs2/outputs/table2_repro_audit/06_simulator/mj332_B_<suite>/eval_info.json
 #
 # 注意:
-# - 必须先 conda activate smolvla_eval_mj332 (mujoco 3.3.2)
+# - 必须先 conda activate smolvla_eval (mujoco 3.3.2)
 # - 四 suite = 400 episodes, Long(520步)最慢, 预计 8-12h
 # - 幂等: 已有 eval_info.json 的 suite 自动跳过
 

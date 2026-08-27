@@ -6,11 +6,11 @@
 #   16 层 / 0.75 宽 / 100k steps / batch64 / expert-only / from smolvla_base
 #   相机 key 为 image/wrist_image, 需 rename_map（由 preflight 自动推导）
 #
-# 用法: 在 smolvla_eval_mj332 环境执行: bash run_phase6_mj332_D_foursuite.sh
+# 用法: 在 smolvla_eval 环境执行: bash run_phase6_mj332_D_foursuite.sh
 # 输出: ~/VLA_tcs2/outputs/table2_repro_audit/06_simulator/mj332_D_<suite>/eval_info.json
 #
 # 注意:
-# - 必须先 conda activate smolvla_eval_mj332 (mujoco 3.3.2)
+# - 必须先 conda activate smolvla_eval (mujoco 3.3.2)
 # - D 类相机 key 为 image/wrist_image（与 A/C 的 image/image2 不同），
 #   rename_map 由 scripts/preflight_policy.py 从 config 自动推导
 # - 四 suite = 400 episodes, Long(520步)最慢, 预计 8-12h

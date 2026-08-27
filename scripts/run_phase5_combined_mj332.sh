@@ -3,13 +3,13 @@
 # 目的：在 mujoco 3.3.2 环境下重跑 combined，与逐 suite 串行(Phase 6 mj332_A)对比 ΔLong，
 #       以及 combined 在 3.8.1 vs 3.3.2 的版本差异。
 #
-# 用法: 先 conda activate smolvla_eval_mj332 (mujoco 3.3.2)，再 bash run_phase5_combined_mj332.sh
+# 用法: 先 conda activate smolvla_eval (mujoco 3.3.2)，再 bash run_phase5_combined_mj332.sh
 # 输出: ~/VLA_tcs2/outputs/table2_repro_audit/05_rng_ordering/combined_mj332/eval_info.json
 #
 # 注意:
 # - 400 episodes, Long(520步)最慢, 预计 8-12h, 建议 nohup 后台
 # - A 类需要 rename_map(camera1/2/3 -> image/image2)
-# - 需 smolvla_eval_mj332 环境 + EGL(device 需在本机重新枚举, 不一定是 2)
+# - 需 smolvla_eval 环境 + EGL(device 需在本机重新枚举, 不一定是 2)
 
 set -euo pipefail
 

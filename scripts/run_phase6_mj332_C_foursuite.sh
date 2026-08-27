@@ -6,11 +6,11 @@
 #   tiantianx/smolvla_libero — 16 层 / 0.75 宽 / 100k steps / expert-only / frozen VLM
 #   需 rename_map: image->camera1, image2->camera2 (config 中 camera3 为 stale, 无需补)
 #
-# 用法: 在 smolvla_eval_mj332 环境执行: bash run_phase6_mj332_C_foursuite.sh
+# 用法: 在 smolvla_eval 环境执行: bash run_phase6_mj332_C_foursuite.sh
 # 输出: ~/VLA_tcs2/outputs/table2_repro_audit/06_simulator/mj332_C_<suite>/eval_info.json
 #
 # 注意:
-# - 必须先 conda activate smolvla_eval_mj332 (mujoco 3.3.2)
+# - 必须先 conda activate smolvla_eval (mujoco 3.3.2)
 # - 四 suite = 400 episodes, Long(520步)最慢, 预计 8-12h
 # - 幂等: 已有 eval_info.json 的 suite 自动跳过
 
