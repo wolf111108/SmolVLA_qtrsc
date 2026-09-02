@@ -67,3 +67,4 @@ manifest_*.txt
 ### jemalloc/编译残留 ###
 *.prof
 core
+scales/
