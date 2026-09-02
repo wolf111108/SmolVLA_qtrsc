@@ -219,9 +219,11 @@ def _wrap_smolvla_linear_layers(
     Selection honors quantization.linear.include/exclude globs.
     """
     replaced = 0
-    model_obj = model.model  # SmolVLMWithExpertModel
+    model_obj = model.model  # VLAFlowMatching
 
-    text_model = model_obj.get_vlm_model().text_model
+    # SmolVLMWithExpertModel lives under .vlm_with_expert
+    vlm_expert = model_obj.vlm_with_expert
+    text_model = vlm_expert.get_vlm_model().text_model
 
     def wrap_layer_group(group, prefix, layer_idx):
         nonlocal replaced
@@ -260,12 +262,12 @@ def _wrap_smolvla_linear_layers(
         wrap_layer_group(layer, f"vlm.text_model.layers.{i}", i)
 
     # LM expert layers
-    expert = model_obj.lm_expert
+    expert = vlm_expert.lm_expert
     for i, layer in enumerate(expert.layers):
         wrap_layer_group(layer, f"lm_expert.layers.{i}", i)
 
     # Action head / misc Linear (exclude vlm + lm_expert subtrees)
-    for name, mod in list(model_obj.named_modules()):
+    for name, mod in list(vlm_expert.named_modules()):
         if name.startswith(("vlm", "lm_expert")):
             continue
         if not isinstance(mod, nn.Linear):
@@ -275,7 +277,7 @@ def _wrap_smolvla_linear_layers(
             continue
         ql = create_quantized_linear(mod, name, 0, quant_config, mode)
         ql._stat_manager = stat_manager
-        _setattr_path(model_obj, name, ql)
+        _setattr_path(vlm_expert, name, ql)
         replaced += 1
         if stat_manager is not None:
             stat_manager.register_layer(name, 0)
@@ -506,7 +508,7 @@ class ModelWrapper:
         print(f"Replaced {n_linear} Linear modules.")
 
         if self.quant_cfg.get("quantize_matmul", False):
-            model_obj = self.model.model
+            model_obj = self.model.model.vlm_with_expert
             num_layers = model_obj.num_vlm_layers
             for layer_idx in range(num_layers):
                 _inject_smolvla_quantized_matmul(

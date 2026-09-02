@@ -22,6 +22,7 @@ from vla_tcs2.quant.utils import (
     load_config,
     save_scales,
     load_scales,
+    compute_sqnr,
 )
 from vla_tcs2.quant.stat_manager import (
     QuantStatManager,
@@ -45,6 +46,7 @@ __all__ = [
     "load_config",
     "save_scales",
     "load_scales",
+    "compute_sqnr",
     "QuantStatManager",
     "QuantStatistics",
 ]

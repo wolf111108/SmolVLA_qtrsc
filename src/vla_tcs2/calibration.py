@@ -18,11 +18,15 @@ Scale persistence follows opt-qt's pickle scheme:
 from __future__ import annotations
 
 import os
+import random
 import time
 from pathlib import Path
 from typing import Any
 
 import torch
+
+from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
+from lerobot.policies import make_pre_post_processors
 
 from vla_tcs2.quant_linear import QuantizedLinear
 from vla_tcs2.quant_matmul import QuantizedMatMul
@@ -130,9 +134,24 @@ def calibrate(
 
     calib_cfg = config.get("calibration", {})
 
+    # The checkpoint's input features use camera1/camera2 keys (training
+    # naming). Reuse the evaluation rename_map unless the calibration
+    # section overrides it with its own dataset-facing names.
+    if "rename_map" not in calib_cfg:
+        calib_cfg["rename_map"] = (
+            config.get("evaluation", {}).get("rename_map", {}) or {}
+        )
+
     print("Preparing calibration data...")
 
-    batches = prepare_calibration_batches(calib_cfg=calib_cfg)
+    batches = prepare_calibration_batches(
+        model=model,
+        calib_cfg=calib_cfg,
+        device=device,
+        fallback_rename_map=(
+            config.get("evaluation", {}).get("rename_map", {}) or {}
+        ),
+    )
 
     print(f"Running calibration on {len(batches)} batches...")
 
@@ -146,12 +165,9 @@ def calibrate(
 
     with torch.no_grad():
         for step, batch in enumerate(batches):
-            batch = {
-                k: v.to(device) if torch.is_tensor(v) else v
-                for k, v in batch.items()
-            }
-
-            model(batch)
+            # Deployment-faithful forward: the inference path exercised
+            # during LIBERO rollouts (VLM backbone + action expert).
+            model.predict_action_chunk(batch)
 
             if step % 10 == 0 or step == len(batches) - 1:
                 print(f"[calibration] forward {step + 1}/{len(batches)}")
@@ -178,29 +194,213 @@ def calibrate(
 
 
 def prepare_calibration_batches(
+    model: torch.nn.Module,
     calib_cfg: dict[str, Any],
+    device: torch.device | None = None,
+    fallback_rename_map: dict[str, str] | None = None,
 ) -> list[dict[str, torch.Tensor]]:
     """
-    Build the list of calibration batches.
+    Build the list of calibration batches (mirrors opt-qt CalibrationDataLoader,
+    adapted to LeRobot datasets and SmolVLA's inference path).
 
-    TODO: implement. Suggested approach (mirrors opt-qt CalibrationDataLoader):
-      - load a LeRobotDataset (calibration.dataset_repo_id / revision)
-      - sample `episodes` episodes with `seed`
-      - take every frame_stride-th frame of each episode
-      - batch them into policy-forward input dicts
-        (images, state, language prompt) matching SmolVLAPolicy format
+    Flow:
+        1. Probe total number of episodes via LeRobotDatasetMetadata.
+        2. Sample `episodes` episode ids with `seed`.
+        3. Load only those episodes into a LeRobotDataset.
+        4. Take every `frame_stride`-th frame of each episode.
+        5. Push each frame through the SAME preprocessor pipeline as
+           evaluation (rename -> batch dim -> language tokenization ->
+           to_device -> normalize with checkpoint stats).
+        6. Collate into batches of `batch_size` frames.
+
+    Returns a list of policy-forward input dicts consumable by
+    `model.predict_action_chunk(batch)`.
     """
 
-    n_episodes = calib_cfg.get("episodes", 8)
-    batch_size = calib_cfg.get("batch_size", 8)
-    frame_stride = calib_cfg.get("frame_stride", 4)
-    seed = calib_cfg.get("seed", 42)
+    repo_id = calib_cfg.get("dataset_repo_id")
+    if not repo_id:
+        raise ValueError(
+            "Missing config entry: calibration.dataset_repo_id"
+        )
 
-    print(
-        f"[calibration] TODO prepare_calibration_batches "
-        f"(episodes={n_episodes}, batch_size={batch_size}, "
-        f"frame_stride={frame_stride}, seed={seed})"
+    revision = calib_cfg.get("dataset_revision", None)
+    n_episodes = int(calib_cfg.get("episodes", 8))
+    batch_size = int(calib_cfg.get("batch_size", 8))
+    frame_stride = int(calib_cfg.get("frame_stride", 4))
+    seed = int(calib_cfg.get("seed", 42))
+    rename_map = calib_cfg.get("rename_map", None)
+    if rename_map is None:
+        rename_map = fallback_rename_map or {}
+
+    if device is None:
+        device = next(model.parameters()).device
+
+    # -------------------------------------------------------------------------
+    # 1. Probe dataset metadata and sample episode ids
+    # -------------------------------------------------------------------------
+
+    meta = LeRobotDatasetMetadata(
+        repo_id,
+        revision=revision,
     )
 
-    # placeholder: no batches -> no new scales collected
-    return []
+    total_episodes = int(meta.total_episodes)
+
+    if n_episodes > total_episodes:
+        raise ValueError(
+            f"Requested {n_episodes} calibration episodes, but dataset "
+            f"'{repo_id}' only has {total_episodes}."
+        )
+
+    rng = random.Random(seed)
+    episode_ids = sorted(
+        rng.sample(range(total_episodes), n_episodes)
+    )
+
+    print(
+        f"[calibration] dataset: {repo_id} (rev={revision}), "
+        f"{total_episodes} episodes total, sampled: {episode_ids}"
+    )
+
+    # -------------------------------------------------------------------------
+    # 2. Load only the sampled episodes
+    # -------------------------------------------------------------------------
+
+    dataset = LeRobotDataset(
+        repo_id,
+        revision=revision,
+        episodes=episode_ids,
+    )
+
+    camera_keys = list(dataset.meta.camera_keys)
+
+    # NOTE: with the episodes filter, dataset[i] expects a RELATIVE index
+    # into the filtered dataset, not the absolute frame index. meta.episodes
+    # holds ALL episodes of the repo, so filter rows to the selected ids
+    # first, then walk lengths cumulatively (selected ids stay sorted).
+    eps_table = dataset.meta.episodes
+    selected = set(int(e) for e in dataset.episodes)
+
+    rows = [
+        (int(ep_idx), int(length))
+        for ep_idx, length in zip(
+            eps_table["episode_index"], eps_table["length"]
+        )
+        if int(ep_idx) in selected
+    ]
+    rows.sort(key=lambda r: r[0])
+
+    frame_indices: list[int] = []
+    offset = 0
+    for _, length in rows:
+        frame_indices.extend(
+            range(offset, offset + length, frame_stride)
+        )
+        offset += length
+
+    print(
+        f"[calibration] {len(episode_ids)} episodes -> "
+        f"{len(frame_indices)} frames (frame_stride={frame_stride})"
+    )
+
+    # -------------------------------------------------------------------------
+    # 3. Preprocessor: identical pipeline to evaluation
+    # -------------------------------------------------------------------------
+
+    policy_cfg = model.config
+    pretrained_path = getattr(policy_cfg, "pretrained_path")
+
+    preprocessor, _ = make_pre_post_processors(
+        policy_cfg=policy_cfg,
+        pretrained_path=str(pretrained_path) if pretrained_path else None,
+        preprocessor_overrides={
+            "rename_observations_processor": {
+                "rename_map": rename_map,
+            },
+        },
+    )
+
+    # -------------------------------------------------------------------------
+    # 4. Per-frame preprocessing + collating
+    # -------------------------------------------------------------------------
+
+    batches: list[dict[str, torch.Tensor]] = []
+    current: list[dict[str, torch.Tensor]] = []
+
+    for idx in frame_indices:
+        frame = dataset[idx]
+
+        # Keep only observation fields the policy consumes.
+        obs = {
+            key: frame[key]
+            for key in list(frame.keys())
+            if key.startswith("observation.")
+        }
+        obs["task"] = frame.get("task", "")
+
+        # (batch=1) forward through eval-identical preprocessing:
+        # rename -> add batch dim -> tokenize language -> to_device -> normalize
+        processed = preprocessor(obs)
+
+        # Keep tensor fields only; the processor may passthrough unrelated
+        # dataset columns (task string, info dicts, next.* flags).
+        processed = {
+            k: v
+            for k, v in processed.items()
+            if torch.is_tensor(v)
+        }
+
+        current.append(processed)
+
+        if len(current) == batch_size:
+            batches.append(_collate(current))
+            current = []
+
+    if current:
+        batches.append(_collate(current))
+
+    print(
+        f"[calibration] prepared {len(batches)} batches "
+        f"(batch_size={batch_size}, cameras={camera_keys})"
+    )
+
+    return batches
+
+
+def _collate(
+    samples: list[dict[str, torch.Tensor]],
+) -> dict[str, torch.Tensor]:
+    """
+    Stack per-frame (1, ...) tensors into (B, ...) batches.
+
+    Language tensors (1, seq_i) may differ in sequence length across frames
+    (pad_language_to="longest" pads per-frame). Pad them to the batch-wide
+    longest so they can stack.
+    """
+
+    def pad_to(t: torch.Tensor, length: int) -> torch.Tensor:
+        pad_len = length - t.shape[-1]
+        if pad_len == 0:
+            return t
+        return torch.nn.functional.pad(t, (0, pad_len))
+
+    keys = set(samples[0])
+    for s in samples[1:]:
+        keys &= set(s)
+
+    batch: dict[str, torch.Tensor] = {}
+    for key in keys:
+        values = [s[key] for s in samples]
+        if not torch.is_tensor(values[0]):
+            batch[key] = values
+            continue
+
+        if values[0].dim() >= 2 and key.startswith(
+            "observation.language"
+        ):
+            max_len = max(v.shape[-1] for v in values)
+            values = [pad_to(v, max_len) for v in values]
+
+        batch[key] = torch.cat(values, dim=0)
+
+    return batch

@@ -21,7 +21,7 @@ import torch.nn.functional as F
 import time
 from typing import Optional, Tuple, Dict
 
-from vla_tcs2.quant.utils import Round, LINEAR_SHIFT_NUM
+from vla_tcs2.quant.utils import Round, LINEAR_SHIFT_NUM, compute_sqnr
 from vla_tcs2.quant.quant_spec import (
     QuantSpec,
     parse_quant_spec,
@@ -31,6 +31,88 @@ from vla_tcs2.quant.quant_spec import (
     fp8_dtype,
     fp8_max,
 )
+
+
+# Hard-coded output path for per-layer SQNR logging.
+SQNR_LOG_PATH = "/home/zyzhao/VLA_tcs2/outputs/quant_sqnr/sqnrs_12mixed_new.jsonl"
+
+
+# ============================================================================
+# Tensor distribution dump (calibration-time, for offline outlier analysis)
+# ============================================================================
+#
+# During scale_inspection we can dump the raw activation / weight / output
+# tensors to disk so a separate script can aggregate and plot their value
+# distributions (to choose an outlier_ratio).
+#
+# Storage is controlled by environment variables:
+#   VLA_TENSOR_DUMP_DIR   output directory (default outputs/tensor_dump)
+#   VLA_TENSOR_DUMP_STEPS number of leading calibration steps to dump (default 3)
+#
+# Weight is static: dumped only once per layer. Activation/output are dumped
+# for each of the first VLA_TENSOR_DUMP_STEPS calibration steps.
+
+DUMP_TENSORS_DIR = os.environ.get(
+    "VLA_TENSOR_DUMP_DIR",
+    "/home/zyzhao/VLA_tcs2/outputs/tensor_dump",
+)
+DUMP_MAX_STEPS = int(os.environ.get("VLA_TENSOR_DUMP_STEPS", "3"))
+
+_dump_step = 0  # current calibration step (advanced by calibration.py)
+
+
+def set_dump_step(step: int) -> None:
+    """Advance the global calibration step counter (called by calibration.py)."""
+    global _dump_step
+    _dump_step = step
+
+
+def get_dump_step() -> int:
+    return _dump_step
+
+
+def log_layer_sqnr(
+    reference: torch.Tensor,
+    quantized: torch.Tensor,
+    layer_name: str = "",
+    layer_idx: int = 0,
+    kind: str = "output",
+    extra: Optional[Dict] = None,
+) -> float:
+    """
+    Compute SQNR between a reference (FP) tensor and a quantized tensor, then
+    append a JSON record (one per line) to SQNR_LOG_PATH.
+
+    Args:
+        reference: full-precision reference tensor.
+        quantized: quantized/dequantized tensor.
+        layer_name: layer identifier (e.g. 'q_proj').
+        layer_idx: layer index.
+        kind: which tensor is being compared ('activation' / 'weight' / 'output').
+        extra: optional dict of additional fields (e.g. a_bit/w_bit/o_bit).
+
+    Returns:
+        SQNR in dB (float). Also writes the record to disk.
+    """
+    import json as _json
+
+    sqnr_db = compute_sqnr(reference, quantized)
+
+    entry = {
+        "layer_name": layer_name,
+        "layer_idx": layer_idx,
+        "kind": kind,
+        "sqnr_db": sqnr_db,
+    }
+    if extra:
+        entry.update(extra)
+
+    os.makedirs(os.path.dirname(SQNR_LOG_PATH), exist_ok=True)
+    with open(SQNR_LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+
+    return sqnr_db
+
 
 class QuantizedLinear(nn.Linear):
     """
@@ -122,6 +204,9 @@ class QuantizedLinear(nn.Linear):
         self.outlier_ratio = outlier_ratio
         self.calibration_policy = "recalibrate"
         self._calibration_action_cache = None
+
+        # Tensor dump state: weight is static, so dump it only once per layer.
+        self._weight_dumped = False
     
     def set_layer_info(self, layer_name: str, layer_idx: int):
         """Set layer name and index for scale file management."""
@@ -267,9 +352,60 @@ class QuantizedLinear(nn.Linear):
                 self.a_interval,
                 self.o_interval
             )
+
+        # Dump raw tensors for offline distribution analysis (outlier ratio
+        # selection). Weight is dumped once; activation/output per leading step.
+        self._maybe_dump_tensors(x, self.weight, out)
         
         # Return FP output for numerical stability during calibration
         return out
+
+
+    def _maybe_dump_tensors(self, x: torch.Tensor, weight: torch.Tensor, out: torch.Tensor) -> None:
+        """
+        Dump raw activation / weight / output tensors to DUMP_TENSORS_DIR for
+        offline distribution analysis.
+
+        - Weight is static: dumped once per layer (guarded by self._weight_dumped).
+        - Activation and output are dumped for each of the first DUMP_MAX_STEPS
+          calibration steps (guarded by the global _dump_step counter).
+
+        File naming:
+            weight_{layer_name}_{layer_idx}.pt
+            activation_{layer_name}_{layer_idx}_step{step}.pt
+            output_{layer_name}_{layer_idx}_step{step}.pt
+
+        Tensors are detached and moved to CPU before saving (torch.save).
+        """
+        if not DUMP_TENSORS_DIR:
+            return
+
+        os.makedirs(DUMP_TENSORS_DIR, exist_ok=True)
+
+        # Weight: once per layer.
+        if not self._weight_dumped:
+            w_path = os.path.join(
+                DUMP_TENSORS_DIR,
+                f"weight_{self.layer_name}_{self.layer_idx}.pt",
+            )
+            torch.save(weight.detach().cpu(), w_path)
+            self._weight_dumped = True
+
+        # Activation / output: only for the leading steps.
+        step = get_dump_step()
+        if step >= DUMP_MAX_STEPS:
+            return
+
+        x_path = os.path.join(
+            DUMP_TENSORS_DIR,
+            f"activation_{self.layer_name}_{self.layer_idx}_step{step}.pt",
+        )
+        o_path = os.path.join(
+            DUMP_TENSORS_DIR,
+            f"output_{self.layer_name}_{self.layer_idx}_step{step}.pt",
+        )
+        torch.save(x.detach().cpu(), x_path)
+        torch.save(out.detach().cpu(), o_path)
     
     
     def quant_forward(
@@ -283,6 +419,9 @@ class QuantizedLinear(nn.Linear):
         if self.outlier_ratio > 0.0:
             return self._quant_forward_with_outlier(x, stat_collector)
 
+        # Full-precision reference output, used for SQNR logging.
+        ref = F.linear(x, self.weight, self.bias)
+
         M0 = torch.tensor(
             self.w_interval * self.a_interval / self.o_interval,
             device=x.device,
@@ -294,7 +433,7 @@ class QuantizedLinear(nn.Linear):
             x,
             self.a_interval,
             self.a_spec,
-            out_dtype=x.dtype,
+            out_dtype=torch.float32,
             chunk_size=1_048_576,
         )
 
@@ -302,18 +441,32 @@ class QuantizedLinear(nn.Linear):
             self.weight,
             self.w_interval,
             self.w_spec,
-            out_dtype=self.weight.dtype,
+            out_dtype=torch.float32,
             chunk_size=1_048_576,
+        )
+
+        # Log SQNR for activation and weight quantization (dequant = code * scale).
+        log_layer_sqnr(
+            x,
+            x_code.mul(self.a_interval),
+            self.layer_name,
+            self.layer_idx,
+            kind="activation",
+            extra={"a_bit": self.a_bit, "w_bit": self.w_bit, "o_bit": self.o_bit},
+        )
+        log_layer_sqnr(
+            self.weight,
+            w_code.mul(self.w_interval),
+            self.layer_name,
+            self.layer_idx,
+            kind="weight",
+            extra={"a_bit": self.a_bit, "w_bit": self.w_bit, "o_bit": self.o_bit},
         )
 
         if self.bias is not None:
             bias_sim = self.quant_bias(self.bias)
         else:
             bias_sim = None
-
-        x_code = x_code.to(torch.float32)
-        w_code = w_code.to(torch.float32)
-
 
         in_features = self.weight.size(1)
         out_features = self.weight.size(0)
@@ -351,6 +504,13 @@ class QuantizedLinear(nn.Linear):
             )
 
             out = out_code.mul(self.o_interval).to(x.dtype)
+            log_layer_sqnr(
+                ref,
+                out,
+                self.layer_name,
+                self.layer_idx,
+                extra={"a_bit": self.a_bit, "w_bit": self.w_bit, "o_bit": self.o_bit},
+            )
             return out
 
         if self.o_spec.kind == "fp" and self.o_spec.enabled:
@@ -361,6 +521,13 @@ class QuantizedLinear(nn.Linear):
 
             out_code = out_scaled.clamp(-max_val, max_val).to(dtype).float()
             out = out_code.mul(self.o_interval).to(x.dtype)
+            log_layer_sqnr(
+                ref,
+                out,
+                self.layer_name,
+                self.layer_idx,
+                extra={"a_bit": self.a_bit, "w_bit": self.w_bit, "o_bit": self.o_bit},
+            )
             return out
 
         # output 不量化
@@ -421,11 +588,15 @@ class QuantizedLinear(nn.Linear):
         M_qa_fb = torch.tensor(self.a_interval)
         M_qa_fb = self.round(M_qa_fb * 2**24)
 
+        # NOTE: use float32 (not x.dtype=bf16) so that high-bit codes
+        # (e.g. int16 weight code range ±32768) are not re-rounded by the
+        # bf16 7-bit mantissa. bf16 can only represent integers up to 256
+        # exactly, which would silently degrade int16 weights to ~8-bit.
         x_sim = quant_awo(
             x_normal_fp,
             self.a_interval,
             self.a_spec,
-            out_dtype=x.dtype,
+            out_dtype=torch.float32,
             chunk_size=1_048_576,
         )
 
@@ -433,7 +604,7 @@ class QuantizedLinear(nn.Linear):
             w_normal_fp,
             self.w_interval,
             self.w_spec,
-            out_dtype=self.weight.dtype,
+            out_dtype=torch.float32,
             chunk_size=1_048_576,
         )
 

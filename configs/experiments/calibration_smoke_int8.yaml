@@ -1,0 +1,46 @@
+# 冒烟用 config：int8 量化校准链路（小规模）
+# 用途：验证 prepare_calibration_batches + scale 采集 + 落盘全链路
+# 正式量化实验请用 smolvla_int8_calibration.yaml（episodes=8, frame_stride=4）
+output_dir: outputs/calibration_smoke/int8_libero
+
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+
+quantization:
+  enabled: true
+  scale_dir: scales/smolvla_libero_int8_smoke
+  quantize_matmul: false
+  linear:
+    enabled: true
+    include: ["*"]
+    exclude: []
+  calibration_policy:
+    default: recalibrate
+
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 2
+  batch_size: 2
+  frame_stride: 100
+  seed: 42
+
+evaluation:
+  env:
+    type: libero
+    task: libero_object
+    max_parallel_tasks: 1
+  n_episodes: 1
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2

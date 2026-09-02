@@ -347,9 +347,6 @@ class QuantizedMatMul(nn.Module):
         self._check_bits()
         self._load_scales()
 
-        if self.mixed_precision and self.outlier_ratio == 0.0:
-            return self._quant_forward_mixed_precision(A, B, stat_collector)
-
         if self.outlier_ratio > 0.0:
             return self._quant_forward_with_outlier(A, B, stat_collector)
 
@@ -357,7 +354,7 @@ class QuantizedMatMul(nn.Module):
             A,
             self.A_interval,
             self.A_spec,
-            out_dtype=A.dtype,
+            out_dtype=torch.float32,
             chunk_size=1_048_576,
         )
 
@@ -365,12 +362,9 @@ class QuantizedMatMul(nn.Module):
             B,
             self.B_interval,
             self.B_spec,
-            out_dtype=B.dtype,
+            out_dtype=torch.float32,
             chunk_size=1_048_576,
         )
-
-        A_sim = A_sim.to(torch.float32)
-        B_sim = B_sim.to(torch.float32)
 
         in_features = A.size(-1)
         out_features = B.size(-1)

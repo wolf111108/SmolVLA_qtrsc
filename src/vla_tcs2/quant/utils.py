@@ -113,3 +113,44 @@ MATMUL_SHIFT_NUM = 2 ** 20
 
 DEFAULT_DIGIT_SIZE = 4
 DEFAULT_PARALLELISM = 4
+
+
+# ============================================================================
+# Signal-to-Quantization-Noise Ratio (SQNR)
+# ============================================================================
+
+def compute_sqnr(reference: torch.Tensor, quantized: torch.Tensor) -> float:
+    """
+    Compute SQNR (Signal-to-Quantization-Noise Ratio) in dB between a
+    reference (FP) tensor and a quantized/dequantized tensor.
+
+        SQNR = 10 * log10( signal_power / noise_power )
+
+    where signal_power is the mean square of the reference and noise_power
+    is the mean square error between reference and quantized.
+
+    Args:
+        reference: the ground-truth (full-precision) tensor.
+        quantized: the quantized (or dequantized) tensor to compare.
+
+    Returns:
+        SQNR in dB (float). Higher is better; +inf if the two tensors are
+        identical.
+    """
+    ref = reference.detach().float()
+    qnt = quantized.detach().float()
+
+    if ref.shape != qnt.shape:
+        raise ValueError(
+            f"Shape mismatch: reference {tuple(ref.shape)} vs "
+            f"quantized {tuple(qnt.shape)}"
+        )
+
+    signal_power = (ref ** 2).mean()
+    noise_power = ((ref - qnt) ** 2).mean()
+
+    if noise_power == 0:
+        return float("inf")
+
+    sqnr = 10.0 * torch.log10(signal_power / noise_power)
+    return sqnr.item()

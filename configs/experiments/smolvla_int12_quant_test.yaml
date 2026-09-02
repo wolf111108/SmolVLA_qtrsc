@@ -1,0 +1,54 @@
+# int12 量化完整测试：正式校准 + 量化后小规模 eval
+# 流程：
+#   1. 校准（8 episodes, frame_stride=4 -> ~500 帧，几分钟）
+#   2. quant_forward 模式跑 LIBERO eval（libero_object，10 episodes 快速验证）
+# 对照基线：FP baseline libero_object = 93.8%（ep10，同口径）
+# 说明：int12 介于 int8 与 int16 之间，用于观察位宽-精度损失的梯度。
+#       预期 delta 介于 int8（掉分多）与 int16（接近无损）之间。
+output_dir: outputs/experiments/smolvla_int12_quant_test
+
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+
+quantization:
+  enabled: true
+  scale_dir: scales/smolvla_libero_int12
+  quantize_matmul: false
+  # int12：权重/激活/输出统一 12-bit
+  a_bit: 12
+  w_bit: 12
+  o_bit: 12
+  linear:
+    enabled: true
+    include: ["*"]
+    exclude: []
+  calibration_policy:
+    default: recalibrate
+
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8              # 正式校准：8 条轨迹
+  batch_size: 8
+  frame_stride: 4          # 每 4 帧取 1 帧 -> ~500 帧
+  seed: 42
+
+evaluation:
+  env:
+    type: libero
+    task: libero_object    # FP baseline 最高的 suite，量化掉分最易暴露
+    max_parallel_tasks: 1
+  n_episodes: 10           # 快速验证；全量改 50
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2

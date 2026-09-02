@@ -87,6 +87,63 @@ evaluate()                  # LIBERO rollout → success rate
 save result.json
 ```
 
+### 2.5 SmolVLA 模型结构与量化范围
+
+#### 模型结构
+
+SmolVLA 由三层嵌套组成（源码：`lerobot_current/src/lerobot/policies/smolvla/`）：
+
+```text
+SmolVLAPolicy (PreTrainedPolicy 子类)           ← 顶层，负责 I/O / 归一化
+└── model = VLAFlowMatching                     ← 核心，含 action head + flow matching
+    ├── vlm_with_expert = SmolVLMWithExpertModel
+    │   ├── vlm = SmolVLM2-500M-Video-Instruct
+    │   │   ├── model.vision_model   (SigLIP 视觉编码器)
+    │   │   ├── model.connector      (视觉→语言 模态投影 + 重采样)
+    │   │   └── model.text_model     (SmolLM2 LLM，16 层)
+    │   └── lm_expert                (action expert，16 层，隐藏宽 0.75×)
+    ├── state_proj / action_in_proj / action_out_proj
+    └── action_time_mlp_in / action_time_mlp_out
+```
+
+各组件职责：
+
+| 组件 | 说明 |
+|------|------|
+| `SmolVLAPolicy` | 顶层策略类，负责归一化、processor（tokenize / 图像编码）、动作反解 |
+| `VLAFlowMatching` | 核心类，持有 action head，实现 flow matching 的训练 / 采样 |
+| `SmolVLMWithExpertModel` | VLM backbone + action expert 的组合模块 |
+| `vlm`（SmolVLM2-500M） | 冻结的视觉-语言 backbone：SigLIP 视觉编码器 + SmolLM2 LLM |
+| `lm_expert` | SmolVLA 的核心创新——从 VLM 配置派生、宽度 0.75× 的 action expert |
+
+action head 各层（均位于 `VLAFlowMatching` 顶层）：
+
+| 层 | 输入 → 输出 | 角色 |
+|----|------------|------|
+| `state_proj` | `max_state_dim` → `hidden_size` | 本体状态 → token 空间 |
+| `action_in_proj` | `max_action_dim` → `expert_hidden_size` | 噪声动作 → expert 维度 |
+| `action_out_proj` | `expert_hidden_size` → `max_action_dim` | 输出 flow matching 速度场 $v_t$ |
+| `action_time_mlp_in/out` | `2×hidden` → `hidden` → `hidden` | 融合 timestep 与动作（SiLU 激活） |
+
+关键机制：**cross-attention 交织**——`num_vlm_layers=16`、`num_expert_layers=16`、`self_attn_every_n_layers=2`。VLM 层做 self-attention 生成 prefix KV cache；expert 层大部分做 cross-attention，其 query 来自「噪声动作 + timestep」、key/value 来自 VLM 的 prefix cache。推理时 `sample_actions` 从纯噪声出发，经 `euler_integrate` 做 ODE 迭代去噪，得到最终 7 维动作。
+
+#### 当前量化范围（已实现）
+
+`_wrap_smolvla_linear_layers`（`model_wrapper.py`）目前只量化以下 **Linear 层**：
+
+| 模块 | 是否量化 | 说明 |
+|------|---------|------|
+| VLM `text_model` 的 `q/k/v/o_proj` + `gate/up/down_proj` | ✅ 量化 | 16 层 LLM 的 self-attn 与 MLP |
+| `lm_expert` 的 `self_attn` + `mlp` | ✅ 量化 | 16 层 action expert |
+| SigLIP `vision_model` | ❌ 未量化 | 视觉编码器 |
+| `connector` | ❌ 未量化 | 视觉模态投影 |
+| action head（`state/action_in/action_out_proj` + `action_time_mlp_*`） | ❌ 未量化 | 位于 `VLAFlowMatching` 顶层，当前 `_wrap` 未触达 |
+| QK^T / PV matmul | ❌ 未量化 | 默认 `quantize_matmul: false` |
+
+> 注：action head 是 flow matching 的**最终输出层**，直接产生速度场 $v_t$，对精度最敏感，
+> 目前保持 FP。后续如需完整量化，可将 `_wrap` 的遍历对象从 `vlm_with_expert` 扩展到
+> `VLAFlowMatching` 顶层，并用 `include/exclude` 控制 vision encoder / action head。
+
 ---
 
 ## 3. 环境说明

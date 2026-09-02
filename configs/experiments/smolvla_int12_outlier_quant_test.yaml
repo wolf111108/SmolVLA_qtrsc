@@ -1,0 +1,139 @@
+# int12 + outlier 保护 量化测试：activation/weight/output 统一 int12，启用 outlier 通道保护
+# 背景：纯 int12（无 outlier）SR=7%，SQNR 分析显示 weight/output 掉分严重。
+#       本配置启用 outlier_ratio，让 absmax 最大的若干通道走 FP，其余走 int12 量化，
+#       避免 long-tail outlier 撑大 per-tensor scale 压死正常值。
+# 用法：
+#   bash scripts/run_int12_outlier_quant_test.sh              # 校准 + eval
+#   bash scripts/run_int12_outlier_quant_test.sh --reuse      # 复用 scale
+# 对照基线：FP libero_object = 93.8%（ep10，同口径）
+output_dir: outputs/experiments/smolvla_int12_outlier_quant_test
+
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+
+quantization:
+  enabled: true
+  mode: quant_forward
+  scale_dir: scales/smolvla_libero_int12_outlier
+  quantize_matmul: false
+
+  calibration_policy:
+    default: auto
+    layer_policy:
+      q_proj: recalibrate
+      k_proj: recalibrate
+      v_proj: recalibrate
+      o_proj: recalibrate
+      gate_proj: recalibrate
+      up_proj: recalibrate
+      down_proj: recalibrate
+    per_layer_policy: {}
+
+  # ---- attention 投影 ----
+  q_proj:
+    a_bit: 12
+    w_bit: 12
+    o_bit: 12
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  k_proj:
+    a_bit: 12
+    w_bit: 12
+    o_bit: 12
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  v_proj:
+    a_bit: 12
+    w_bit: 12
+    o_bit: 12
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  o_proj:
+    a_bit: 12
+    w_bit: 12
+    o_bit: 12
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  # ---- MLP 投影 ----
+  gate_proj:
+    a_bit: 12
+    w_bit: 12
+    o_bit: 12
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  up_proj:
+    a_bit: 12
+    w_bit: 12
+    o_bit: 12
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  down_proj:
+    a_bit: 12
+    w_bit: 12
+    o_bit: 12
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  # ---- matmul（quantize_matmul=false，字段保留备查） ----
+  qk_matmul:
+    A_bit: 12
+    B_bit: 12
+    O_bit: 12
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  pv_matmul:
+    A_bit: 12
+    B_bit: 12
+    O_bit: 12
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  # ---- SmolVLA 特有：Linear 层 include/exclude glob 过滤 ----
+  linear:
+    enabled: true
+    include: ["*"]
+    exclude: []
+
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8              # 正式校准：8 条轨迹
+  batch_size: 8
+  frame_stride: 4          # 每 4 帧取 1 帧 -> ~500 帧
+  seed: 42
+
+evaluation:
+  env:
+    type: libero
+    task: libero_object    # FP baseline 最高的 suite，量化掉分最易暴露
+    max_parallel_tasks: 1
+  n_episodes: 10           # 快速验证；全量改 50
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2
