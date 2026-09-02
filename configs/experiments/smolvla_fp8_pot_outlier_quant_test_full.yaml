@@ -1,0 +1,190 @@
+# PoT-FP8 + Outlier Protection 量化测试
+#
+# 目标：
+#   1. 与现有 FP8 + outlier 保持同一套 calibration / evaluation 协议；
+#   2. 仅把 scale 从任意浮点数改成 2^k；
+#   3. 第一阶段仍使用当前 dynamic outlier protection，便于做干净的 scale ablation。
+#
+# 用法：
+#   python main.py --config configs/experiments/smolvla_fp8_pot_outlier_quant_test.yaml
+#
+# 首次运行必须重新校准，建议不要复用旧 INT/FP8 scale_dir。
+
+output_dir: outputs/experiments/smolvla_fp8_pot_outlier_quant_test
+
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+
+quantization:
+  enabled: true
+  mode: quant_forward
+
+  # quant_methods.py / scale_methods.py 中注册的新方法
+  method: pot_fp8_outlier
+
+  # 使用全新的 scale 目录，避免误加载旧 arbitrary-scale 文件
+  scale_dir: scales/smolvla_libero_fp8_e4m3_pot_outlier
+
+  # 第一阶段仍只量化 Linear；attention MatMul 暂不量化
+  quantize_matmul: false
+
+  # 顶层默认 outlier_ratio；各 Linear 下也显式写出，便于审计
+  outlier_ratio: 0.01
+
+  # ------------------------------------------------------------
+  # Calibration scale reuse / recalibration policy
+  # ------------------------------------------------------------
+  calibration_policy:
+    default: auto
+    layer_policy:
+      q_proj: recalibrate
+      k_proj: recalibrate
+      v_proj: recalibrate
+      o_proj: recalibrate
+      gate_proj: recalibrate
+      up_proj: recalibrate
+      down_proj: recalibrate
+    per_layer_policy: {}
+
+  # ------------------------------------------------------------
+  # Attention projection Linear
+  # ------------------------------------------------------------
+  q_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  k_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  v_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  o_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  # ------------------------------------------------------------
+  # MLP projection Linear
+  # ------------------------------------------------------------
+  gate_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  up_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  down_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  # ------------------------------------------------------------
+  # Attention MatMul
+  # quantize_matmul=false，因此当前实验不会使用这些量化配置；
+  # 保留只是为了与现有配置结构一致，后续扩展时可直接启用。
+  # ------------------------------------------------------------
+  qk_matmul:
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  pv_matmul:
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  # ------------------------------------------------------------
+  # SmolVLA Linear include / exclude
+  # ------------------------------------------------------------
+  linear:
+    enabled: true
+    include: ["*"]
+    exclude: []
+
+# ==================================================================
+# Calibration
+#
+# 与当前 int8/int12 outlier 正式配置保持同一口径：
+#   - HuggingFaceVLA/libero v3.0
+#   - 8 episodes
+#   - batch_size 8
+#   - 每 4 帧采一帧
+#   - seed 42
+#
+# calibration.py 会在此处未显式给 rename_map 时自动复用
+# evaluation.rename_map。
+# ==================================================================
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8
+  batch_size: 8
+  frame_stride: 4
+  seed: 42
+
+# ==================================================================
+# Evaluation
+#
+# 与当前 libero_object 量化测试协议保持一致。
+# n_episodes=10 用于快速筛选；确认结果后改成 50 做正式验证。
+# ==================================================================
+evaluation:
+  env:
+    type: libero
+    task: libero_object
+    max_parallel_tasks: 1
+
+  n_episodes: 10
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+
+  # 不保存 rollout 视频，避免大量 I/O；如需 failure analysis 可调大
+  max_episodes_rendered: 0
+
+  # 当前 checkpoint 输入命名约定
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2

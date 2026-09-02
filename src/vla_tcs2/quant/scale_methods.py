@@ -27,6 +27,8 @@ from __future__ import annotations
 
 from typing import Callable, Optional, Tuple
 
+import math
+
 import torch
 
 from vla_tcs2.quant.quant_spec import (
@@ -159,6 +161,119 @@ def scales_with_outlier(
 
     return a, w, o
 
+def scales_with_pot_fp8_outlier(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    out: torch.Tensor,
+    a_spec: QuantSpec,
+    w_spec: QuantSpec,
+    o_spec: QuantSpec,
+    outlier_ratio: float = 0.01,
+    **kwargs,
+) -> Tuple[
+    Optional[float],
+    Optional[float],
+    Optional[float],
+]:
+    """
+    PoT-FP8 + Outlier Protection.
+
+    First reuse exactly the same outlier filtering as the
+    existing `outlier` method, then quantize each resulting
+    scalar scale onto the power-of-two grid.
+
+        arbitrary scale
+              ↓
+        2 ^ ceil(log2(scale))
+
+    Therefore the only intended algorithmic difference versus
+    the existing FP8+outlier path is the scale representation.
+    """
+
+    _validate_fp8_or_passthrough(
+        a_spec,
+        "activation",
+    )
+    _validate_fp8_or_passthrough(
+        w_spec,
+        "weight",
+    )
+    _validate_fp8_or_passthrough(
+        o_spec,
+        "output",
+    )
+
+    # Existing outlier calibration.
+    a, w, o = scales_with_outlier(
+        x,
+        weight,
+        out,
+        a_spec,
+        w_spec,
+        o_spec,
+        outlier_ratio=outlier_ratio,
+        **kwargs,
+    )
+
+    # New part: force every scale to power-of-two.
+    a_pot = _ceil_power_of_two_scale(a)
+    w_pot = _ceil_power_of_two_scale(w)
+    o_pot = _ceil_power_of_two_scale(o)
+
+    return a_pot, w_pot, o_pot
+
+# ============================================================================
+# Tools
+# ============================================================================
+
+def _ceil_power_of_two_scale(
+    scale: Optional[float],
+) -> Optional[float]:
+    """
+    Convert a positive scalar scale to the smallest power-of-two
+    scale >= original scale.
+
+    Example:
+        0.00513 -> 2^-7 = 0.0078125
+
+    This preserves the no-overflow property of absmax calibration.
+    """
+    if scale is None:
+        return None
+
+    scale = float(scale)
+
+    if (not math.isfinite(scale)) or scale <= 0.0:
+        return 1.0
+
+    exponent = math.ceil(math.log2(scale))
+
+    # math.ldexp(1.0, exponent) == 2**exponent
+    # and is exactly representable in binary floating point.
+    return math.ldexp(1.0, exponent)
+
+def _validate_fp8_or_passthrough(
+    spec: QuantSpec,
+    name: str,
+) -> None:
+    """
+    pot_fp8_outlier is intended for FP8 tensors.
+
+    Disabled fp16 / bf16 passthrough is also allowed,
+    so later A8W8O16 experiments remain possible.
+    """
+    if not spec.enabled:
+        return
+
+    if (
+        spec.kind != "fp"
+        or (spec.fmt or "").lower()
+        not in {"e4m3", "e4m3fn", "e5m2"}
+    ):
+        raise ValueError(
+            f"pot_fp8_outlier requires FP8 or passthrough "
+            f"for {name}, got {spec}"
+        )
 
 # ============================================================================
 # Registry
@@ -167,7 +282,7 @@ def scales_with_outlier(
 SCALE_METHODS: dict[str, Callable] = {
     "per_tensor": scales_per_tensor,
     "outlier": scales_with_outlier,
-    # "per_channel": scales_per_channel,  # TODO: per-out-channel weight scale
+    "pot_fp8_outlier": scales_with_pot_fp8_outlier,
 }
 
 

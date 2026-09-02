@@ -25,6 +25,7 @@ from typing import Callable, Optional
 
 import torch
 import torch.nn.functional as F
+import math
 
 from vla_tcs2.quant.utils import Round, LINEAR_SHIFT_NUM, log_layer_sqnr
 from vla_tcs2.quant.scale_methods import (
@@ -274,6 +275,72 @@ def quant_forward_with_outlier(layer, x, stat_collector=None) -> torch.Tensor:
 
     return out
 
+def quant_forward_pot_fp8_outlier(
+    layer,
+    x,
+    stat_collector=None,
+) -> torch.Tensor:
+    """
+    PoT-FP8 + outlier forward.
+
+    The actual datapath intentionally reuses the existing
+    outlier implementation. The only difference is that all
+    calibrated scales must be exact powers of two.
+    """
+
+    # Verify only once.
+    if not getattr(
+        layer,
+        "_pot_scales_verified",
+        False,
+    ):
+        for name, interval in (
+            ("activation", layer.a_interval),
+            ("weight", layer.w_interval),
+            ("output", layer.o_interval),
+        ):
+            if not _is_power_of_two_scalar(
+                interval
+            ):
+                raise ValueError(
+                    f"{layer.layer_name}_{layer.layer_idx}: "
+                    f"{name} scale {interval!r} is not "
+                    f"power-of-two. Recalibrate into a "
+                    f"fresh scale_dir before using "
+                    f"method=pot_fp8_outlier."
+                )
+
+        layer._pot_scales_verified = True
+
+    return quant_forward_with_outlier(
+        layer,
+        x,
+        stat_collector,
+    )
+
+# ============================================================================
+# Tools
+# ============================================================================
+
+def _is_power_of_two_scalar(value) -> bool:
+    if value is None:
+        return False
+
+    if isinstance(value, torch.Tensor):
+        if value.numel() != 1:
+            return False
+        value = value.item()
+
+    value = float(value)
+
+    if (not math.isfinite(value)) or value <= 0.0:
+        return False
+
+    exponent = math.log2(value)
+
+    return abs(
+        exponent - round(exponent)
+    ) < 1e-6
 
 # ============================================================================
 # Registry
@@ -282,8 +349,9 @@ def quant_forward_with_outlier(layer, x, stat_collector=None) -> torch.Tensor:
 QUANT_METHODS: dict[str, Callable] = {
     "per_tensor": quant_forward_per_tensor,
     "outlier": quant_forward_with_outlier,
+    "pot_fp8_outlier":
+        quant_forward_pot_fp8_outlier,
 }
-
 
 def get_quant_method(name: str) -> Callable:
     """Look up a quantized-forward method by name (paired with scale_methods)."""
