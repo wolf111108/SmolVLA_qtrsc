@@ -105,6 +105,14 @@ def create_quantized_linear(
         quant_config, layer_type, layer_idx
     )
 
+    # Pluggable quantization method name (quant/scale_methods.py +
+    # quant/quant_methods.py, paired by the same key). Per-layer config
+    # overrides the top-level quantization.method.
+    quant_layer.method = layer_config.get(
+        "method",
+        quant_config.get("method", "per_tensor"),
+    )
+
     # Copy weights (defensive device/dtype alignment first).
     _ow = original_layer.weight
     if _ow.device.type != "meta":

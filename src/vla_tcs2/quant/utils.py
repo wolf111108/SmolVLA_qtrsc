@@ -15,7 +15,7 @@ import pickle
 import yaml
 import torch
 from torch.autograd import Function
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 # ============================================================================
@@ -154,3 +154,50 @@ def compute_sqnr(reference: torch.Tensor, quantized: torch.Tensor) -> float:
 
     sqnr = 10.0 * torch.log10(signal_power / noise_power)
     return sqnr.item()
+
+
+# Hard-coded output path for per-layer SQNR logging.
+SQNR_LOG_PATH = "/home/zyzhao/VLA_tcs2/outputs/quant_sqnr/sqnrs_12mixed_new.jsonl"
+
+
+def log_layer_sqnr(
+    reference: torch.Tensor,
+    quantized: torch.Tensor,
+    layer_name: str = "",
+    layer_idx: int = 0,
+    kind: str = "output",
+    extra: Optional[Dict] = None,
+) -> float:
+    """
+    Compute SQNR between a reference (FP) tensor and a quantized tensor, then
+    append a JSON record (one per line) to SQNR_LOG_PATH.
+
+    Args:
+        reference: full-precision reference tensor.
+        quantized: quantized/dequantized tensor.
+        layer_name: layer identifier (e.g. 'q_proj').
+        layer_idx: layer index.
+        kind: which tensor is being compared ('activation' / 'weight' / 'output').
+        extra: optional dict of additional fields (e.g. a_bit/w_bit/o_bit).
+
+    Returns:
+        SQNR in dB (float). Also writes the record to disk.
+    """
+    import json as _json
+
+    sqnr_db = compute_sqnr(reference, quantized)
+
+    entry = {
+        "layer_name": layer_name,
+        "layer_idx": layer_idx,
+        "kind": kind,
+        "sqnr_db": sqnr_db,
+    }
+    if extra:
+        entry.update(extra)
+
+    os.makedirs(os.path.dirname(SQNR_LOG_PATH), exist_ok=True)
+    with open(SQNR_LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+
+    return sqnr_db
