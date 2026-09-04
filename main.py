@@ -55,7 +55,10 @@ import yaml
 
 from vla_tcs2.calibration import calibrate
 from vla_tcs2.eval import evaluate
-from vla_tcs2.model_wrapper import ModelWrapper
+from vla_tcs2.model_wrapper import (
+    ModelWrapper,
+    apply_sensitivity_target,
+)
 
 
 # =============================================================================
@@ -288,13 +291,29 @@ def main() -> None:
         # 3.2 Quantized inference
         # ---------------------------------------------------------------------
 
-        wrapper.set_mode(
-            "quant_forward"
-        )
+        test_cfg = config.get("test", {})
+        if test_cfg.get("enabled", False):
+            # Sensitivity experiment: isolate a single physical site with
+            # test_forward (noise injection), everything else raw. Requires
+            # no calibration for gaussian methods; quant_residual methods
+            # reuse the calibrated scale files above.
+            print_header("SENSITIVITY TARGET")
 
-        print(
-            "Quantized inference mode enabled."
-        )
+            n_target = apply_sensitivity_target(model, config)
+            if n_target == 0:
+                raise RuntimeError(
+                    "test.enabled=true but no module matched test.target. "
+                    "Check the module_id / component / layer / operator "
+                    "selectors."
+                )
+        else:
+            wrapper.set_mode(
+                "quant_forward"
+            )
+
+            print(
+                "Quantized inference mode enabled."
+            )
 
     else:
 

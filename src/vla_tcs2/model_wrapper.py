@@ -268,6 +268,140 @@ def switch_quantization_mode_all(model: nn.Module, mode: str) -> nn.Module:
 
 
 # =============================================================================
+# Sensitivity targeting (fine-grained quant plan §19-§20)
+# =============================================================================
+
+def _matches_target(module_id: str, target: dict[str, Any]) -> bool:
+    """Return True if a module's `module_id` matches the sensitivity target.
+
+    Supported selectors (ANDed when multiple are present):
+
+      - `module_id`:  exact string or glob (fnmatch) against module_id
+      - `module_ids`: list of exact/glob patterns (OR)
+      - `component`:  "vlm" / "expert"
+      - `layer`:      int, or list[int], matching the layer index
+      - `operator`:   q_proj/k_proj/v_proj/o_proj/gate_proj/up_proj/down_proj
+                      or qk/pv
+
+    When `target` is empty or lacks any selector, nothing matches (safety).
+    """
+    if not target:
+        return False
+
+    ids = target.get("module_ids")
+    if ids:
+        if any(fnmatch(module_id, p) for p in ids):
+            return True
+
+    mid = target.get("module_id")
+    if mid:
+        if fnmatch(module_id, str(mid)):
+            return True
+
+    component = target.get("component")
+    if component:
+        comp = module_id.split(".")[0]
+        if comp != component:
+            return False
+
+    layer = target.get("layer")
+    if layer is not None:
+        # module_id forms:
+        #   Linear : {comp}.layers.{i}.{self_attn|mlp}.{name}
+        #   MatMul : {comp}.layer.{i}.{op}
+        parts = module_id.split(".")
+        idx = None
+        for i, p in enumerate(parts):
+            if p in ("layers", "layer"):
+                idx = int(parts[i + 1])
+                break
+        if idx is None:
+            return False
+        if isinstance(layer, list):
+            if idx not in layer:
+                return False
+        elif idx != int(layer):
+            return False
+
+    operator = target.get("operator")
+    if operator:
+        last = module_id.split(".")[-1]
+        if last != operator:
+            return False
+
+    return True
+
+
+def apply_sensitivity_target(
+    model: nn.Module,
+    config: dict[str, Any],
+) -> int:
+    """Apply a sensitivity-test target to the wrapped model.
+
+    Reads the top-level `test` config block:
+
+        test:
+          enabled: true
+          method: gaussian_rms_output   # or gaussian_rms_*/quant_residual_*
+          alpha: 0.03
+          seed: 0
+          site: output                  # input|weight|output (Linear) / A|B|output (MatMul)
+          use_outlier_protection: false
+          residual_lambda: 1.0
+          outlier_ratio: 0.01
+          target:
+            module_id: expert.layer.7.qk   # or component/layer/operator selectors
+
+    Every QuantizedLinear / QuantizedMatMul matching `target` is switched to
+    mode="test_forward" with the given test method + params; all others are
+    switched to "raw". This isolates a single physical site's sensitivity.
+
+    Returns the number of targeted modules.
+    """
+    test_cfg = config.get("test", {})
+    if not test_cfg.get("enabled", False):
+        return 0
+
+    method = str(test_cfg.get("method", "gaussian_rms_output"))
+    target = test_cfg.get("target", {})
+
+    n_target = 0
+    for module in model.modules():
+        if not isinstance(module, (QuantizedLinear, QuantizedMatMul)):
+            continue
+
+        mid = getattr(module, "module_id", "") or (
+            f"{getattr(module, 'layer_name', '')}_"
+            f"{getattr(module, 'layer_idx', 0)}"
+        )
+
+        if _matches_target(mid, target):
+            module.mode = "test_forward"
+            module.test_method = method
+            module.test_noise_alpha = float(test_cfg.get("alpha", 0.03))
+            module.test_noise_seed = int(test_cfg.get("seed", 0))
+            module.test_site = str(test_cfg.get("site", "output"))
+            module.test_use_outlier_protection = bool(
+                test_cfg.get("use_outlier_protection", False)
+            )
+            module.test_residual_lambda = float(
+                test_cfg.get("residual_lambda", 1.0)
+            )
+            module.test_outlier_ratio = float(
+                test_cfg.get("outlier_ratio", 0.01)
+            )
+            n_target += 1
+        else:
+            module.mode = "raw"
+
+    print(
+        f"[sensitivity] method={method} target={target} "
+        f"-> {n_target} modules in test_forward, rest raw"
+    )
+    return n_target
+
+
+# =============================================================================
 # SmolVLA wrapping
 # =============================================================================
 
