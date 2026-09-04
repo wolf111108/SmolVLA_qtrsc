@@ -31,16 +31,22 @@ from vla_tcs2.quant.stat_manager import (
 from vla_tcs2.quant.scale_methods import (
     SCALE_METHODS,
     get_scale_method,
+    get_matmul_scale_method,
     scales_per_tensor,
     scales_with_outlier,
+    matmul_scales_per_tensor,
+    matmul_scales_with_outlier,
     get_outlier_mask_channel,
     get_outlier_mask_1d,
 )
 from vla_tcs2.quant.quant_methods import (
     QUANT_METHODS,
     get_quant_method,
+    get_matmul_quant_method,
     quant_forward_per_tensor,
     quant_forward_with_outlier,
+    matmul_quant_forward_per_tensor,
+    matmul_quant_forward_with_outlier,
 )
 
 __version__ = "0.1.0"
@@ -65,12 +71,18 @@ __all__ = [
     "QuantStatistics",
     "SCALE_METHODS",
     "get_scale_method",
+    "get_matmul_scale_method",
     "scales_per_tensor",
     "scales_with_outlier",
+    "matmul_scales_per_tensor",
+    "matmul_scales_with_outlier",
     "get_outlier_mask_channel",
     "get_outlier_mask_1d",
     "QUANT_METHODS",
     "get_quant_method",
+    "get_matmul_quant_method",
     "quant_forward_per_tensor",
     "quant_forward_with_outlier",
+    "matmul_quant_forward_per_tensor",
+    "matmul_quant_forward_with_outlier",
 ]

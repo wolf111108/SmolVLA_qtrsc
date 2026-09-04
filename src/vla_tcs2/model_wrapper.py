@@ -156,6 +156,15 @@ def create_quantized_matmul(
         quant_config, layer_type, layer_idx
     )
 
+    # Pluggable quantization method name — same registry keys as
+    # QuantizedLinear (dispatched to the matmul_* entries of
+    # scale_methods/quant_methods). Per-layer config overrides the
+    # top-level quantization.method.
+    quant_matmul.method = layer_config.get(
+        "method",
+        quant_config.get("method", "per_tensor"),
+    )
+
     quant_matmul.set_layer_info(layer_type, layer_idx)
 
     return quant_matmul
@@ -309,6 +318,10 @@ def _inject_smolvla_quantized_matmul(
 
         att_weights = Q @ K^T            -> qk_matmul
         att_output  = softmax(...) @ V   -> pv_matmul
+
+    NOTE: the interface is model-level (shared by all attention layers),
+    so a single injected pair of quantizers serves every layer. The
+    layer_idx is only used for scale-file naming.
     """
     if not quant_config.get("quantize_matmul", False):
         return
@@ -516,17 +529,22 @@ class ModelWrapper:
         print(f"Replaced {n_linear} Linear modules.")
 
         if self.quant_cfg.get("quantize_matmul", False):
+            # NOTE: get_attention_interface is a MODEL-level method on
+            # SmolVLMWithExpertModel (every self/cross-attention layer calls
+            # the same interface), so per-layer injection is not possible
+            # without threading layer_idx through the model. We inject ONE
+            # shared pair of qk/pv quantizers; their scales are calibrated
+            # over ALL layers' activations (absmax aggregated), which is
+            # conservative but safe.
             model_obj = self.model.model.vlm_with_expert
-            num_layers = model_obj.num_vlm_layers
-            for layer_idx in range(num_layers):
-                _inject_smolvla_quantized_matmul(
-                    model_obj,
-                    layer_idx,
-                    self.quant_cfg,
-                    mode,
-                    self.stat_manager,
-                )
-            print(f"Injected SmolVLA QuantizedMatMul for {num_layers} layers")
+            _inject_smolvla_quantized_matmul(
+                model_obj,
+                0,
+                self.quant_cfg,
+                mode,
+                self.stat_manager,
+            )
+            print("Injected SmolVLA QuantizedMatMul (shared qk/pv pair)")
 
     # -------------------------------------------------------------------------
     # Summary

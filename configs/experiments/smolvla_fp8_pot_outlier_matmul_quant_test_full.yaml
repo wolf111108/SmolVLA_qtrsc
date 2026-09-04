@@ -1,0 +1,183 @@
+# PoT-FP8 + Outlier Protection 量化测试 — Linear + MatMul 同时开启
+#
+# 目标：
+#   与 smolvla_fp8_pot_outlier_quant_test_full.yaml 完全同协议，唯一差异：
+#     quantize_matmul: false -> true
+#   即 attention 的 QK^T / PV matmul 也走 pot_fp8_outlier 量化。
+#
+# 注意：
+#   1. get_attention_interface 是 SmolVLMWithExpertModel 的模型级方法，
+#      所有 attention 层共享一对 qk/pv 量化器（scale 用全层 absmax 聚合）；
+#   2. 必须使用全新 scale_dir（不能复用只开 linear 时的目录，
+#      否则缺 A/B/O scale 文件会在加载时报 FileNotFoundError）；
+#   3. matmul 校准侧要求 A/B/O 均为 e4m3（或显式 passthrough），
+#      与 _validate_fp8_or_passthrough 的校验一致。
+#
+# 用法：
+#   python main.py --config configs/experiments/smolvla_fp8_pot_outlier_matmul_quant_test_full.yaml
+
+output_dir: outputs/experiments/smolvla_fp8_pot_outlier_matmul_quant_test
+
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+
+quantization:
+  enabled: true
+  mode: quant_forward
+
+  # 注册表方法名，Linear 与 MatMul 共用（matmul 侧自动映射到 matmul_* 条目）
+  method: pot_fp8_outlier
+
+  # 全新 scale 目录：包含 linear 的 w/a/o + matmul 的 A/B/O
+  scale_dir: scales/smolvla_libero_fp8_e4m3_pot_outlier_matmul
+
+  # ★ 本次实验的差异点：attention matmul 也量化
+  quantize_matmul: true
+
+  # 顶层默认 outlier_ratio；linear 与 matmul 各层也显式写出，便于审计
+  outlier_ratio: 0.01
+
+  # ------------------------------------------------------------
+  # Calibration scale reuse / recalibration policy
+  # （matmul 层通过 layer_policy 生效：qk_matmul/pv_matmul）
+  # ------------------------------------------------------------
+  calibration_policy:
+    default: auto
+    layer_policy:
+      q_proj: recalibrate
+      k_proj: recalibrate
+      v_proj: recalibrate
+      o_proj: recalibrate
+      gate_proj: recalibrate
+      up_proj: recalibrate
+      down_proj: recalibrate
+      qk_matmul: recalibrate
+      pv_matmul: recalibrate
+    per_layer_policy: {}
+
+  # ------------------------------------------------------------
+  # Attention projection Linear
+  # ------------------------------------------------------------
+  q_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  k_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  v_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  o_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  # ------------------------------------------------------------
+  # MLP projection Linear
+  # ------------------------------------------------------------
+  gate_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  up_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  down_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  # ------------------------------------------------------------
+  # Attention MatMul（本次实验启用）
+  # A=Q 或 softmax 概率，B=K^T 或 V，O=attention 输出
+  # ------------------------------------------------------------
+  qk_matmul:
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  pv_matmul:
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+
+  # ------------------------------------------------------------
+  # SmolVLA Linear include / exclude
+  # ------------------------------------------------------------
+  linear:
+    enabled: true
+    include: ["*"]
+    exclude: []
+
+# ==================================================================
+# Calibration（与 linear-only config 完全一致）
+# ==================================================================
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8
+  batch_size: 8
+  frame_stride: 4
+  seed: 42
+
+# ==================================================================
+# Evaluation（与 linear-only config 完全一致：ep10 libero_object）
+# ==================================================================
+evaluation:
+  env:
+    type: libero
+    task: libero_object
+    max_parallel_tasks: 1
+
+  n_episodes: 10
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+
+  max_episodes_rendered: 0
+
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2

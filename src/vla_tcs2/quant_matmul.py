@@ -22,6 +22,12 @@ import torch
 import torch.nn as nn
 
 from vla_tcs2.quant.utils import Round, MATMUL_SHIFT_NUM
+from vla_tcs2.quant.scale_methods import (
+    get_matmul_scale_method,
+)
+from vla_tcs2.quant.quant_methods import (
+    get_matmul_quant_method,
+)
 from vla_tcs2.quant.quant_spec import (
     QuantSpec,
     parse_quant_spec,
@@ -96,6 +102,11 @@ class QuantizedMatMul(nn.Module):
         self.mixed_precision = 0
         self.mp_high_ratio = 0.25
         self.mp_low_ratio = 0.2
+
+        # Pluggable quantization method name — same registry keys as
+        # QuantizedLinear (resolved by create_quantized_matmul from config;
+        # dispatched to the matmul_* entries of scale_methods/quant_methods).
+        self.method = "per_tensor"
 
     # =========================================================================
     # Layer info
@@ -183,7 +194,9 @@ class QuantizedMatMul(nn.Module):
         if self.mode == "quant_forward":
             if self.is_bitnet:
                 return self.bitnet_forward(A, B, stat_collector)
-            return self.raw_forward(A, B, stat_collector)
+            if self.mixed_precision:
+                return self._quant_forward_mixed_precision(A, B, stat_collector)
+            return self.quant_forward(A, B, stat_collector)
 
         raise NotImplementedError(f"Mode {self.mode} not implemented")
 
@@ -206,56 +219,21 @@ class QuantizedMatMul(nn.Module):
         if self.mixed_precision and self.outlier_ratio == 0.0:
             return self._scale_inspection_mixed_precision(A, B, stat_collector)
 
-        if self.outlier_ratio > 0.0:
-            outliermore = True
-            channel_mask = self.get_outlier_mask_channel(A, self.outlier_ratio)
+        # Delegate to the pluggable matmul scale method
+        # (quant/scale_methods.py, "matmul_<method>" entries).
+        # Signature: fn(A, B, out, A_spec, B_spec, O_spec, **kwargs)
+        # Returns: (A_interval, B_interval, O_interval)
+        scale_fn = get_matmul_scale_method(self.method)
 
-            # A: feature dim is always dim=-1
-            A_channel_mask = channel_mask.view(*([1] * (A.dim() - 1)), -1)
-            # B: feature dim may be -1 (pv_matmul) or -2 (qk_matmul after transpose)
-            if B.shape[-1] == channel_mask.numel():
-                B_channel_mask = channel_mask.view(*([1] * (B.dim() - 1)), -1)
-            elif B.dim() >= 2 and B.shape[-2] == channel_mask.numel():
-                B_channel_mask = channel_mask.view(*([1] * (B.dim() - 2)), -1, 1)
-            else:
-                B_channel_mask = torch.zeros(1, dtype=torch.bool, device=A.device)
-            del channel_mask
-            if outliermore:
-                B_outlier_mask = self._get_outlier_mask_1d(B, self.outlier_ratio)
-                B_channel_mask = B_channel_mask | B_outlier_mask
-                del B_outlier_mask
-            else:
-                pass
-
-            A_normal_fp = A * (~A_channel_mask).to(dtype=A.dtype)
-            A_normal_fp = A_normal_fp.to(torch.float32)
-
-            B_normal_fp = B * (~B_channel_mask).to(dtype=B.dtype)
-            B_normal_fp = B_normal_fp.to(torch.float32)
-
-            del B_channel_mask
-            del A_channel_mask
-
-            self.A_interval = safe_scale_from_tensor(A_normal_fp, self.A_spec)
-            if self.A_interval == 0:
-                self.A_interval = None
-
-            self.B_interval = safe_scale_from_tensor(B_normal_fp, self.B_spec)
-
-            del A_normal_fp
-            del B_normal_fp
-
-            channel_mask = self.get_outlier_mask_channel(out, self.outlier_ratio)
-
-            normal_idx = torch.nonzero(~channel_mask, as_tuple=False).flatten()
-
-            O_normal_fp = out.index_select(dim=-1, index=normal_idx).to(torch.float32)
-
-            self.O_interval = safe_scale_from_tensor(O_normal_fp, self.O_spec)
-        else:
-            self.A_interval = safe_scale_from_tensor(A, self.A_spec)
-            self.B_interval = safe_scale_from_tensor(B, self.B_spec)
-            self.O_interval = safe_scale_from_tensor(out, self.O_spec)
+        self.A_interval, self.B_interval, self.O_interval = scale_fn(
+            A,
+            B,
+            out,
+            self.A_spec,
+            self.B_spec,
+            self.O_spec,
+            outlier_ratio=self.outlier_ratio,
+        )
 
         if stat_collector is not None:
             stat_collector.collect_matmul_stats(
@@ -297,35 +275,6 @@ class QuantizedMatMul(nn.Module):
     # Quantized forward
     # =========================================================================
 
-    def raw_forward(
-        self,
-        A: torch.Tensor,
-        B: torch.Tensor,
-        stat_collector: Optional[object] = None,
-    ) -> torch.Tensor:
-        """Forward without quantization (mode 'raw')."""
-        out = self._matmul(A, B)
-
-        in_features = A.size(-1)
-        out_features = B.size(-1)
-
-        if stat_collector is not None:
-            stat_collector.collect_quant_activation(
-                self.layer_name,
-                self.layer_idx,
-                A,
-                A,
-                B,
-                self.B_spec,
-                self.A_spec,
-                self.digit_size,
-                self.parallelism,
-                in_features,
-                out_features,
-            )
-
-        return out
-
     def quant_forward(
         self,
         A: torch.Tensor,
@@ -333,230 +282,28 @@ class QuantizedMatMul(nn.Module):
         stat_collector: Optional[object] = None,
     ) -> torch.Tensor:
         """
-        Flexible quantized matmul.
-
-        A ~= A_interval * A_code
-        B ~= B_interval * B_code
-        acc_code = A_code @ B_code
-
-        Output is handled according to O_spec:
-          - INT: floor/round into integer output code
-          - FP: cast into FP8 output code
-          - disabled: no output quantization
+        Quantized forward — delegates to the pluggable matmul quant method
+        (quant/quant_methods.py, "matmul_<method>" entries). This method
+        only handles flow control: validate bits, load scales, dispatch.
         """
         self._check_bits()
         self._load_scales()
 
-        if self.outlier_ratio > 0.0:
-            return self._quant_forward_with_outlier(A, B, stat_collector)
+        return get_matmul_quant_method(self.method)(self, A, B, stat_collector)
 
-        A_sim = quant_awo(
-            A,
-            self.A_interval,
-            self.A_spec,
-            out_dtype=torch.float32,
-            chunk_size=1_048_576,
-        )
-
-        B_sim = quant_awo(
-            B,
-            self.B_interval,
-            self.B_spec,
-            out_dtype=torch.float32,
-            chunk_size=1_048_576,
-        )
-
-        in_features = A.size(-1)
-        out_features = B.size(-1)
-
-        if stat_collector is not None:
-            stat_collector.collect_quant_activation(
-                f"{self.layer_name}",
-                self.layer_idx,
-                A_sim,
-                A,
-                B_sim,
-                self.B_spec,
-                self.A_spec,
-                self.digit_size,
-                self.parallelism,
-                in_features,
-                out_features,
-            )
-
-        acc_code = self._matmul(A_sim, B_sim)
-
-        scale_to_output = self.A_interval * self.B_interval / self.O_interval
-
-        if self.O_spec.kind == "int":
-            M0 = torch.tensor(
-                scale_to_output,
-                device=A.device,
-                dtype=torch.float32,
-            )
-            M0 = self.round(M0 * MATMUL_SHIFT_NUM)
-
-            out_code = acc_code.mul(M0)
-            out_code = torch.div(
-                out_code,
-                MATMUL_SHIFT_NUM,
-                rounding_mode="floor",
-            )
-
-            out = out_code.mul(self.O_interval).to(A.dtype)
-
-        elif self.O_spec.kind == "fp":
-            out_scaled = acc_code.mul(scale_to_output)
-
-            dtype = fp8_dtype(self.O_spec.fmt)
-            max_val = fp8_max(self.O_spec.fmt)
-
-            out_code = out_scaled.clamp(-max_val, max_val).to(dtype).float()
-            out = out_code.mul(self.O_interval).to(A.dtype)
-
-        elif self.O_spec.kind == "bf":
-            M0 = torch.tensor(
-                scale_to_output,
-                device=A.device,
-                dtype=torch.float32,
-            )
-            M0 = self.round(M0 * MATMUL_SHIFT_NUM)
-
-            out_code = acc_code.mul(M0)
-            out_code = torch.div(
-                out_code,
-                MATMUL_SHIFT_NUM,
-                rounding_mode="floor",
-            )
-
-            out = out_code.mul(self.O_interval).to(A.dtype)
-
-        else:
-            out = self._matmul(A, B)
-
-        return out
+    # =========================================================================
+    # Mixed precision
+    # =========================================================================
 
     def _quant_forward_with_outlier(self, A, B, stat_collector=None):
-        """Outlier-protected quantized forward."""
-        outliermore = True
-        channel_mask = self.get_outlier_mask_channel(A, self.outlier_ratio)
+        """DEPRECATED: kept only as a thin alias for backward compatibility.
 
-        # A: feature dim is always dim=-1
-        A_channel_mask = channel_mask.view(*([1] * (A.dim() - 1)), -1)
-        # B: feature dim may be -1 (pv_matmul) or -2 (qk_matmul after transpose)
-        if B.shape[-1] == channel_mask.numel():
-            B_channel_mask = channel_mask.view(*([1] * (B.dim() - 1)), -1)
-        elif B.dim() >= 2 and B.shape[-2] == channel_mask.numel():
-            B_channel_mask = channel_mask.view(*([1] * (B.dim() - 2)), -1, 1)
-        else:
-            B_channel_mask = torch.zeros(1, dtype=torch.bool, device=A.device)
-        del channel_mask
-        if outliermore:
-            B_outlier_mask = self._get_outlier_mask_1d(B, self.outlier_ratio)
-            B_channel_mask = B_channel_mask | B_outlier_mask
-            del B_outlier_mask
-        else:
-            pass
-
-        A_fp = A * A_channel_mask.to(torch.float32)        # A outlier, keep FP
-        A_normal_fp = A * (~A_channel_mask).to(dtype=A.dtype)
-        A_normal_fp = A_normal_fp.to(torch.float32)
-
-        B_fp = B * B_channel_mask.to(torch.float32)        # B outlier, keep FP
-        B_normal_fp = B * (~B_channel_mask).to(dtype=B.dtype)
-        B_normal_fp = B_normal_fp.to(torch.float32)
-
-        del B_channel_mask
-        del A_channel_mask
-
-        M_q = torch.tensor(self.O_interval)
-        M_q = self.round(M_q * (2 ** 16))
-
-        M_aw = torch.tensor(self.A_interval * self.B_interval)
-        M_aw = self.round(M_aw * 2 ** 48)
-
-        M_fa_qb = torch.tensor(self.B_interval)
-        M_fa_qb = self.round(M_fa_qb * 2 ** 24)
-
-        M_qa_fb = torch.tensor(self.A_interval)
-        M_qa_fb = self.round(M_qa_fb * 2 ** 24)
-
-        A_sim = quant_awo(
-            A_normal_fp,
-            self.A_interval,
-            self.A_spec,
-            out_dtype=A.dtype,
-            chunk_size=1_048_576,
-        )
-
-        B_sim = quant_awo(
-            B_normal_fp,
-            self.B_interval,
-            self.B_spec,
-            out_dtype=B.dtype,
-            chunk_size=1_048_576,
-        )
-
-        in_features = A.size(-1)
-        out_features = B.size(-1)
-        if stat_collector is not None:
-            stat_collector.collect_quant_activation(
-                self.layer_name,
-                self.layer_idx,
-                A_sim.to(torch.float16),
-                A_sim.to(torch.float16),
-                B_sim,
-                self.B_spec,
-                self.A_spec,
-                self.digit_size,
-                self.parallelism,
-                in_features,
-                out_features,
-            )
-
-        A_sim_fp32 = A_sim.to(torch.float32)
-        B_sim_fp32 = B_sim.to(torch.float32)
-
-        out_qa_qb = self._matmul(A_sim_fp32, B_sim_fp32)
-        out_fa_fb = self._matmul(A_fp, B_fp)
-        out_fa_qb = self._matmul(A_fp, B_sim_fp32)
-        out_qa_fb = self._matmul(A_sim_fp32, B_fp)
-
-        out_qa_qb = out_qa_qb.mul_(M_aw)
-        out_qa_qb = torch.div(out_qa_qb, 2 ** 48)
-
-        out_fa_qb = out_fa_qb.mul_(M_fa_qb)
-        out_fa_qb = torch.div(out_fa_qb, 2 ** 24)
-
-        out_qa_fb = out_qa_fb.mul_(M_qa_fb)
-        out_qa_fb = torch.div(out_qa_fb, 2 ** 24)
-
-        if outliermore:
-            out_with_outlier = out_qa_qb + out_fa_fb + out_fa_qb + out_qa_fb
-        else:
-            out_with_outlier = out_qa_qb + out_fa_fb
-
-        out_with_outlier_mask = self.get_outlier_mask_channel(out_with_outlier, self.outlier_ratio)
-        out_without_outlier_mask = ~out_with_outlier_mask
-
-        out_outlier = out_with_outlier * out_with_outlier_mask.to(torch.float32)
-        out_normal = out_with_outlier * out_without_outlier_mask.to(torch.float32)
-
-        out_normal_quant = quant_awo(
-            out_normal,
-            self.O_interval,
-            self.O_spec,
-            out_dtype=out_normal.dtype,
-            chunk_size=1_048_576,
-        )
-
-        out_normal_dequant = out_normal_quant.to(torch.float32).mul_(M_q).to(A.dtype)
-        out_normal_dequant = torch.div(out_normal_dequant, 2 ** 16).to(A.dtype)
-        out_outlier = out_outlier.to(A.dtype)
-
-        out = out_normal_dequant + out_outlier
-
-        return out
+        The implementation now lives in
+        quant/quant_methods.py::matmul_quant_forward_with_outlier.
+        """
+        self._check_bits()
+        self._load_scales()
+        return get_matmul_quant_method("outlier")(self, A, B, stat_collector)
 
     # =========================================================================
     # Mixed precision
@@ -779,49 +526,6 @@ class QuantizedMatMul(nn.Module):
             chunk_size=1_048_576,
         ).to(torch.float32)
         return code, scale, code * scale
-
-    # =========================================================================
-    # Outlier helpers
-    # =========================================================================
-
-    def get_outlier_mask_channel(self, tensor: torch.Tensor, ratio: float) -> torch.Tensor:
-        """Compute per-channel outlier mask (True = protected channel)."""
-        tensor_2d = tensor.reshape(-1, tensor.shape[-1])   # [N, H]
-        channel_score = tensor_2d.abs().amax(dim=0)        # [H]
-
-        k = max(1, int(channel_score.numel() * ratio))
-
-        protected_idx = torch.topk(channel_score, k).indices
-
-        channel_mask = torch.zeros_like(channel_score, dtype=torch.bool)
-        channel_mask[protected_idx] = True
-
-        return channel_mask
-
-    def _get_outlier_mask_1d(self, tensor: torch.Tensor, ratio: float) -> torch.Tensor:
-        """Return bool mask, True = outlier (kept in FP)."""
-        if ratio <= 0.0:
-            return torch.zeros(tensor.shape, dtype=torch.bool, device=tensor.device)
-
-        numel = tensor.numel()
-        if numel == 0:
-            return torch.zeros(tensor.shape, dtype=torch.bool, device=tensor.device)
-
-        k = max(1, min(int(numel * ratio), numel - 1))
-
-        flat_abs = tensor.abs().flatten()
-        threshold = torch.topk(flat_abs, k).values.min()
-
-        min_val = flat_abs.min()
-        if threshold == min_val:
-            outlier_mask_flat = flat_abs > min_val
-        else:
-            outlier_mask_flat = flat_abs >= threshold
-
-        if outlier_mask_flat.sum() == 0:
-            return torch.zeros(tensor.shape, dtype=torch.bool, device=tensor.device)
-
-        return outlier_mask_flat.view(tensor.shape)
 
     # =========================================================================
     # BitNet (kept for compatibility; unused on SmolVLA path)

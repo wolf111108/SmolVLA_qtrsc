@@ -159,6 +159,12 @@ def compute_sqnr(reference: torch.Tensor, quantized: torch.Tensor) -> float:
 # Hard-coded output path for per-layer SQNR logging.
 SQNR_LOG_PATH = "/home/zyzhao/VLA_tcs2/outputs/quant_sqnr/sqnrs_12mixed_new.jsonl"
 
+# SQNR logging is opt-in (env var): the linear paths log per-layer SQNR on
+# every forward, which is useful for offline analysis but slows eval down.
+# Keep the default OFF so eval runs are not penalized unless requested.
+import os as _os
+SQNR_LOG_ENABLED = _os.environ.get("VLA_SQNR_LOG", "0") == "1"
+
 
 def log_layer_sqnr(
     reference: torch.Tensor,
@@ -181,8 +187,11 @@ def log_layer_sqnr(
         extra: optional dict of additional fields (e.g. a_bit/w_bit/o_bit).
 
     Returns:
-        SQNR in dB (float). Also writes the record to disk.
+        SQNR in dB (float). Also writes the record to disk (when enabled).
     """
+    if not SQNR_LOG_ENABLED:
+        return float("nan")
+
     import json as _json
 
     sqnr_db = compute_sqnr(reference, quantized)

@@ -21,6 +21,10 @@ Available methods:
   - "per_channel"     : (reserved) per-output-channel weight scale —
                         returns tensor scales, needs tensor-aware
                         quant_awo (already supported) — placeholder.
+
+MatMul variants (attention QK^T / PV) live in the same registry with a
+"matmul_" prefix and take the two operands (A, B) instead of (x, weight):
+  - "matmul_per_tensor" / "matmul_outlier" / "matmul_pot_fp8_outlier"
 """
 
 from __future__ import annotations
@@ -222,6 +226,131 @@ def scales_with_pot_fp8_outlier(
 
     return a_pot, w_pot, o_pot
 
+
+# ============================================================================
+# MatMul scale methods (attention QK^T / PV). Same signature shape as the
+# linear variants, but the layer passes its two operands as (A, B).
+# ============================================================================
+
+
+def _matmul_B_channel_mask(
+    B: torch.Tensor,
+    channel_mask: torch.Tensor,
+    A: torch.Tensor,
+) -> torch.Tensor:
+    """
+    Broadcast a [H] channel mask onto B, whose contraction dim may be the
+    last (pv_matmul: P @ V) or second-to-last (qk_matmul: Q @ K^T) dim.
+    """
+    if B.shape[-1] == channel_mask.numel():
+        return channel_mask.view(*([1] * (B.dim() - 1)), -1)
+    if B.dim() >= 2 and B.shape[-2] == channel_mask.numel():
+        return channel_mask.view(*([1] * (B.dim() - 2)), -1, 1)
+    return torch.zeros(1, dtype=torch.bool, device=A.device)
+
+
+def matmul_scales_per_tensor(
+    A: torch.Tensor,
+    B: torch.Tensor,
+    out: torch.Tensor,
+    A_spec: QuantSpec,
+    B_spec: QuantSpec,
+    O_spec: QuantSpec,
+    **kwargs,
+) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    """Classic per-tensor absmax scale for matmul operands."""
+    a = safe_scale_from_tensor(A, A_spec)
+    w = safe_scale_from_tensor(B, B_spec)
+    o = safe_scale_from_tensor(out, O_spec)
+    return a, w, o
+
+
+def matmul_scales_with_outlier(
+    A: torch.Tensor,
+    B: torch.Tensor,
+    out: torch.Tensor,
+    A_spec: QuantSpec,
+    B_spec: QuantSpec,
+    O_spec: QuantSpec,
+    outlier_ratio: float = 0.01,
+    **kwargs,
+) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    """
+    Per-tensor scale over the *normal* part of matmul operands.
+
+    Same policy as scales_with_outlier: outlier channels (ranked by
+    absmax along A's last dim) plus element-level B outliers are
+    excluded from the absmax and kept FP at quantization time.
+    """
+    if outlier_ratio <= 0.0:
+        return matmul_scales_per_tensor(A, B, out, A_spec, B_spec, O_spec)
+
+    channel_mask = get_outlier_mask_channel(A, outlier_ratio)
+
+    A_channel_mask = channel_mask.view(*([1] * (A.dim() - 1)), -1)
+    B_channel_mask = _matmul_B_channel_mask(B, channel_mask, A)
+    del channel_mask
+    B_channel_mask = B_channel_mask | get_outlier_mask_1d(B, outlier_ratio)
+
+    A_normal = (A * (~A_channel_mask).to(dtype=A.dtype)).to(torch.float32)
+    B_normal = (B * (~B_channel_mask).to(dtype=B.dtype)).to(torch.float32)
+    del A_channel_mask, B_channel_mask
+
+    a = safe_scale_from_tensor(A_normal, A_spec)
+    if a == 0:
+        a = None
+    w = safe_scale_from_tensor(B_normal, B_spec)
+
+    del A_normal, B_normal
+
+    o_channel_mask = get_outlier_mask_channel(out, outlier_ratio)
+    normal_idx = torch.nonzero(~o_channel_mask, as_tuple=False).flatten()
+    o_normal = out.index_select(dim=-1, index=normal_idx).to(torch.float32)
+    o = safe_scale_from_tensor(o_normal, O_spec)
+
+    return a, w, o
+
+
+def matmul_scales_pot_fp8_outlier(
+    A: torch.Tensor,
+    B: torch.Tensor,
+    out: torch.Tensor,
+    A_spec: QuantSpec,
+    B_spec: QuantSpec,
+    O_spec: QuantSpec,
+    outlier_ratio: float = 0.01,
+    **kwargs,
+) -> Tuple[
+    Optional[float],
+    Optional[float],
+    Optional[float],
+]:
+    """
+    PoT-FP8 + Outlier Protection for matmul: same relation to
+    matmul_scales_with_outlier as scales_with_pot_fp8_outlier has to
+    scales_with_outlier (scales snapped onto the 2^k grid).
+    """
+    _validate_fp8_or_passthrough(A_spec, "activation")
+    _validate_fp8_or_passthrough(B_spec, "weight")
+    _validate_fp8_or_passthrough(O_spec, "output")
+
+    a, w, o = matmul_scales_with_outlier(
+        A,
+        B,
+        out,
+        A_spec,
+        B_spec,
+        O_spec,
+        outlier_ratio=outlier_ratio,
+        **kwargs,
+    )
+
+    return (
+        _ceil_power_of_two_scale(a),
+        _ceil_power_of_two_scale(w),
+        _ceil_power_of_two_scale(o),
+    )
+
 # ============================================================================
 # Tools
 # ============================================================================
@@ -283,14 +412,29 @@ SCALE_METHODS: dict[str, Callable] = {
     "per_tensor": scales_per_tensor,
     "outlier": scales_with_outlier,
     "pot_fp8_outlier": scales_with_pot_fp8_outlier,
+    # matmul variants (QuantizedMatMul appends/prefixes these)
+    "matmul_per_tensor": matmul_scales_per_tensor,
+    "matmul_outlier": matmul_scales_with_outlier,
+    "matmul_pot_fp8_outlier": matmul_scales_pot_fp8_outlier,
 }
 
 
 def get_scale_method(name: str) -> Callable:
-    """Look up a scale method by name (config: quantization.scale_method)."""
+    """Look up a scale method by name (config: quantization.method)."""
     method = SCALE_METHODS.get(name)
     if method is None:
         raise ValueError(
             f"Unknown scale_method '{name}', valid: {sorted(SCALE_METHODS)}"
         )
     return method
+
+
+def get_matmul_scale_method(name: str) -> Callable:
+    """
+    Look up a matmul scale method by its *linear-style* name.
+
+    QuantizedMatMul stores the same method name as QuantizedLinear
+    (e.g. "pot_fp8_outlier"); this resolver maps it onto the
+    "matmul_"-prefixed registry entry, falling back to per_tensor.
+    """
+    return get_scale_method(f"matmul_{name}")
