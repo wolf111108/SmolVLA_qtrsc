@@ -24,6 +24,7 @@ from typing import Optional, Tuple, Dict
 from vla_tcs2.quant.utils import Round
 from vla_tcs2.quant.scale_methods import get_scale_method
 from vla_tcs2.quant.quant_methods import get_quant_method
+from vla_tcs2.quant.test_methods import get_test_method, test_method_requires_scales
 from vla_tcs2.quant.quant_spec import (
     QuantSpec,
     parse_quant_spec,
@@ -150,6 +151,16 @@ class QuantizedLinear(nn.Linear):
         # Layer identification
         self.layer_name = ""
         self.layer_idx = 0
+
+        # Physical operator identity (unique; used for sensitivity / dump /
+        # SQNR / test stats). NEVER used for scale sharing.
+        self.module_id = ""
+
+        # Scale-sharing identity (configurable; used for calibration
+        # aggregation and scale persistence). Falls back to layer_name/idx
+        # when unset, preserving legacy behaviour.
+        self.scale_group_name = ""
+        self.scale_group_idx = 0
         
         self.outlier_ratio = outlier_ratio
         self.calibration_policy = "recalibrate"
@@ -162,20 +173,45 @@ class QuantizedLinear(nn.Linear):
         # per-layer method).
         self.method = "per_tensor"
 
+        # Pluggable test-forward method name (quant/test_methods.py). Resolved
+        # at wrap time from config (quantization.test_method or per-layer
+        # test_method); dispatched by self.test_forward (mode "test_forward").
+        self.test_method = "raw"
+
         # Tensor dump state: weight is static, so dump it only once per layer.
         self._weight_dumped = False
     
-    def set_layer_info(self, layer_name: str, layer_idx: int):
-        """Set layer name and index for scale file management."""
+    def set_layer_info(self, layer_name: str, layer_idx: int, module_id: Optional[str] = None):
+        """Set layer name/index and the physical operator identity.
+
+        `module_id` uniquely identifies the real computation site (e.g.
+        "vlm.layers.3.self_attn.q_proj") and is used only for sensitivity /
+        dump / SQNR / test stats — never for scale sharing.
+        """
         self.layer_name = layer_name
         self.layer_idx = layer_idx
+        self.module_id = (
+            module_id if module_id is not None else f"{layer_name}_{layer_idx}"
+        )
+
+    def set_scale_group(self, name: str, idx: int):
+        """Set the scale-sharing identity (calibration aggregation + files)."""
+        self.scale_group_name = name
+        self.scale_group_idx = idx
+
+    def _scale_identity(self):
+        """Return (name, idx) used for scale files / calibration aggregation."""
+        if self.scale_group_name:
+            return self.scale_group_name, self.scale_group_idx
+        return self.layer_name, self.layer_idx
     
     
     def _scale_file_paths(self):
+        name, idx = self._scale_identity()
         return (
-            os.path.join(self.scale_root_str, f"{self.layer_name}_w_scale_{self.layer_idx}.p"),
-            os.path.join(self.scale_root_str, f"{self.layer_name}_a_scale_{self.layer_idx}.p"),
-            os.path.join(self.scale_root_str, f"{self.layer_name}_o_scale_{self.layer_idx}.p"),
+            os.path.join(self.scale_root_str, f"{name}_w_scale_{idx}.p"),
+            os.path.join(self.scale_root_str, f"{name}_a_scale_{idx}.p"),
+            os.path.join(self.scale_root_str, f"{name}_o_scale_{idx}.p"),
         )
 
     def _scale_files_exist(self) -> bool:
@@ -228,6 +264,8 @@ class QuantizedLinear(nn.Linear):
             return self.scale_inspection(x, stat_collector)
         elif self.mode == "quant_forward":
             return self.quant_forward(x, stat_collector)
+        elif self.mode == "test_forward":
+            return self.test_forward(x, stat_collector)
         else:
             raise NotImplementedError(f"Mode {self.mode} not implemented")
     
@@ -271,11 +309,12 @@ class QuantizedLinear(nn.Linear):
             outlier_ratio=self.outlier_ratio,
         )
 
-            # Collect statistics if collector is provided
+        # Collect statistics if collector is provided
         if stat_collector is not None:
+            scale_name, scale_idx = self._scale_identity()
             stat_collector.collect_linear_stats(
-                self.layer_name,
-                self.layer_idx,
+                scale_name,
+                scale_idx,
                 self.w_interval,
                 self.a_interval,
                 self.o_interval
@@ -299,9 +338,9 @@ class QuantizedLinear(nn.Linear):
           calibration steps (guarded by the global _dump_step counter).
 
         File naming:
-            weight_{layer_name}_{layer_idx}.pt
-            activation_{layer_name}_{layer_idx}_step{step}.pt
-            output_{layer_name}_{layer_idx}_step{step}.pt
+            weight_{module_id}.pt
+            activation_{module_id}_step{step}.pt
+            output_{module_id}_step{step}.pt
 
         Tensors are detached and moved to CPU before saving (torch.save).
         """
@@ -310,11 +349,14 @@ class QuantizedLinear(nn.Linear):
 
         os.makedirs(DUMP_TENSORS_DIR, exist_ok=True)
 
+        # Sanitize module_id for use as a filename fragment (dots -> underscores).
+        dump_id = self.module_id.replace(".", "_")
+
         # Weight: once per layer.
         if not self._weight_dumped:
             w_path = os.path.join(
                 DUMP_TENSORS_DIR,
-                f"weight_{self.layer_name}_{self.layer_idx}.pt",
+                f"weight_{dump_id}.pt",
             )
             torch.save(weight.detach().cpu(), w_path)
             self._weight_dumped = True
@@ -326,11 +368,11 @@ class QuantizedLinear(nn.Linear):
 
         x_path = os.path.join(
             DUMP_TENSORS_DIR,
-            f"activation_{self.layer_name}_{self.layer_idx}_step{step}.pt",
+            f"activation_{dump_id}_step{step}.pt",
         )
         o_path = os.path.join(
             DUMP_TENSORS_DIR,
-            f"output_{self.layer_name}_{self.layer_idx}_step{step}.pt",
+            f"output_{dump_id}_step{step}.pt",
         )
         torch.save(x.detach().cpu(), x_path)
         torch.save(out.detach().cpu(), o_path)
@@ -349,21 +391,25 @@ class QuantizedLinear(nn.Linear):
         self._load_scales()
         return get_quant_method(self.method)(self, x, stat_collector)
 
+    def test_forward(
+        self,
+        x: torch.Tensor,
+        stat_collector: Optional[object] = None
+    ) -> torch.Tensor:
+        """
+        Test/experimental forward — delegates to the pluggable test method
+        (quant/test_methods.py). Flow control mirrors quant_forward, but
+        scales are loaded on demand: only quant_residual methods need them
+        (gaussian/raw methods work without calibration).
+        """
+        if test_method_requires_scales(self.test_method):
+            self._load_scales()
+        return get_test_method(self.test_method)(self, x, stat_collector)
+
     def _load_scales(self):
         """Load quantization scales from files."""
         # Construct scale file paths
-        w_scale_file = os.path.join(
-            self.scale_root_str, 
-            f"{self.layer_name}_w_scale_{self.layer_idx}.p"
-        )
-        a_scale_file = os.path.join(
-            self.scale_root_str,
-            f"{self.layer_name}_a_scale_{self.layer_idx}.p"
-        )
-        o_scale_file = os.path.join(
-            self.scale_root_str,
-            f"{self.layer_name}_o_scale_{self.layer_idx}.p"
-        )
+        w_scale_file, a_scale_file, o_scale_file = self._scale_file_paths()
         
         # Load scales
         with open(w_scale_file, 'rb') as f:
@@ -383,26 +429,15 @@ class QuantizedLinear(nn.Linear):
         os.makedirs(self.scale_root_str, exist_ok=True)
         
         # Save weight scale
-        w_scale_file = os.path.join(
-            self.scale_root_str,
-            f"{self.layer_name}_w_scale_{self.layer_idx}.p"
-        )
+        w_scale_file, a_scale_file, o_scale_file = self._scale_file_paths()
         with open(w_scale_file, 'wb') as f:
             pickle.dump(self.w_interval, f)
         
         # Save activation scale
-        a_scale_file = os.path.join(
-            self.scale_root_str,
-            f"{self.layer_name}_a_scale_{self.layer_idx}.p"
-        )
         with open(a_scale_file, 'wb') as f:
             pickle.dump(self.a_interval, f)
         
         # Save output scale
-        o_scale_file = os.path.join(
-            self.scale_root_str,
-            f"{self.layer_name}_o_scale_{self.layer_idx}.p"
-        )
         with open(o_scale_file, 'wb') as f:
             pickle.dump(self.o_interval, f)
     

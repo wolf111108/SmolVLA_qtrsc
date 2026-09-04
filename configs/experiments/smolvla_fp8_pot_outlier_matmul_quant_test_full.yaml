@@ -40,6 +40,14 @@ quantization:
   # ★ 本次实验的差异点：attention matmul 也量化
   quantize_matmul: true
 
+  # scale 共享粒度（fine-grained quant plan Phase C）。
+  # 无论粒度如何，物理对象数不变（64 MatMul + 224 Linear），
+  # 只改变 scale 文件共享关系：
+  #   global / per_component / per_layer / per_site
+  # per_site = 完全不共享（正确 baseline）；其余作为 sharing ablation。
+  matmul_scale_granularity: per_site
+  linear_scale_granularity: per_site
+
   # 顶层默认 outlier_ratio；linear 与 matmul 各层也显式写出，便于审计
   outlier_ratio: 0.01
 

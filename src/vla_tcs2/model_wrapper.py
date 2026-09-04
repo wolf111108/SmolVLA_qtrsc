@@ -21,6 +21,7 @@ managed by QuantStatManager (quant/stat_manager.py).
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
@@ -113,6 +114,14 @@ def create_quantized_linear(
         quant_config.get("method", "per_tensor"),
     )
 
+    # Pluggable test-forward method name (quant/test_methods.py), used when
+    # mode == "test_forward". Per-layer config overrides the top-level
+    # quantization.test_method.
+    quant_layer.test_method = layer_config.get(
+        "test_method",
+        quant_config.get("test_method", "raw"),
+    )
+
     # Copy weights (defensive device/dtype alignment first).
     _ow = original_layer.weight
     if _ow.device.type != "meta":
@@ -165,14 +174,86 @@ def create_quantized_matmul(
         quant_config.get("method", "per_tensor"),
     )
 
+    # Pluggable test-forward method name (quant/test_methods.py), used when
+    # mode == "test_forward". Per-layer config overrides the top-level
+    # quantization.test_method.
+    quant_matmul.test_method = layer_config.get(
+        "test_method",
+        quant_config.get("test_method", "raw"),
+    )
+
     quant_matmul.set_layer_info(layer_type, layer_idx)
 
     return quant_matmul
 
 
+# =============================================================================
+# MatMul site routing (fine-grained quant plan §13-§18)
+# =============================================================================
+
+# Holds the currently-executing attention site as (component, layer_idx).
+# `get_attention_interface()` is a model-level method with no layer_idx
+# parameter, so we thread the site through a ContextVar instead of modifying
+# lerobot source. component ∈ {"vlm", "expert", "joint"}.
+_CURRENT_ATTN_SITE: ContextVar = ContextVar("smolvla_attn_site", default=None)
+
+
+def resolve_matmul_scale_group(
+    component: str,
+    layer_idx: int,
+    op: str,
+    granularity: str,
+) -> tuple[str, int]:
+    """Map a physical MatMul site to its scale-sharing (name, idx) pair.
+
+    granularity ∈ {global, per_component, per_layer, per_site}:
+      - global        : every qk/pv shares one scale (qk/pv only).
+      - per_component : vlm vs expert split (qk/pv per component).
+      - per_layer     : shared across vlm/expert per layer index.
+      - per_site      : every physical MatMul has its own scale (default).
+    """
+    if granularity == "global":
+        return f"{op}_matmul", 0
+    if granularity == "per_component":
+        return f"{component}_{op}_matmul", 0
+    if granularity == "per_layer":
+        return f"layer_{op}_matmul", layer_idx
+    if granularity == "per_site":
+        return f"{component}_{op}_matmul", layer_idx
+    raise ValueError(f"Unknown matmul_scale_granularity: {granularity}")
+
+
+def resolve_linear_scale_group(
+    component: str,
+    layer_idx: int,
+    name: str,
+    granularity: str,
+) -> tuple[str, int]:
+    """Map a physical Linear site to its scale-sharing (name, idx) pair.
+
+    Mirrors resolve_matmul_scale_group. `name` is the Linear op name
+    (q_proj/k_proj/v_proj/o_proj/gate_proj/up_proj/down_proj).
+
+    granularity ∈ {global, per_component, per_layer, per_site}:
+      - global        : every layer/component shares one scale per op name.
+      - per_component : vlm vs expert split (op scale per component).
+      - per_layer     : shared across vlm/expert per layer index.
+      - per_site      : every physical Linear has its own scale (default).
+    """
+    if granularity == "global":
+        return f"{name}", 0
+    if granularity == "per_component":
+        return f"{component}_{name}", 0
+    if granularity == "per_layer":
+        return f"layer_{name}", layer_idx
+    if granularity == "per_site":
+        return f"{component}_{name}", layer_idx
+    raise ValueError(f"Unknown linear_scale_granularity: {granularity}")
+
+
 def switch_quantization_mode_all(model: nn.Module, mode: str) -> nn.Module:
     """Toggle every QuantizedLinear / QuantizedMatMul to the given mode."""
-    valid_modes = {"raw", "scale_inspection", "quant_forward"}
+    valid_modes = {"raw", "scale_inspection", "quant_forward", "test_forward"}
     if mode not in valid_modes:
         raise ValueError(f"Invalid quantization mode: {mode}")
 
@@ -238,11 +319,15 @@ def _wrap_smolvla_linear_layers(
     replaced = 0
     model_obj = model.model  # VLAFlowMatching
 
+    granularity = str(
+        quant_config.get("linear_scale_granularity", "per_site")
+    ).lower()
+
     # SmolVLMWithExpertModel lives under .vlm_with_expert
     vlm_expert = model_obj.vlm_with_expert
     text_model = vlm_expert.get_vlm_model().text_model
 
-    def wrap_layer_group(group, prefix, layer_idx):
+    def wrap_layer_group(group, component, layer_idx):
         nonlocal replaced
         attn = group.self_attn
         mlp = getattr(group, "mlp", None)
@@ -251,37 +336,49 @@ def _wrap_smolvla_linear_layers(
             mod = getattr(attn, name, None)
             if mod is None or not isinstance(mod, nn.Linear):
                 continue
-            if not _should_wrap(f"{prefix}.self_attn.{name}", quant_config):
+            module_id = f"{component}.layers.{layer_idx}.self_attn.{name}"
+            if not _should_wrap(module_id, quant_config):
                 continue
             ql = create_quantized_linear(mod, name, layer_idx, quant_config, mode)
             ql._stat_manager = stat_manager
+            ql.set_layer_info(name, layer_idx, module_id=module_id)
+            sg_name, sg_idx = resolve_linear_scale_group(
+                component, layer_idx, name, granularity
+            )
+            ql.set_scale_group(sg_name, sg_idx)
             setattr(attn, name, ql)
             replaced += 1
             if stat_manager is not None:
-                stat_manager.register_layer(name, layer_idx)
+                stat_manager.register_layer(sg_name, sg_idx)
 
         if mlp is not None:
             for name in SMOLVLA_MLP_LINEAR_NAMES:
                 mod = getattr(mlp, name, None)
                 if mod is None or not isinstance(mod, nn.Linear):
                     continue
-                if not _should_wrap(f"{prefix}.mlp.{name}", quant_config):
+                module_id = f"{component}.layers.{layer_idx}.mlp.{name}"
+                if not _should_wrap(module_id, quant_config):
                     continue
                 ql = create_quantized_linear(mod, name, layer_idx, quant_config, mode)
                 ql._stat_manager = stat_manager
+                ql.set_layer_info(name, layer_idx, module_id=module_id)
+                sg_name, sg_idx = resolve_linear_scale_group(
+                    component, layer_idx, name, granularity
+                )
+                ql.set_scale_group(sg_name, sg_idx)
                 setattr(mlp, name, ql)
                 replaced += 1
                 if stat_manager is not None:
-                    stat_manager.register_layer(name, layer_idx)
+                    stat_manager.register_layer(sg_name, sg_idx)
 
     # VLM text layers
     for i, layer in enumerate(text_model.layers):
-        wrap_layer_group(layer, f"vlm.text_model.layers.{i}", i)
+        wrap_layer_group(layer, "vlm", i)
 
     # LM expert layers
     expert = vlm_expert.lm_expert
     for i, layer in enumerate(expert.layers):
-        wrap_layer_group(layer, f"lm_expert.layers.{i}", i)
+        wrap_layer_group(layer, "expert", i)
 
     # Action head / misc Linear (exclude vlm + lm_expert subtrees)
     for name, mod in list(vlm_expert.named_modules()):
@@ -294,55 +391,159 @@ def _wrap_smolvla_linear_layers(
             continue
         ql = create_quantized_linear(mod, name, 0, quant_config, mode)
         ql._stat_manager = stat_manager
+        ql.set_layer_info(name, 0, module_id=full_name)
+        ql.set_scale_group(f"head_{name}", 0)
         _setattr_path(vlm_expert, name, ql)
         replaced += 1
         if stat_manager is not None:
-            stat_manager.register_layer(name, 0)
+            stat_manager.register_layer(f"head_{name}", 0)
 
     return replaced
 
 
+def _resolve_attn_component(inputs_embeds: list) -> str:
+    """Infer the attention component from the inputs_embeds list.
+
+    inputs_embeds[0] is the VLM prefix, inputs_embeds[1] the expert suffix.
+    Eval paths pass exactly one of them (prefix prefill -> vlm, denoise ->
+    expert). When both are present (joint/training) we return "joint" and the
+    dispatcher falls back to raw matmul.
+    """
+    has_prefix = bool(inputs_embeds) and inputs_embeds[0] is not None
+    has_suffix = len(inputs_embeds) > 1 and inputs_embeds[1] is not None
+    if has_prefix and not has_suffix:
+        return "vlm"
+    if not has_prefix and has_suffix:
+        return "expert"
+    return "joint"
+
+
 def _inject_smolvla_quantized_matmul(
     attention_module,
-    layer_idx: int,
     quant_config: dict[str, Any],
     mode: str,
     stat_manager: QuantStatManager | None,
 ):
     """
-    Monkey-patch SmolVLMWithExpertModel.get_attention_interface so the
-    QK^T and PV matmuls in eager attention go through QuantizedMatMul.
+    Create 64 physical QuantizedMatMul objects (2 components × 16 layers ×
+    qk/pv) and route the eager attention QK^T / PV matmuls to the correct one
+    via a ContextVar, without modifying lerobot source.
 
-    The eager_attention_forward receives (attention_mask, batch_size,
-    head_dim, query_states, key_states, value_states) and internally does:
+    `get_attention_interface()` is a model-level method with no layer_idx, so
+    we (a) wrap forward_attn_layer / forward_cross_attn_layer to set the
+    current (component, layer_idx) site, and (b) make the attention interface
+    dispatch to `quant_matmuls[f"{component}_{op}_{layer_idx}"]`.
 
-        att_weights = Q @ K^T            -> qk_matmul
-        att_output  = softmax(...) @ V   -> pv_matmul
-
-    NOTE: the interface is model-level (shared by all attention layers),
-    so a single injected pair of quantizers serves every layer. The
-    layer_idx is only used for scale-file naming.
+    Each MatMul has a unique `module_id` (physical identity) and a
+    `scale_group` resolved by `matmul_scale_granularity` (scale sharing).
     """
     if not quant_config.get("quantize_matmul", False):
         return
 
-    qk_matmul = create_quantized_matmul("qk_matmul", layer_idx, quant_config, mode)
-    pv_matmul = create_quantized_matmul("pv_matmul", layer_idx, quant_config, mode)
+    granularity = str(
+        quant_config.get("matmul_scale_granularity", "per_site")
+    ).lower()
 
-    qk_matmul._stat_manager = stat_manager
-    pv_matmul._stat_manager = stat_manager
+    num_vlm_layers = attention_module.num_vlm_layers
+    num_expert_layers = attention_module.num_expert_layers
 
-    attention_module.qk_matmul = qk_matmul
-    attention_module.pv_matmul = pv_matmul
+    attention_module.quant_matmuls = nn.ModuleDict()
     attention_module.stat_manager = stat_manager
 
-    if stat_manager is not None:
-        stat_manager.register_layer("qk_matmul", layer_idx)
-        stat_manager.register_layer("pv_matmul", layer_idx)
+    for component, n_layers in (
+        ("vlm", num_vlm_layers),
+        ("expert", num_expert_layers),
+    ):
+        for layer_idx in range(n_layers):
+            for op in ("qk", "pv"):
+                layer_type = f"{op}_matmul"
+                mm = create_quantized_matmul(
+                    layer_type, layer_idx, quant_config, mode
+                )
+                mm._stat_manager = stat_manager
+                mm.set_layer_info(
+                    layer_type,
+                    layer_idx,
+                    module_id=f"{component}.layer.{layer_idx}.{op}",
+                )
+                sg_name, sg_idx = resolve_matmul_scale_group(
+                    component, layer_idx, op, granularity
+                )
+                mm.set_scale_group(sg_name, sg_idx)
+                attention_module.quant_matmuls[
+                    f"{component}_{op}_{layer_idx}"
+                ] = mm
+                if stat_manager is not None:
+                    stat_manager.register_layer(sg_name, sg_idx)
 
     # Keep the original eager implementation as fallback reference.
     original_forward = attention_module.get_attention_interface()
     attention_module._original_attention_forward = original_forward
+
+    # Wrap the two layer-level forward methods to set the current site.
+    original_forward_attn_layer = attention_module.forward_attn_layer
+    original_forward_cross_attn_layer = attention_module.forward_cross_attn_layer
+
+    def wrapped_forward_attn_layer(
+        model_layers,
+        inputs_embeds,
+        layer_idx,
+        position_ids,
+        attention_mask,
+        batch_size,
+        head_dim,
+        use_cache=True,
+        past_key_values=None,
+    ):
+        token = _CURRENT_ATTN_SITE.set(
+            (_resolve_attn_component(inputs_embeds), layer_idx)
+        )
+        try:
+            return original_forward_attn_layer(
+                model_layers,
+                inputs_embeds,
+                layer_idx,
+                position_ids,
+                attention_mask,
+                batch_size,
+                head_dim,
+                use_cache=use_cache,
+                past_key_values=past_key_values,
+            )
+        finally:
+            _CURRENT_ATTN_SITE.reset(token)
+
+    def wrapped_forward_cross_attn_layer(
+        model_layers,
+        inputs_embeds,
+        layer_idx,
+        position_ids,
+        attention_mask,
+        batch_size,
+        head_dim,
+        use_cache=True,
+        past_key_values=None,
+    ):
+        token = _CURRENT_ATTN_SITE.set(
+            (_resolve_attn_component(inputs_embeds), layer_idx)
+        )
+        try:
+            return original_forward_cross_attn_layer(
+                model_layers,
+                inputs_embeds,
+                layer_idx,
+                position_ids,
+                attention_mask,
+                batch_size,
+                head_dim,
+                use_cache=use_cache,
+                past_key_values=past_key_values,
+            )
+        finally:
+            _CURRENT_ATTN_SITE.reset(token)
+
+    attention_module.forward_attn_layer = wrapped_forward_attn_layer
+    attention_module.forward_cross_attn_layer = wrapped_forward_cross_attn_layer
 
     def quantized_eager_attention_forward(
         attention_mask, batch_size, head_dim, query_states, key_states, value_states
@@ -373,9 +574,28 @@ def _inject_smolvla_quantized_matmul(
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
 
-        att_weights = attention_module.qk_matmul(
-            query_states, key_states.transpose(2, 3)
-        )
+        site = _CURRENT_ATTN_SITE.get()
+        if site is not None and site[0] in ("vlm", "expert"):
+            component, layer_idx = site
+            qk_matmul = attention_module.quant_matmuls[
+                f"{component}_qk_{layer_idx}"
+            ]
+            pv_matmul = attention_module.quant_matmuls[
+                f"{component}_pv_{layer_idx}"
+            ]
+        else:
+            # joint / unknown site -> raw matmul fallback (training boundary)
+            qk_matmul = None
+            pv_matmul = None
+
+        if qk_matmul is not None:
+            att_weights = qk_matmul(
+                query_states, key_states.transpose(2, 3)
+            )
+        else:
+            att_weights = torch.matmul(
+                query_states, key_states.transpose(2, 3)
+            )
         att_weights *= head_dim**-0.5
 
         att_weights = att_weights.to(dtype=torch.float32)
@@ -384,9 +604,14 @@ def _inject_smolvla_quantized_matmul(
         probs = nn.functional.softmax(masked_att_weights, dim=-1)
         probs = probs.to(dtype=value_states.dtype)
 
-        att_output = attention_module.pv_matmul(
-            probs, value_states.permute(0, 2, 1, 3)
-        )
+        if pv_matmul is not None:
+            att_output = pv_matmul(
+                probs, value_states.permute(0, 2, 1, 3)
+            )
+        else:
+            att_output = torch.matmul(
+                probs, value_states.permute(0, 2, 1, 3)
+            )
 
         att_output = att_output.permute(0, 2, 1, 3)
         att_output = att_output.reshape(
@@ -529,22 +754,24 @@ class ModelWrapper:
         print(f"Replaced {n_linear} Linear modules.")
 
         if self.quant_cfg.get("quantize_matmul", False):
-            # NOTE: get_attention_interface is a MODEL-level method on
-            # SmolVLMWithExpertModel (every self/cross-attention layer calls
-            # the same interface), so per-layer injection is not possible
-            # without threading layer_idx through the model. We inject ONE
-            # shared pair of qk/pv quantizers; their scales are calibrated
-            # over ALL layers' activations (absmax aggregated), which is
-            # conservative but safe.
+            # get_attention_interface is a MODEL-level method on
+            # SmolVLMWithExpertModel, so per-layer routing is done via a
+            # ContextVar set inside wrapped forward_attn_layer /
+            # forward_cross_attn_layer (see _inject_smolvla_quantized_matmul).
+            # 64 physical MatMul objects (vlm/expert × 16 layers × qk/pv) are
+            # created; scale sharing is controlled by matmul_scale_granularity.
             model_obj = self.model.model.vlm_with_expert
             _inject_smolvla_quantized_matmul(
                 model_obj,
-                0,
                 self.quant_cfg,
                 mode,
                 self.stat_manager,
             )
-            print("Injected SmolVLA QuantizedMatMul (shared qk/pv pair)")
+            n_mm = len(getattr(model_obj, "quant_matmuls", {}))
+            print(
+                "Injected SmolVLA QuantizedMatMul "
+                f"({n_mm} physical qk/pv objects)"
+            )
 
     # -------------------------------------------------------------------------
     # Summary

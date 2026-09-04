@@ -28,6 +28,10 @@ from vla_tcs2.quant.scale_methods import (
 from vla_tcs2.quant.quant_methods import (
     get_matmul_quant_method,
 )
+from vla_tcs2.quant.test_methods import (
+    get_matmul_test_method,
+    test_method_requires_scales,
+)
 from vla_tcs2.quant.quant_spec import (
     QuantSpec,
     parse_quant_spec,
@@ -93,6 +97,16 @@ class QuantizedMatMul(nn.Module):
         self.layer_name = ""
         self.layer_idx = 0
 
+        # Physical operator identity (unique; used for sensitivity / dump /
+        # SQNR / test stats). NEVER used for scale sharing.
+        self.module_id = ""
+
+        # Scale-sharing identity (configurable; used for calibration
+        # aggregation and scale persistence). Falls back to layer_name/idx
+        # when unset, preserving legacy behaviour.
+        self.scale_group_name = ""
+        self.scale_group_idx = 0
+
         self.outlier_ratio = outlier_ratio
 
         self.calibration_policy = "recalibrate"
@@ -108,13 +122,38 @@ class QuantizedMatMul(nn.Module):
         # dispatched to the matmul_* entries of scale_methods/quant_methods).
         self.method = "per_tensor"
 
+        # Pluggable test-forward method name (quant/test_methods.py). Resolved
+        # at wrap time from config; dispatched by self.test_forward
+        # (mode "test_forward"), mapping to the matmul_* test entries.
+        self.test_method = "raw"
+
     # =========================================================================
     # Layer info
     # =========================================================================
 
-    def set_layer_info(self, layer_name: str, layer_idx: int):
+    def set_layer_info(self, layer_name: str, layer_idx: int, module_id: Optional[str] = None):
+        """Set layer name/index and the physical operator identity.
+
+        `module_id` uniquely identifies the real computation site (e.g.
+        "expert.layer.7.qk") and is used only for sensitivity / dump / SQNR /
+        test stats — never for scale sharing.
+        """
         self.layer_name = layer_name
         self.layer_idx = layer_idx
+        self.module_id = (
+            module_id if module_id is not None else f"{layer_name}_{layer_idx}"
+        )
+
+    def set_scale_group(self, name: str, idx: int):
+        """Set the scale-sharing identity (calibration aggregation + files)."""
+        self.scale_group_name = name
+        self.scale_group_idx = idx
+
+    def _scale_identity(self):
+        """Return (name, idx) used for scale files / calibration aggregation."""
+        if self.scale_group_name:
+            return self.scale_group_name, self.scale_group_idx
+        return self.layer_name, self.layer_idx
 
     # =========================================================================
     # Helpers
@@ -139,10 +178,11 @@ class QuantizedMatMul(nn.Module):
             )
 
     def _scale_file_paths(self):
+        name, idx = self._scale_identity()
         return (
-            os.path.join(self.scale_root_str, f"{self.layer_name}_A_scale_{self.layer_idx}.p"),
-            os.path.join(self.scale_root_str, f"{self.layer_name}_B_scale_{self.layer_idx}.p"),
-            os.path.join(self.scale_root_str, f"{self.layer_name}_O_scale_{self.layer_idx}.p"),
+            os.path.join(self.scale_root_str, f"{name}_A_scale_{idx}.p"),
+            os.path.join(self.scale_root_str, f"{name}_B_scale_{idx}.p"),
+            os.path.join(self.scale_root_str, f"{name}_O_scale_{idx}.p"),
         )
 
     def _scale_files_exist(self) -> bool:
@@ -198,6 +238,9 @@ class QuantizedMatMul(nn.Module):
                 return self._quant_forward_mixed_precision(A, B, stat_collector)
             return self.quant_forward(A, B, stat_collector)
 
+        if self.mode == "test_forward":
+            return self.test_forward(A, B, stat_collector)
+
         raise NotImplementedError(f"Mode {self.mode} not implemented")
 
     # =========================================================================
@@ -236,9 +279,10 @@ class QuantizedMatMul(nn.Module):
         )
 
         if stat_collector is not None:
+            scale_name, scale_idx = self._scale_identity()
             stat_collector.collect_matmul_stats(
-                self.layer_name,
-                self.layer_idx,
+                scale_name,
+                scale_idx,
                 self.A_interval,
                 self.B_interval,
                 self.O_interval,
@@ -261,9 +305,10 @@ class QuantizedMatMul(nn.Module):
         self.A_interval = 0
 
         if stat_collector is not None:
+            scale_name, scale_idx = self._scale_identity()
             stat_collector.collect_matmul_stats(
-                self.layer_name,
-                self.layer_idx,
+                scale_name,
+                scale_idx,
                 self.A_interval,
                 self.B_interval,
                 self.O_interval,
@@ -290,6 +335,22 @@ class QuantizedMatMul(nn.Module):
         self._load_scales()
 
         return get_matmul_quant_method(self.method)(self, A, B, stat_collector)
+
+    def test_forward(
+        self,
+        A: torch.Tensor,
+        B: torch.Tensor,
+        stat_collector: Optional[object] = None,
+    ) -> torch.Tensor:
+        """
+        Test/experimental forward — delegates to the pluggable matmul test
+        method (quant/test_methods.py, "matmul_<method>" entries). Scales are
+        loaded on demand: only quant_residual methods need them.
+        """
+        if test_method_requires_scales(self.test_method):
+            self._check_bits()
+            self._load_scales()
+        return get_matmul_test_method(self.test_method)(self, A, B, stat_collector)
 
     # =========================================================================
     # Mixed precision

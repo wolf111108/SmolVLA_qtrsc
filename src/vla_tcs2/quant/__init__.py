@@ -48,6 +48,12 @@ from vla_tcs2.quant.quant_methods import (
     matmul_quant_forward_per_tensor,
     matmul_quant_forward_with_outlier,
 )
+from vla_tcs2.quant.test_methods import (
+    TEST_METHODS,
+    get_test_method,
+    get_matmul_test_method,
+    test_method_requires_scales,
+)
 
 __version__ = "0.1.0"
 
@@ -85,4 +91,8 @@ __all__ = [
     "quant_forward_with_outlier",
     "matmul_quant_forward_per_tensor",
     "matmul_quant_forward_with_outlier",
+    "TEST_METHODS",
+    "get_test_method",
+    "get_matmul_test_method",
+    "test_method_requires_scales",
 ]

@@ -45,6 +45,11 @@ from vla_tcs2.quant.quant_spec import (
 )
 
 
+def _module_label(layer) -> str:
+    """Return the physical operator identity for logging (module_id first)."""
+    return getattr(layer, "module_id", "") or getattr(layer, "layer_name", "")
+
+
 def quant_forward_per_tensor(layer, x, stat_collector=None) -> torch.Tensor:
     """Quantized forward with a single global per-tensor scale (no outliers)."""
     # Full-precision reference output, used for SQNR logging.
@@ -77,7 +82,7 @@ def quant_forward_per_tensor(layer, x, stat_collector=None) -> torch.Tensor:
     log_layer_sqnr(
         x,
         x_code.mul(layer.a_interval),
-        layer.layer_name,
+        _module_label(layer),
         layer.layer_idx,
         kind="activation",
         extra={"a_bit": layer.a_bit, "w_bit": layer.w_bit, "o_bit": layer.o_bit},
@@ -85,7 +90,7 @@ def quant_forward_per_tensor(layer, x, stat_collector=None) -> torch.Tensor:
     log_layer_sqnr(
         layer.weight,
         w_code.mul(layer.w_interval),
-        layer.layer_name,
+        _module_label(layer),
         layer.layer_idx,
         kind="weight",
         extra={"a_bit": layer.a_bit, "w_bit": layer.w_bit, "o_bit": layer.o_bit},
@@ -131,7 +136,7 @@ def quant_forward_per_tensor(layer, x, stat_collector=None) -> torch.Tensor:
         log_layer_sqnr(
             ref,
             out,
-            layer.layer_name,
+            _module_label(layer),
             layer.layer_idx,
             extra={"a_bit": layer.a_bit, "w_bit": layer.w_bit, "o_bit": layer.o_bit},
         )
@@ -148,7 +153,7 @@ def quant_forward_per_tensor(layer, x, stat_collector=None) -> torch.Tensor:
         log_layer_sqnr(
             ref,
             out,
-            layer.layer_name,
+            _module_label(layer),
             layer.layer_idx,
             extra={"a_bit": layer.a_bit, "w_bit": layer.w_bit, "o_bit": layer.o_bit},
         )
@@ -419,7 +424,7 @@ def matmul_quant_forward_per_tensor(layer, A, B, stat_collector=None) -> torch.T
     log_layer_sqnr(
         torch.matmul(A, B),
         out,
-        layer.layer_name,
+        _module_label(layer),
         layer.layer_idx,
         extra={
             "A_bit": layer.A_bit,
@@ -540,7 +545,7 @@ def matmul_quant_forward_with_outlier(layer, A, B, stat_collector=None) -> torch
     log_layer_sqnr(
         torch.matmul(A, B),
         out,
-        layer.layer_name,
+        _module_label(layer),
         layer.layer_idx,
         extra={
             "A_bit": layer.A_bit,

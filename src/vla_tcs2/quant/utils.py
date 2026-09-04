@@ -185,6 +185,8 @@ def log_layer_sqnr(
         layer_idx: layer index.
         kind: which tensor is being compared ('activation' / 'weight' / 'output').
         extra: optional dict of additional fields (e.g. a_bit/w_bit/o_bit).
+            A 'module_id' key is included automatically by callers that pass
+            it via layer_name (see quant_methods); keep layer_name as-is.
 
     Returns:
         SQNR in dB (float). Also writes the record to disk (when enabled).
