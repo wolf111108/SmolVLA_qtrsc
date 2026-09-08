@@ -8,9 +8,12 @@
 from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file
 
+import os
 import sys
 
-out_path = "/home/zyzhao/VLA_tcs2/outputs/audit_tiantianx_normalizer.txt"
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.makedirs(os.path.join(_REPO_ROOT, "outputs"), exist_ok=True)
+out_path = os.path.join(_REPO_ROOT, "outputs", "audit_tiantianx_normalizer.txt")
 _orig_stdout = sys.stdout
 sys.stdout = open(out_path, "w")
 try:

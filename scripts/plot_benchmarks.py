@@ -4,12 +4,12 @@ Usage:
     python scripts/plot_benchmarks.py
 
 Outputs:
-    outputs/figures/benchmark_libero.png
-    outputs/figures/benchmark_metaworld.png
+    outputs/benchmark_libero.png
+    outputs/benchmark_metaworld.png
 
 Data sources:
 - LIBERO: paper Table 2 + four public checkpoints (suite-level eval_info.json)
-- Meta-World: paper 0.45B table + outputs/metaworld/metaworld_mt50_lerobot_smolvla/eval_info.json
+- Meta-World: paper 0.45B table + outputs/metaworld_mt50_lerobot_smolvla/eval_info.json
 All figure text is in English to avoid CJK font issues.
 """
 
@@ -62,39 +62,39 @@ def plot_libero():
         "lerobot A (16L/0.75)": {
             "color": C_LEROBOT_A,
             "paths": {
-                "Spatial": [base / "libero/baseline_smolvla450m_libero_spatial" / "eval_info.json",
-                            base / "libero/baseline_smolvla450m_libero_spatial" / "eval" / "eval_info.json",
-                            base / "libero/libero_spatial_rerun_v2" / "eval_info.json"],
-                "Object": [base / "libero/lerobot_smolvla_libero_libero_object" / "eval_info.json"],
-                "Goal": [base / "libero/lerobot_smolvla_libero_libero_goal" / "eval_info.json"],
-                "Long": [base / "libero/lerobot_smolvla_libero_libero_10" / "eval_info.json"],
+                "Spatial": [base / "baseline_smolvla450m_libero_spatial" / "eval_info.json",
+                            base / "baseline_smolvla450m_libero_spatial" / "eval" / "eval_info.json",
+                            base / "libero_spatial_rerun_v2" / "eval_info.json"],
+                "Object": [base / "lerobot_smolvla_libero_libero_object" / "eval_info.json"],
+                "Goal": [base / "lerobot_smolvla_libero_libero_goal" / "eval_info.json"],
+                "Long": [base / "lerobot_smolvla_libero_libero_10" / "eval_info.json"],
             },
         },
         "tiantianx C": {
             "color": C_TIANTIANX,
             "paths": {
-                "Spatial": [base / "libero/tiantianx_smolvla_libero_libero_spatial" / "eval_info.json"],
-                "Object": [base / "libero/tiantianx_smolvla_libero_libero_object" / "eval_info.json"],
-                "Goal": [base / "libero/tiantianx_smolvla_libero_libero_goal" / "eval_info.json"],
-                "Long": [base / "libero/tiantianx_smolvla_libero_libero_10" / "eval_info.json"],
+                "Spatial": [base / "tiantianx_smolvla_libero_libero_spatial" / "eval_info.json"],
+                "Object": [base / "tiantianx_smolvla_libero_libero_object" / "eval_info.json"],
+                "Goal": [base / "tiantianx_smolvla_libero_libero_goal" / "eval_info.json"],
+                "Long": [base / "tiantianx_smolvla_libero_libero_10" / "eval_info.json"],
             },
         },
         "k1000dai D": {
             "color": C_K1000DAI,
             "paths": {
-                "Spatial": [base / "libero/k1000dai_ft100k_libero_spatial" / "eval_info.json"],
-                "Object": [base / "libero/k1000dai_ft100k_libero_object" / "eval_info.json"],
-                "Goal": [base / "libero/k1000dai_ft100k_libero_goal" / "eval_info.json"],
-                "Long": [base / "libero/k1000dai_ft100k_libero_10" / "eval_info.json"],
+                "Spatial": [base / "k1000dai_ft100k_libero_spatial" / "eval_info.json"],
+                "Object": [base / "k1000dai_ft100k_libero_object" / "eval_info.json"],
+                "Goal": [base / "k1000dai_ft100k_libero_goal" / "eval_info.json"],
+                "Long": [base / "k1000dai_ft100k_libero_10" / "eval_info.json"],
             },
         },
         "HuggingFaceVLA (32L/0.5)": {
             "color": C_HFVLA,
             "paths": {
-                "Spatial": [base / "libero/hfvla_libero_libero_spatial" / "eval_info.json"],
-                "Object": [base / "libero/hfvla_libero_libero_object" / "eval_info.json"],
-                "Goal": [base / "libero/hfvla_libero_libero_goal" / "eval_info.json"],
-                "Long": [base / "libero/hfvla_libero_libero_10" / "eval_info.json"],
+                "Spatial": [base / "hfvla_libero_libero_spatial" / "eval_info.json"],
+                "Object": [base / "hfvla_libero_libero_object" / "eval_info.json"],
+                "Goal": [base / "hfvla_libero_libero_goal" / "eval_info.json"],
+                "Long": [base / "hfvla_libero_libero_10" / "eval_info.json"],
             },
         },
     }
@@ -152,7 +152,7 @@ def plot_libero():
     ax.legend(fontsize=9, ncol=2, loc="upper right")
     ax.grid(axis="y", alpha=0.3, linestyle="--")
     fig.tight_layout()
-    out = OUT / "figures" / "benchmark_libero.png"
+    out = OUT / "benchmark_libero.png"
     fig.savefig(out, dpi=150)
     print(f"Generated {out}")
 
@@ -163,7 +163,7 @@ def plot_metaworld():
     paper = [82.5, 41.8, 45.0, 60.0]
     paper_avg = sum(paper) / len(paper)  # 57.3, arithmetic mean as reported in paper
 
-    info = json.loads((OUT / "metaworld" / "metaworld_mt50_lerobot_smolvla" / "eval_info.json").read_text())
+    info = json.loads((OUT / "metaworld_mt50_lerobot_smolvla" / "eval_info.json").read_text())
     ours_by_group = {k: v["pc_success"] for k, v in info["per_group"].items()}
 
     # Per-task success rates for min/max annotation
@@ -215,7 +215,7 @@ def plot_metaworld():
     ax.legend(fontsize=10, loc="upper right")
     ax.grid(axis="y", alpha=0.3, linestyle="--")
     fig.tight_layout()
-    out = OUT / "figures" / "benchmark_metaworld.png"
+    out = OUT / "benchmark_metaworld.png"
     fig.savefig(out, dpi=150)
     print(f"Generated {out}")
 

@@ -156,8 +156,14 @@ def compute_sqnr(reference: torch.Tensor, quantized: torch.Tensor) -> float:
     return sqnr.item()
 
 
-# Hard-coded output path for per-layer SQNR logging.
-SQNR_LOG_PATH = "/home/zyzhao/VLA_tcs2/outputs/quant_sqnr/sqnrs_12mixed_new.jsonl"
+# Output path for per-layer SQNR logging (repo-relative so it works on any
+# machine / checkout path).
+_REPO_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+SQNR_LOG_PATH = os.path.join(
+    _REPO_ROOT, "outputs", "quant_sqnr", "sqnrs_12mixed_new.jsonl"
+)
 
 # SQNR logging is opt-in (env var): the linear paths log per-layer SQNR on
 # every forward, which is useful for offline analysis but slows eval down.

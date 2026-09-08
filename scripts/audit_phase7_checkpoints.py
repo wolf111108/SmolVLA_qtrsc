@@ -8,6 +8,7 @@
 
 from huggingface_hub import hf_hub_download
 import json
+import os
 
 repos = [
     "lerobot/smolvla_base",
@@ -60,7 +61,9 @@ for repo in repos:
     except Exception as e:
         log(f"train_config unavailable: {type(e).__name__}")
 
-out = "/home/zyzhao/VLA_tcs2/outputs/table2_repro_audit/07_checkpoint_provenance/configs.txt"
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+out = os.path.join(_REPO_ROOT, "outputs", "table2_repro_audit", "07_checkpoint_provenance", "configs.txt")
+os.makedirs(os.path.dirname(out), exist_ok=True)
 with open(out, "w") as f:
     f.write("\n".join(lines))
 print(f"\n[done] 已写入 {out}")

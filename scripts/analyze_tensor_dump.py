@@ -207,8 +207,9 @@ def plot_weight_topk_energy(groups: dict, out_dir: str) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--dir", default="/home/zyzhao/VLA_tcs2/outputs/tensor_dump")
-    ap.add_argument("--out", default="/home/zyzhao/VLA_tcs2/outputs/tensor_dump_analysis")
+    _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ap.add_argument("--dir", default=os.path.join(_repo_root, "outputs", "tensor_dump"))
+    ap.add_argument("--out", default=os.path.join(_repo_root, "outputs", "tensor_dump_analysis"))
     args = ap.parse_args()
 
     dump_dir = args.dir

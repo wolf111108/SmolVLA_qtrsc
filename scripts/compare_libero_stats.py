@@ -6,12 +6,14 @@
 """
 
 import json
+import os
 
 import torch
 from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file
 
-OUT = "/home/zyzhao/VLA_tcs2/outputs/compare_libero_stats.txt"
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(_REPO_ROOT, "outputs", "compare_libero_stats.txt")
 
 
 def find_state_stats(obj, path=""):

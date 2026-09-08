@@ -46,9 +46,14 @@ from vla_tcs2.quant.quant_spec import (
 # Weight is static: dumped only once per layer. Activation/output are dumped
 # for each of the first VLA_TENSOR_DUMP_STEPS calibration steps.
 
+# Repo root (three levels up from src/vla_tcs2/quant_linear.py) so the
+# default works on any machine / checkout path.
+_REPO_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 DUMP_TENSORS_DIR = os.environ.get(
     "VLA_TENSOR_DUMP_DIR",
-    "/home/zyzhao/VLA_tcs2/outputs/tensor_dump",
+    os.path.join(_REPO_ROOT, "outputs", "tensor_dump"),
 )
 DUMP_MAX_STEPS = int(os.environ.get("VLA_TENSOR_DUMP_STEPS", "3"))
 
