@@ -40,6 +40,7 @@ import torch
 import torch.nn.functional as F
 
 from .quant_spec import QuantSpec
+from ..runtime_context import get_runtime_context
 
 
 # =============================================================================
@@ -188,7 +189,28 @@ class QuantStatManager:
         }
 
         # Per-layer sparsity records: key = f"{layer_name}_{layer_idx}".
+        # Legacy records (module-level aggregate); structured per-role /
+        # per-phase records live in per_role_sparsity (key includes role).
         self.per_layer_sparsity: Dict[str, Dict[str, Any]] = {}
+
+        # Structured records: key = (layer_key, phase, tensor_role).
+        # Accumulated counters per manual §21-§22 (sum numerators and
+        # denominators first, ratios computed at export time).
+        self.per_role_sparsity: Dict[tuple, Dict[str, Any]] = {}
+
+        # Denoise flow-step call counts: flow_step -> layer_key -> calls.
+        self.flow_step_sparsity: Dict[int, Dict[str, int]] = {}
+
+        # Per-layer tensor-role call counts (audit: Linear in/out, MatMul A/B/O).
+        self.tensor_role_calls: Dict[str, Dict[str, int]] = {}
+
+        # Last-observed operand dims per module_id (workload export shapes).
+        self.module_last_dims: Dict[str, tuple] = {}
+
+        # Outlier side-path accounting (manual §26-§27): per module_id,
+        # counts of calls with dynamic outlier protection active and the
+        # protected element fraction (activation/weight sides).
+        self.outlier_sidepath: Dict[str, Dict[str, float]] = {}
 
         # Per-layer WEIGHT sparsity records (static, collected once).
         self.per_layer_weight_sparsity: Dict[str, Dict[str, Any]] = {}
@@ -257,6 +279,11 @@ class QuantStatManager:
         }
         self.unit_sparsity = {phase: {} for phase in self._PHASES}
         self.per_layer_sparsity = {}
+        self.per_role_sparsity = {}
+        self.flow_step_sparsity = {}
+        self.tensor_role_calls = {}
+        self.module_last_dims = {}
+        self.outlier_sidepath = {}
         self.per_layer_weight_sparsity = {}
         self.current_phase = "full_forward"
 
@@ -356,7 +383,7 @@ class QuantStatManager:
             #   args = (x_code, x_fp16, a_spec, digit_size,
             #           parallelism, in_features, out_features)
             x_code, _x_fp16, a_spec = args[0], args[1], args[2]
-            tensors = [(x_code, a_spec)]
+            tensors = [("activation", x_code, a_spec)]
         elif n_extra == 9:
             # MatMul call site:
             #   args = (A_sim, A, B_sim, B_spec, A_spec, digit_size,
@@ -364,7 +391,7 @@ class QuantStatManager:
             A_sim, _A, B_sim, B_spec, A_spec = (
                 args[0], args[1], args[2], args[3], args[4]
             )
-            tensors = [(A_sim, A_spec), (B_sim, B_spec)]
+            tensors = [("A", A_sim, A_spec), ("B", B_sim, B_spec)]
         else:
             raise ValueError(
                 f"collect_quant_activation: unsupported positional-arg "
@@ -372,13 +399,113 @@ class QuantStatManager:
                 f"layer={key}"
             )
 
-        for tensor, spec in tensors:
+        # Compatibility adapter (manual §20): forward to the structured
+        # collect_quant_tensor API so legacy call sites get the same
+        # module_id / phase / role-aware records. layer_name here is the
+        # physical site name (module_id-like) at every current call site.
+        module_id = str(layer_name)
+        for role, tensor, spec in tensors:
             if tensor is None or spec is None:
                 continue
             if spec.kind == "none" or not getattr(spec, "enabled", True):
                 # FP16/BF16 pass-through档不参与稀疏统计
                 continue
-            self._collect_one_tensor_sparsity(layer_name, layer_idx, tensor, spec)
+            self.collect_quant_tensor(
+                module_id=module_id,
+                tensor_role=role,
+                tensor_code=tensor,
+                spec=spec,
+                layer_idx=layer_idx,
+            )
+
+    @staticmethod
+    def _layer_idx_from_module_id(module_id: str) -> int:
+        """
+        Parse the layer index from a module_id.
+
+        Forms:
+            vlm.layers.3.mlp.down_proj        -> 3
+            expert.layer.7.qk                  -> 7
+            model.model.action_head.proj       -> -1 (no layer index)
+        """
+        parts = str(module_id).split(".")
+        for i, p in enumerate(parts):
+            if p in ("layers", "layer") and i + 1 < len(parts):
+                try:
+                    return int(parts[i + 1])
+                except ValueError:
+                    break
+        return -1
+
+    def collect_quant_tensor(
+        self,
+        *,
+        module_id: str,
+        tensor_role: str,
+        tensor_code: torch.Tensor,
+        spec: QuantSpec,
+        attention_kind: Optional[str] = None,
+        layer_idx: Optional[int] = None,
+        runtime_context: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Structured collector for ONE quantized tensor at a physical module
+        (research manual §19). Keyed by module_id + runtime labels.
+
+        Args:
+            module_id:    physical operator identity, e.g.
+                          "vlm.layers.3.mlp.down_proj" /
+                          "expert.layer.7.qk" (NEVER scale_group).
+            tensor_role:  "activation" | "output" (Linear) /
+                          "A" | "B" | "O" (MatMul).
+            tensor_code:  the quantized code tensor (post quant_awo).
+            spec:         QuantSpec of this operand.
+            attention_kind: "self" | "cross" (attention matmuls; None ok).
+            runtime_context: snapshot from get_runtime_context(); when
+                          omitted the current context is read.
+            metadata:    free-form extras (e.g. operand_origin).
+        """
+        ctx = runtime_context or get_runtime_context()
+
+        self.quant_activation_calls[module_id] = (
+            self.quant_activation_calls.get(module_id, 0) + 1
+        )
+
+        if not self.sparsity_enabled:
+            return
+        if tensor_code is None or spec is None:
+            return
+        if spec.kind == "none" or not getattr(spec, "enabled", True):
+            return
+
+        # Record last-observed dims for the workload exporter.
+        if tensor_code.dim() >= 1:
+            self.module_last_dims[module_id] = (
+                int(tensor_code.shape[-1]),  # K (inner dim)
+                int(tensor_code.numel() // max(tensor_code.shape[-1], 1)),
+            )
+
+        # Runtime context drives the phase; fall back to the manual
+        # set_phase() tag when no hook has ever set the context (keeps
+        # legacy runners working).
+        phase = ctx.get("phase", "unknown")
+        if phase == "unknown" and self.current_phase != "full_forward":
+            phase = self.current_phase
+        flow_step = ctx.get("flow_step", -1)
+        flow_step = ctx.get("flow_step", -1)
+
+        self._collect_one_tensor_sparsity(
+            module_id,
+            layer_idx,
+            tensor_code,
+            spec,
+            tensor_role=tensor_role,
+            phase=phase,
+            flow_step=flow_step,
+            attention_kind=attention_kind
+            or ctx.get("attention_kind", "unknown"),
+        )
 
     # -------------------------------------------------------------------------
     # Sparsity: collection internals
@@ -387,13 +514,34 @@ class QuantStatManager:
     def _collect_one_tensor_sparsity(
         self,
         layer_name: str,
-        layer_idx: int,
+        layer_idx,
         activation: torch.Tensor,
         spec: QuantSpec,
+        tensor_role: str = "activation",
+        phase: Optional[str] = None,
+        flow_step: int = -1,
+        attention_kind: str = "unknown",
     ):
-        """Compute and accumulate element/bit-level + unit sparsity."""
-        phase = self.current_phase
+        """Compute and accumulate element/bit-level + unit sparsity.
+
+        `layer_idx` may be None when the caller only has a module_id
+        (structured path); it is parsed from the module_id when possible.
+        `tensor_role`/`flow_step`/`attention_kind` extend the record key
+        so Linear input/output and MatMul A/B/O stay separate, and denoise
+        statistics can be split per flow step (manual §6/§8/§21).
+        """
+        phase = phase or self.current_phase
+        if layer_idx is None:
+            layer_idx = self._layer_idx_from_module_id(layer_name)
         layer_key = f"{layer_name}_{layer_idx}"
+
+        # Flow-step split bookkeeping (denoise only; manual §21-§22).
+        if phase == "denoise":
+            fs_counter = self.flow_step_sparsity.setdefault(flow_step, {})
+            fs_counter[layer_key] = fs_counter.get(layer_key, 0) + 1
+
+        role_counts = self.tensor_role_calls.setdefault(layer_key, {})
+        role_counts[tensor_role] = role_counts.get(tensor_role, 0) + 1
 
         self.collected_layer_names_by_phase.setdefault(phase, set()).add(layer_key)
         call_counts = self.collected_layer_call_count_by_phase.setdefault(
@@ -447,7 +595,7 @@ class QuantStatManager:
             amplitude_zero_bits_total,
         )
 
-        # Per-layer records.
+        # Per-layer records (legacy aggregate).
         entry = self.per_layer_sparsity.setdefault(
             layer_key,
             {
@@ -455,6 +603,41 @@ class QuantStatManager:
                 "layer_idx": layer_idx,
             },
         )
+        self._accumulate_sparsity_entry(entry, total_num, abs_less_th, total_bits,
+                                        zero_bits_total, sparse_bits_total,
+                                        amplitude_zero_bits_total)
+
+        # Structured per-role / per-phase record (module_id-aware).
+        role_key = (layer_key, phase, tensor_role)
+        role_entry = self.per_role_sparsity.setdefault(
+            role_key,
+            {
+                "module_id": layer_name,
+                "layer_idx": layer_idx,
+                "phase": phase,
+                "tensor_role": tensor_role,
+            },
+        )
+        self._accumulate_sparsity_entry(role_entry, total_num, abs_less_th,
+                                        total_bits, zero_bits_total,
+                                        sparse_bits_total,
+                                        amplitude_zero_bits_total)
+
+        # Unit/block sparsity.
+        if self.enable_unit_sparsity:
+            self.collect_unit_sparsity(layer_name, layer_idx, activation, spec)
+
+    @staticmethod
+    def _accumulate_sparsity_entry(
+        entry: Dict[str, Any],
+        total_num: int,
+        abs_less_th: int,
+        total_bits: int,
+        zero_bits_total: int,
+        sparse_bits_total: int,
+        amplitude_zero_bits_total: int,
+    ):
+        """Accumulate counters into a record and refresh derived ratios."""
         entry["total_elements"] = entry.get("total_elements", 0) + int(total_num)
         entry["zero_elements"] = entry.get("zero_elements", 0) + int(abs_less_th)
         entry["total_bits"] = entry.get("total_bits", 0) + int(total_bits)
@@ -483,13 +666,7 @@ class QuantStatManager:
             if entry["sparse_bit_rate"] < 1
             else float("inf")
         )
-        entry["1_bits"] = (
-            entry["total_bits"] - entry["amplitude_zero_bits"]
-        )
-
-        # Unit/block sparsity.
-        if self.enable_unit_sparsity:
-            self.collect_unit_sparsity(layer_name, layer_idx, activation, spec)
+        entry["1_bits"] = entry["total_bits"] - entry["amplitude_zero_bits"]
 
     def collect_weight_sparsity(
         self,
@@ -677,28 +854,20 @@ class QuantStatManager:
                     out_dtype=torch.float32,
                     chunk_size=self.sparse_stat_chunk_size,
                 )
+                module_id = getattr(module, "module_id", "") or (
+                    f"{module.layer_name}_{module.layer_idx}"
+                )
                 self.collect_weight_sparsity(
-                    module.layer_name, module.layer_idx, w_code, module.w_spec
+                    module_id, module.layer_idx, w_code, module.w_spec
                 )
                 n += 1
             elif cls_name == "QuantizedMatMul":
-                if module.B_interval is None:
-                    continue
-                # MatMul "weight" side is B (K/V or V^T); A is dynamic.
-                B_code = quant_awo(
-                    module.B,
-                    module.B_interval,
-                    module.B_spec,
-                    out_dtype=torch.float32,
-                    chunk_size=self.sparse_stat_chunk_size,
-                )
-                self.collect_weight_sparsity(
-                    f"{module.layer_name}_B",
-                    module.layer_idx,
-                    B_code,
-                    module.B_spec,
-                )
-                n += 1
+                # NOTE (manual §25): QuantizedMatMul has NO static weight —
+                # B (K/V) arrives at runtime from attention projections /
+                # KV cache. Only a scale exists (B_interval). Weight-side
+                # sparsity for matmul B must therefore come from runtime
+                # collection (tensor_role="B"), not this static path.
+                continue
         return n
 
     # -------------------------------------------------------------------------
@@ -1691,6 +1860,165 @@ class QuantStatManager:
                 ])
 
             writer.writerows(rows)
+
+    def export_module_sparsity_csv(
+        self,
+        csv_path: str,
+        config_name: str = "",
+        model_path: str = "",
+    ):
+        """
+        Export structured sparsity records (module_id × phase × tensor_role)
+        to CSV — the manual §46 module_sparsity.csv.
+
+        Ratios are computed from accumulated numerator/denominator sums
+        (manual §23: never average per-layer ratios).
+        """
+        import csv
+
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "config", "model_path",
+                "module_id", "layer_idx", "phase", "tensor_role",
+                "total_elements", "zero_elements", "element_sparsity",
+                "total_bits", "zero_bits", "bit_sparsity",
+                "sm_zero_bits", "sm_bit_sparsity",
+                "one_bits",
+            ])
+
+            for key in sorted(
+                self.per_role_sparsity.keys(),
+                key=lambda k: (str(k[0]), str(k[1]), str(k[2])),
+            ):
+                entry = self.per_role_sparsity[key]
+                writer.writerow([
+                    config_name, model_path,
+                    entry.get("module_id", key[0]),
+                    entry.get("layer_idx", -1),
+                    entry.get("phase", key[1]),
+                    entry.get("tensor_role", key[2]),
+                    entry.get("total_elements", 0),
+                    entry.get("zero_elements", 0),
+                    entry.get("zero_rate", 0.0),
+                    entry.get("total_bits", 0),
+                    entry.get("zero_bits", 0),
+                    entry.get("sparse_bit_rate", 0.0),
+                    entry.get("amplitude_zero_bits", 0),
+                    entry.get("amplitude_zero_bit_rate", 0.0),
+                    entry.get("1_bits", 0),
+                ])
+
+    def export_workload_csv(
+        self,
+        model,
+        csv_path: str,
+        config_name: str = "",
+        model_path: str = "",
+    ):
+        """
+        Export the hardware-facing workload trace (manual §49).
+
+        One row per (module_id, phase, tensor_role) with call counts from
+        the runtime collection, GEMM shapes from the wrapped modules, and
+        first-order active-bit-op proxies:
+
+            BOP_dense  = MACs * B_A * B_B        (full bitwidths)
+            BOP_active = MACs * b_A  * b_B       (1 - bit sparsity scaled)
+
+        These are hardware PROXIES (manual §55), not measured latency.
+
+        Linear shapes: x[B,T,K] @ W[N,K]^T  -> M=B*T, K, N.
+        MatMul (QK/PV) shapes come from the last observed call dims.
+        """
+        import csv
+
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+
+        def _macs_linear(module) -> tuple:
+            M = None  # batch*token count is runtime-dependent; use per-call
+            K = module.in_features
+            N = module.out_features
+            return K, N
+
+        rows = []
+
+        for module in model.modules():
+            cls_name = type(module).__name__
+            is_linear = cls_name == "QuantizedLinear" or (
+                hasattr(module, "in_features")
+                and hasattr(module, "weight")
+                and not hasattr(module, "A_spec")
+            )
+            is_matmul = cls_name == "QuantizedMatMul" or (
+                hasattr(module, "A_spec") and hasattr(module, "B_spec")
+            )
+            if not (is_linear or is_matmul):
+                continue
+            module_id = getattr(module, "module_id", "") or (
+                f"{getattr(module, 'layer_name', '')}_"
+                f"{getattr(module, 'layer_idx', 0)}"
+            )
+            layer_key = f"{module_id}_{self._layer_idx_from_module_id(module_id)}"
+
+            if is_linear:
+                op_type = "linear"
+                K, N = _macs_linear(module)
+                a_bits = module.a_bit if module.a_spec.kind == "int" else 8
+                b_bits = module.w_bit if module.w_spec.kind == "int" else 8
+            else:
+                op_type = "matmul"
+                # Shapes recorded from the last call (see collect paths).
+                dims = self.module_last_dims.get(module_id)
+                K = dims[0] if dims else None
+                N = dims[1] if dims else None
+                a_bits = module.A_bit if module.A_spec.kind == "int" else 8
+                b_bits = module.B_bit if module.B_spec.kind == "int" else 8
+
+            for (lk, phase, role), entry in self.per_role_sparsity.items():
+                if lk != layer_key:
+                    continue
+                calls = self.tensor_role_calls.get(lk, {}).get(role, 0)
+                elems = entry.get("total_elements", 0)
+                bits = entry.get("total_bits", 0)
+                bit_sparsity = entry.get("sparse_bit_rate", 0.0)
+
+                # Per-call M from element counts (M = elems/calls/K).
+                if calls > 0 and K:
+                    M = elems // (calls * K)
+                    macs = M * K * (N or 0)
+                    b_a = a_bits * (1 - bit_sparsity)
+                    b_b = b_bits * (1 - bit_sparsity)
+                    bop_dense = macs * a_bits * b_bits
+                    bop_active = macs * b_a * b_b
+                else:
+                    M = None
+                    macs = bop_dense = bop_active = None
+
+                rows.append([
+                    config_name, model_path,
+                    module_id, phase, role, op_type, calls,
+                    M, K, N, elems, bits,
+                    a_bits, b_bits,
+                    entry.get("sparse_bit_rate", 0.0),
+                    macs, bop_dense, bop_active,
+                ])
+
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "config", "model_path",
+                "module_id", "phase", "tensor_role", "op_type", "calls",
+                "M", "K", "N", "elements", "bits",
+                "A_bitwidth", "B_bitwidth",
+                "bit_sparsity",
+                "MACs", "BOP_dense_proxy", "BOP_active_proxy",
+            ])
+            writer.writerows(rows)
+
+        return len(rows)
 
     def export_per_layer_sparsity_csv(
         self,

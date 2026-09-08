@@ -36,6 +36,12 @@ from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
 from vla_tcs2.quant_linear import QuantizedLinear
 from vla_tcs2.quant_matmul import QuantizedMatMul
 from vla_tcs2.quant.stat_manager import QuantStatManager
+from vla_tcs2.runtime_context import (
+    CURRENT_PHASE,
+    CURRENT_FLOW_STEP,
+    CURRENT_ATTN_KIND,
+    CURRENT_GENERATION_ID,
+)
 
 
 # =============================================================================
@@ -671,9 +677,11 @@ def _inject_smolvla_quantized_matmul(
         use_cache=True,
         past_key_values=None,
     ):
-        token = _CURRENT_ATTN_SITE.set(
+        site_token = _CURRENT_ATTN_SITE.set(
             (_resolve_attn_component(inputs_embeds), layer_idx)
         )
+        # attention_kind from the real call site (never layer parity).
+        kind_token = CURRENT_ATTN_KIND.set("self")
         try:
             return original_forward_attn_layer(
                 model_layers,
@@ -687,7 +695,8 @@ def _inject_smolvla_quantized_matmul(
                 past_key_values=past_key_values,
             )
         finally:
-            _CURRENT_ATTN_SITE.reset(token)
+            CURRENT_ATTN_KIND.reset(kind_token)
+            _CURRENT_ATTN_SITE.reset(site_token)
 
     def wrapped_forward_cross_attn_layer(
         model_layers,
@@ -700,9 +709,10 @@ def _inject_smolvla_quantized_matmul(
         use_cache=True,
         past_key_values=None,
     ):
-        token = _CURRENT_ATTN_SITE.set(
+        site_token = _CURRENT_ATTN_SITE.set(
             (_resolve_attn_component(inputs_embeds), layer_idx)
         )
+        kind_token = CURRENT_ATTN_KIND.set("cross")
         try:
             return original_forward_cross_attn_layer(
                 model_layers,
@@ -716,7 +726,8 @@ def _inject_smolvla_quantized_matmul(
                 past_key_values=past_key_values,
             )
         finally:
-            _CURRENT_ATTN_SITE.reset(token)
+            CURRENT_ATTN_KIND.reset(kind_token)
+            _CURRENT_ATTN_SITE.reset(site_token)
 
     attention_module.forward_attn_layer = wrapped_forward_attn_layer
     attention_module.forward_cross_attn_layer = wrapped_forward_cross_attn_layer
@@ -800,6 +811,66 @@ def _inject_smolvla_quantized_matmul(
 
 
 # =============================================================================
+# Runtime context hooks (phase / flow_step auto instrumentation)
+# =============================================================================
+
+_generation_counter = [0]
+
+
+def install_runtime_hooks(model: SmolVLAPolicy) -> bool:
+    """
+    Monkey-patch VLAFlowMatching.sample_actions / denoise_step so the
+    runtime context (phase, flow_step, generation_id) is tagged
+    automatically during evaluation — no runner-side set_phase needed.
+
+    Mapping (research manual §12-§16):
+      sample_actions entry : phase="prefill", flow_step=-1,
+                             generation_id += 1 (denoise counter reset)
+      denoise_step entry   : phase="denoise", flow_step=0..num_steps-1
+
+    Safe to call multiple times: already-patched models are detected via
+    the `_runtime_hooks_installed` marker and re-installation is a no-op.
+
+    Returns True if hooks were installed by this call.
+    """
+    flow_model = model.model  # VLAFlowMatching
+    if getattr(flow_model, "_runtime_hooks_installed", False):
+        return False
+
+    original_sample_actions = flow_model.sample_actions
+    original_denoise_step = flow_model.denoise_step
+
+    def hooked_sample_actions(*args, **kwargs):
+        _generation_counter[0] += 1
+        gen_token = CURRENT_GENERATION_ID.set(_generation_counter[0])
+        phase_token = CURRENT_PHASE.set("prefill")
+        step_token = CURRENT_FLOW_STEP.set(-1)
+        try:
+            return original_sample_actions(*args, **kwargs)
+        finally:
+            CURRENT_FLOW_STEP.reset(step_token)
+            CURRENT_PHASE.reset(phase_token)
+            CURRENT_GENERATION_ID.reset(gen_token)
+
+    def hooked_denoise_step(*args, **kwargs):
+        # flow_step 0..num_steps-1: euler_integrate calls denoise_step in
+        # order, once per step, inside sample_actions.
+        step = CURRENT_FLOW_STEP.get() + 1
+        phase_token = CURRENT_PHASE.set("denoise")
+        step_token = CURRENT_FLOW_STEP.set(step)
+        try:
+            return original_denoise_step(*args, **kwargs)
+        finally:
+            CURRENT_FLOW_STEP.reset(step_token)
+            CURRENT_PHASE.reset(phase_token)
+
+    flow_model.sample_actions = hooked_sample_actions
+    flow_model.denoise_step = hooked_denoise_step
+    flow_model._runtime_hooks_installed = True
+    return True
+
+
+# =============================================================================
 # ModelWrapper (public class used by main.py)
 # =============================================================================
 
@@ -848,6 +919,11 @@ class ModelWrapper:
         Returns the wrapped SmolVLAPolicy.
         """
         self.model = self._load_model()
+
+        # Auto phase/flow-step instrumentation for sparsity & workload
+        # stats (no-op if quantization disabled; context is only read by
+        # opt-in collectors).
+        install_runtime_hooks(self.model)
 
         if self.quant_cfg.get("enabled", False):
             scale_dir = self.quant_cfg.get("scale_dir", "scales/default")

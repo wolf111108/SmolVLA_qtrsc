@@ -50,6 +50,97 @@ def _module_label(layer) -> str:
     return getattr(layer, "module_id", "") or getattr(layer, "layer_name", "")
 
 
+def _collect_linear_runtime(
+    layer,
+    stat_collector,
+    *,
+    input_code=None,
+    input_spec=None,
+    output_code=None,
+    output_spec=None,
+    operand_origin=None,
+):
+    """Structured runtime collection for a Linear site (manual §30-§31).
+
+    Collects input AND output codes with module_id + runtime context.
+    No-op when the collector does not expose collect_quant_tensor.
+    """
+    if stat_collector is None or not hasattr(
+        stat_collector, "collect_quant_tensor"
+    ):
+        return
+
+    module_id = getattr(layer, "module_id", "") or layer.layer_name
+    metadata = {"operand_origin": operand_origin} if operand_origin else None
+
+    if input_code is not None and input_spec is not None:
+        stat_collector.collect_quant_tensor(
+            module_id=module_id,
+            tensor_role="activation",
+            tensor_code=input_code,
+            spec=input_spec,
+            metadata=metadata,
+        )
+    if output_code is not None and output_spec is not None:
+        stat_collector.collect_quant_tensor(
+            module_id=module_id,
+            tensor_role="output",
+            tensor_code=output_code,
+            spec=output_spec,
+            metadata=metadata,
+        )
+
+
+def _collect_matmul_runtime(
+    layer,
+    stat_collector,
+    *,
+    A_code=None,
+    A_spec=None,
+    B_code=None,
+    B_spec=None,
+    O_code=None,
+    O_spec=None,
+    A_origin=None,
+    B_origin=None,
+):
+    """Structured runtime collection for a MatMul site (manual §33).
+
+    A / B / O are collected as separate roles with module_id + runtime
+    context (attention_kind comes from the runtime context).
+    """
+    if stat_collector is None or not hasattr(
+        stat_collector, "collect_quant_tensor"
+    ):
+        return
+
+    module_id = getattr(layer, "module_id", "") or layer.layer_name
+
+    if A_code is not None and A_spec is not None:
+        stat_collector.collect_quant_tensor(
+            module_id=module_id,
+            tensor_role="A",
+            tensor_code=A_code,
+            spec=A_spec,
+            metadata={"operand_origin": A_origin} if A_origin else None,
+        )
+    if B_code is not None and B_spec is not None:
+        stat_collector.collect_quant_tensor(
+            module_id=module_id,
+            tensor_role="B",
+            tensor_code=B_code,
+            spec=B_spec,
+            metadata={"operand_origin": B_origin} if B_origin else None,
+        )
+    if O_code is not None and O_spec is not None:
+        stat_collector.collect_quant_tensor(
+            module_id=module_id,
+            tensor_role="O",
+            tensor_code=O_code,
+            spec=O_spec,
+        )
+
+
 def quant_forward_per_tensor(layer, x, stat_collector=None) -> torch.Tensor:
     """Quantized forward with a single global per-tensor scale (no outliers)."""
     # Full-precision reference output, used for SQNR logging.
@@ -115,6 +206,12 @@ def quant_forward_per_tensor(layer, x, stat_collector=None) -> torch.Tensor:
             in_features,
             out_features,
         )
+        _collect_linear_runtime(
+            layer,
+            stat_collector,
+            input_code=x_code,
+            input_spec=layer.a_spec,
+        )
 
     if bias_sim is not None:
         bias_code = bias_sim.to(torch.float32)
@@ -133,6 +230,12 @@ def quant_forward_per_tensor(layer, x, stat_collector=None) -> torch.Tensor:
         out_code = torch.div(out_code, LINEAR_SHIFT_NUM, rounding_mode="floor")
 
         out = out_code.mul(layer.o_interval).to(x.dtype)
+        _collect_linear_runtime(
+            layer,
+            stat_collector,
+            output_code=out_code,
+            output_spec=layer.o_spec,
+        )
         log_layer_sqnr(
             ref,
             out,
@@ -150,6 +253,12 @@ def quant_forward_per_tensor(layer, x, stat_collector=None) -> torch.Tensor:
 
         out_code = out_scaled.clamp(-max_val, max_val).to(dtype).float()
         out = out_code.mul(layer.o_interval).to(x.dtype)
+        _collect_linear_runtime(
+            layer,
+            stat_collector,
+            output_code=out_code,
+            output_spec=layer.o_spec,
+        )
         log_layer_sqnr(
             ref,
             out,
@@ -231,6 +340,12 @@ def quant_forward_with_outlier(layer, x, stat_collector=None) -> torch.Tensor:
             in_features,
             out_features,
         )
+        _collect_linear_runtime(
+            layer,
+            stat_collector,
+            input_code=x_sim,
+            input_spec=layer.a_spec,
+        )
 
     if layer.bias is not None:
         bias_sim = layer.quant_bias(layer.bias).to(torch.float32)
@@ -280,6 +395,15 @@ def quant_forward_with_outlier(layer, x, stat_collector=None) -> torch.Tensor:
     out_outlier = out_outlier.to(x.dtype)
 
     out = out_normal_dequant + out_outlier
+
+    # Output collection: the normal-path quantized code (manual §25-§26;
+    # outlier side-path fraction accounting is future work).
+    _collect_linear_runtime(
+        layer,
+        stat_collector,
+        output_code=out_normal_quant.to(torch.float32),
+        output_spec=layer.o_spec,
+    )
 
     if torch.isnan(out).max():
         pass
@@ -458,6 +582,14 @@ def matmul_quant_forward_per_tensor(layer, A, B, stat_collector=None) -> torch.T
             in_features,
             out_features,
         )
+        _collect_matmul_runtime(
+            layer,
+            stat_collector,
+            A_code=A_sim,
+            A_spec=layer.A_spec,
+            B_code=B_sim,
+            B_spec=layer.B_spec,
+        )
 
     acc_code = torch.matmul(A_sim, B_sim)
 
@@ -479,6 +611,9 @@ def matmul_quant_forward_per_tensor(layer, A, B, stat_collector=None) -> torch.T
         )
 
         out = out_code.mul(layer.O_interval).to(A.dtype)
+        _collect_matmul_runtime(
+            layer, stat_collector, O_code=out_code, O_spec=layer.O_spec,
+        )
 
     elif layer.O_spec.kind == "fp":
         out_scaled = acc_code.mul(scale_to_output)
@@ -488,6 +623,9 @@ def matmul_quant_forward_per_tensor(layer, A, B, stat_collector=None) -> torch.T
 
         out_code = out_scaled.clamp(-max_val, max_val).to(dtype).float()
         out = out_code.mul(layer.O_interval).to(A.dtype)
+        _collect_matmul_runtime(
+            layer, stat_collector, O_code=out_code, O_spec=layer.O_spec,
+        )
 
     elif layer.O_spec.kind == "bf":
         M0 = torch.tensor(
@@ -589,6 +727,14 @@ def matmul_quant_forward_with_outlier(layer, A, B, stat_collector=None) -> torch
             in_features,
             out_features,
         )
+        _collect_matmul_runtime(
+            layer,
+            stat_collector,
+            A_code=A_sim.to(torch.float32),
+            A_spec=layer.A_spec,
+            B_code=B_sim.to(torch.float32),
+            B_spec=layer.B_spec,
+        )
 
     A_sim_fp32 = A_sim.to(torch.float32)
     B_sim_fp32 = B_sim.to(torch.float32)
@@ -629,6 +775,13 @@ def matmul_quant_forward_with_outlier(layer, A, B, stat_collector=None) -> torch
     out_outlier = out_outlier.to(A.dtype)
 
     out = out_normal_dequant + out_outlier
+
+    _collect_matmul_runtime(
+        layer,
+        stat_collector,
+        O_code=out_normal_quant.to(torch.float32),
+        O_spec=layer.O_spec,
+    )
 
     log_layer_sqnr(
         torch.matmul(A, B),

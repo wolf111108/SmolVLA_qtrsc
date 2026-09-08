@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -254,6 +255,31 @@ def main() -> None:
     print("Model build completed.")
 
     # -------------------------------------------------------------------------
+    # 2.5 Sparsity setup (opt-in, research manual §39)
+    # -------------------------------------------------------------------------
+
+    sp_cfg = config.get("sparsity", {})
+    if sp_cfg.get("enabled", False):
+        sm = wrapper.stat_manager
+        if sm is None:
+            raise RuntimeError(
+                "sparsity.enabled=true requires quantization.enabled=true "
+                "(or a stat manager); see manual §37 for the raw-FP mode."
+            )
+        sm.enable_sparsity()
+        unit_cfg = sp_cfg.get("unit", {})
+        if unit_cfg:
+            sm.configure_unit_sparsity(
+                enable=unit_cfg.get("enabled", True),
+                bit_group_size=unit_cfg.get("rows", 2),
+                dim_group_size=unit_cfg.get("cols", 2),
+            )
+        print(
+            "[sparsity] enabled (runtime context: phase / flow_step / "
+            "attention_kind auto-tagged)"
+        )
+
+    # -------------------------------------------------------------------------
     # 3. Prepare model execution mode
     # -------------------------------------------------------------------------
 
@@ -349,6 +375,39 @@ def main() -> None:
         config=config,
         output_dir=output_dir,
     )
+
+    # -------------------------------------------------------------------------
+    # 4.5 Sparsity export (research manual §39/§45)
+    # -------------------------------------------------------------------------
+
+    if sp_cfg.get("enabled", False) and wrapper.stat_manager is not None:
+        sm = wrapper.stat_manager
+        sparsity_dir = sp_cfg.get("export", {}).get(
+            "dir", os.path.join(output_dir, "sparsity")
+        )
+        os.makedirs(sparsity_dir, exist_ok=True)
+        sm.export_module_sparsity_csv(
+            os.path.join(sparsity_dir, "module_sparsity.csv"),
+            config_name=os.path.basename(args.config),
+        )
+        n_rows = sm.export_workload_csv(
+            model,
+            os.path.join(sparsity_dir, "workload.csv"),
+            config_name=os.path.basename(args.config),
+        )
+        sm.export_per_layer_sparsity_csv(
+            os.path.join(sparsity_dir, "per_layer_sparsity.csv"),
+        )
+        sm.export_per_layer_weight_sparsity_csv(
+            os.path.join(sparsity_dir, "weight_sparsity.csv"),
+        )
+        sm.export_unit_sparsity_csv(
+            os.path.join(sparsity_dir, "unit_sparsity.csv"),
+        )
+        print(
+            f"[sparsity] exported module/workload/per-layer/weight/unit "
+            f"CSVs to {sparsity_dir} (workload rows: {n_rows})"
+        )
 
     # -------------------------------------------------------------------------
     # 5. Save results
