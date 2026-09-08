@@ -329,6 +329,94 @@ def quant_forward_pot_fp8_outlier(
         stat_collector,
     )
 
+
+def quant_forward_pot_ao_outlier(
+    layer,
+    x,
+    stat_collector=None,
+) -> torch.Tensor:
+    """
+    PoT-FP8 activation/output + continuous weight scale + outlier forward.
+
+    Companion forward for ``scales_with_pot_ao_outlier`` (mixed precision,
+    e.g. INT4 weights + FP8 activations/output): only the activation and
+    output scales are guaranteed to be exact powers of two — the weight
+    scale keeps its calibrated continuous value and is NOT checked.
+    """
+
+    # Verify only once.
+    if not getattr(
+        layer,
+        "_pot_ao_scales_verified",
+        False,
+    ):
+        for name, interval in (
+            ("activation", layer.a_interval),
+            ("output", layer.o_interval),
+        ):
+            if not _is_power_of_two_scalar(
+                interval,
+            ):
+                raise ValueError(
+                    f"{layer.layer_name}_{layer.layer_idx}: "
+                    f"{name} scale {interval!r} is not "
+                    "power-of-two. Recalibrate into a "
+                    "fresh scale_dir before using "
+                    "method=pot_ao_outlier."
+                )
+
+        layer._pot_ao_scales_verified = True
+
+    return quant_forward_with_outlier(
+        layer,
+        x,
+        stat_collector,
+    )
+
+
+def quant_forward_pot_fp8_per_tensor(
+    layer,
+    x,
+    stat_collector=None,
+) -> torch.Tensor:
+    """
+    PoT-FP8 per-tensor forward (NO outlier protection).
+
+    Companion forward for ``scales_with_pot_fp8_per_tensor``: every scale
+    must be an exact power of two (verified once per layer), then the
+    datapath delegates to quant_forward_per_tensor.
+    """
+
+    # Verify only once.
+    if not getattr(
+        layer,
+        "_pot_scales_verified",
+        False,
+    ):
+        for name, interval in (
+            ("activation", layer.a_interval),
+            ("weight", layer.w_interval),
+            ("output", layer.o_interval),
+        ):
+            if not _is_power_of_two_scalar(
+                interval,
+            ):
+                raise ValueError(
+                    f"{layer.layer_name}_{layer.layer_idx}: "
+                    f"{name} scale {interval!r} is not "
+                    "power-of-two. Recalibrate into a "
+                    "fresh scale_dir before using "
+                    "method=pot_fp8_per_tensor."
+                )
+
+        layer._pot_scales_verified = True
+
+    return quant_forward_per_tensor(
+        layer,
+        x,
+        stat_collector,
+    )
+
 # ============================================================================
 # MatMul quantized-forward methods (attention QK^T / PV)
 # Signature: fn(layer, A, B, stat_collector=None) -> Tensor
@@ -585,6 +673,35 @@ def matmul_quant_forward_pot_fp8_outlier(
 
     return matmul_quant_forward_with_outlier(layer, A, B, stat_collector)
 
+
+def matmul_quant_forward_pot_fp8_per_tensor(
+    layer,
+    A,
+    B,
+    stat_collector=None,
+) -> torch.Tensor:
+    """
+    PoT-FP8 per-tensor matmul forward (NO outlier protection): identical
+    datapath to matmul_quant_forward_per_tensor, but every scale must be
+    an exact power of two (verified once per layer).
+    """
+    if not getattr(layer, "_pot_scales_verified", False):
+        for name, interval in (
+            ("activation", layer.A_interval),
+            ("weight", layer.B_interval),
+            ("output", layer.O_interval),
+        ):
+            if not _is_power_of_two_scalar(interval):
+                raise ValueError(
+                    f"{layer.layer_name}_{layer.layer_idx}: "
+                    f"{name} scale {interval!r} is not power-of-two. "
+                    f"Recalibrate into a fresh scale_dir before using "
+                    f"method=pot_fp8_per_tensor."
+                )
+        layer._pot_scales_verified = True
+
+    return matmul_quant_forward_per_tensor(layer, A, B, stat_collector)
+
 # ============================================================================
 # Tools
 # ============================================================================
@@ -618,10 +735,15 @@ QUANT_METHODS: dict[str, Callable] = {
     "outlier": quant_forward_with_outlier,
     "pot_fp8_outlier":
         quant_forward_pot_fp8_outlier,
+    "pot_ao_outlier":
+        quant_forward_pot_ao_outlier,
+    "pot_fp8_per_tensor":
+        quant_forward_pot_fp8_per_tensor,
     # matmul variants (attention QK^T / PV)
     "matmul_per_tensor": matmul_quant_forward_per_tensor,
     "matmul_outlier": matmul_quant_forward_with_outlier,
     "matmul_pot_fp8_outlier": matmul_quant_forward_pot_fp8_outlier,
+    "matmul_pot_fp8_per_tensor": matmul_quant_forward_pot_fp8_per_tensor,
 }
 
 def get_quant_method(name: str) -> Callable:

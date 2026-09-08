@@ -1,0 +1,73 @@
+# Phase D-w4 — scale granularity ablation, Linear w_bit=4（int4 权重版 per_layer）
+# 与 phaseD_w4_ablation_per_site 唯一差异：granularity + scale_dir + output_dir。
+# Linear：w_bit=4（int4）+ method: pot_ao_outlier（a/o PoT，w 连续）；MatMul：pot_fp8_outlier + e4m3。
+# 用法：python main.py --config configs/experiments/phaseD_w4_ablation_per_layer.yaml
+
+output_dir: outputs/experiments/phaseD_w4_ablation_per_layer
+
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+
+quantization:
+  enabled: true
+  mode: quant_forward
+  method: pot_fp8_outlier
+  scale_dir: scales/phaseD_w4_ablation_per_layer
+  quantize_matmul: true
+  matmul_scale_granularity: per_layer
+  linear_scale_granularity: per_layer
+  outlier_ratio: 0.01
+  calibration_policy:
+    default: auto
+    layer_policy:
+      q_proj: recalibrate
+      k_proj: recalibrate
+      v_proj: recalibrate
+      o_proj: recalibrate
+      gate_proj: recalibrate
+      up_proj: recalibrate
+      down_proj: recalibrate
+      qk_matmul: recalibrate
+      pv_matmul: recalibrate
+    per_layer_policy: {}
+  q_proj: { a_bit: e4m3, w_bit: 4, o_bit: e4m3, d_bit: 4, outlier_ratio: 0.01, p: 4, method: pot_ao_outlier }
+  k_proj: { a_bit: e4m3, w_bit: 4, o_bit: e4m3, d_bit: 4, outlier_ratio: 0.01, p: 4, method: pot_ao_outlier }
+  v_proj: { a_bit: e4m3, w_bit: 4, o_bit: e4m3, d_bit: 4, outlier_ratio: 0.01, p: 4, method: pot_ao_outlier }
+  o_proj: { a_bit: e4m3, w_bit: 4, o_bit: e4m3, d_bit: 4, outlier_ratio: 0.01, p: 4, method: pot_ao_outlier }
+  gate_proj: { a_bit: e4m3, w_bit: 4, o_bit: e4m3, d_bit: 4, outlier_ratio: 0.01, p: 4, method: pot_ao_outlier }
+  up_proj: { a_bit: e4m3, w_bit: 4, o_bit: e4m3, d_bit: 4, outlier_ratio: 0.01, p: 4, method: pot_ao_outlier }
+  down_proj: { a_bit: e4m3, w_bit: 4, o_bit: e4m3, d_bit: 4, outlier_ratio: 0.01, p: 4, method: pot_ao_outlier }
+  qk_matmul: { A_bit: e4m3, B_bit: e4m3, O_bit: e4m3, d_bit: 4, outlier_ratio: 0.01, p: 4, method: pot_fp8_outlier }
+  pv_matmul: { A_bit: e4m3, B_bit: e4m3, O_bit: e4m3, d_bit: 4, outlier_ratio: 0.01, p: 4, method: pot_fp8_outlier }
+  linear:
+    enabled: true
+    include: ["*"]
+    exclude: []
+
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8
+  batch_size: 8
+  frame_stride: 4
+  seed: 42
+
+evaluation:
+  env:
+    type: libero
+    task: libero_object
+    max_parallel_tasks: 1
+  n_episodes: 10
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2

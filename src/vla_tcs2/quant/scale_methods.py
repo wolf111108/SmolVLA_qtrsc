@@ -227,6 +227,62 @@ def scales_with_pot_fp8_outlier(
     return a_pot, w_pot, o_pot
 
 
+def scales_with_pot_ao_outlier(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    out: torch.Tensor,
+    a_spec: QuantSpec,
+    w_spec: QuantSpec,
+    o_spec: QuantSpec,
+    outlier_ratio: float = 0.01,
+    **kwargs,
+) -> Tuple[
+    Optional[float],
+    Optional[float],
+    Optional[float],
+]:
+    """
+    PoT-FP8 activation/output + continuous weight scale + outlier
+    protection.
+
+    Variant of ``pot_fp8_outlier`` for mixed-precision layers such as
+    INT4 weights + FP8 activations/output (e.g. w_bit=4, a_bit/o_bit=e4m3):
+
+      - activation / output scales: forced onto the power-of-two grid
+        (they are FP8, same as pot_fp8_outlier);
+      - weight scale: keeps its calibrated continuous value (INT weights
+        have no PoT requirement).
+
+    Outlier masking is identical to the other outlier methods.
+    """
+    _validate_fp8_or_passthrough(
+        a_spec,
+        "activation",
+    )
+    _validate_fp8_or_passthrough(
+        o_spec,
+        "output",
+    )
+    # NOTE: w_spec is intentionally NOT validated — INT (e.g. int4) and FP8
+    # weights are both acceptable here.
+
+    a, w, o = scales_with_outlier(
+        x,
+        weight,
+        out,
+        a_spec,
+        w_spec,
+        o_spec,
+        outlier_ratio=outlier_ratio,
+        **kwargs,
+    )
+
+    a_pot = _ceil_power_of_two_scale(a)
+    o_pot = _ceil_power_of_two_scale(o)
+
+    return a_pot, w, o_pot
+
+
 # ============================================================================
 # MatMul scale methods (attention QK^T / PV). Same signature shape as the
 # linear variants, but the layer passes its two operands as (A, B).
@@ -404,6 +460,74 @@ def _validate_fp8_or_passthrough(
             f"for {name}, got {spec}"
         )
 
+
+def scales_with_pot_fp8_per_tensor(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    out: torch.Tensor,
+    a_spec: QuantSpec,
+    w_spec: QuantSpec,
+    o_spec: QuantSpec,
+    **kwargs,
+) -> Tuple[
+    Optional[float],
+    Optional[float],
+    Optional[float],
+]:
+    """
+    PoT-FP8 classic per-tensor absmax scales — NO outlier protection.
+
+    Companion to `scales_per_tensor`: identical absmax calibration, then
+    every scale is forced onto the power-of-two grid (same representation
+    as pot_fp8_outlier). Use this for the "no outlier protection" arm of
+    the ablation — setting outlier_ratio=0 on the outlier methods is NOT
+    equivalent: the channel mask uses k = max(1, ...) and would still
+    protect 1 channel.
+    """
+    _validate_fp8_or_passthrough(a_spec, "activation")
+    _validate_fp8_or_passthrough(w_spec, "weight")
+    _validate_fp8_or_passthrough(o_spec, "output")
+
+    a = safe_scale_from_tensor(x, a_spec)
+    w = safe_scale_from_tensor(weight, w_spec)
+    o = safe_scale_from_tensor(out, o_spec)
+
+    return (
+        _ceil_power_of_two_scale(a),
+        _ceil_power_of_two_scale(w),
+        _ceil_power_of_two_scale(o),
+    )
+
+
+def matmul_scales_pot_fp8_per_tensor(
+    A: torch.Tensor,
+    B: torch.Tensor,
+    out: torch.Tensor,
+    A_spec: QuantSpec,
+    B_spec: QuantSpec,
+    O_spec: QuantSpec,
+    **kwargs,
+) -> Tuple[
+    Optional[float],
+    Optional[float],
+    Optional[float],
+]:
+    """MatMul variant of scales_with_pot_fp8_per_tensor (no outliers, PoT)."""
+    _validate_fp8_or_passthrough(A_spec, "activation")
+    _validate_fp8_or_passthrough(B_spec, "weight")
+    _validate_fp8_or_passthrough(O_spec, "output")
+
+    a = safe_scale_from_tensor(A, A_spec)
+    b = safe_scale_from_tensor(B, B_spec)
+    o = safe_scale_from_tensor(out, O_spec)
+
+    return (
+        _ceil_power_of_two_scale(a),
+        _ceil_power_of_two_scale(b),
+        _ceil_power_of_two_scale(o),
+    )
+
+
 # ============================================================================
 # Registry
 # ============================================================================
@@ -412,10 +536,13 @@ SCALE_METHODS: dict[str, Callable] = {
     "per_tensor": scales_per_tensor,
     "outlier": scales_with_outlier,
     "pot_fp8_outlier": scales_with_pot_fp8_outlier,
+    "pot_ao_outlier": scales_with_pot_ao_outlier,
+    "pot_fp8_per_tensor": scales_with_pot_fp8_per_tensor,
     # matmul variants (QuantizedMatMul appends/prefixes these)
     "matmul_per_tensor": matmul_scales_per_tensor,
     "matmul_outlier": matmul_scales_with_outlier,
     "matmul_pot_fp8_outlier": matmul_scales_pot_fp8_outlier,
+    "matmul_pot_fp8_per_tensor": matmul_scales_pot_fp8_per_tensor,
 }
 
 
