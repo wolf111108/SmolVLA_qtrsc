@@ -1,0 +1,135 @@
+# Phase E3: vlm alpha=0.01, expert alpha=0.01, method=gaussian_rms_output (all 288 sites injected)
+output_dir: outputs/experiments/phaseE3_v01_e01
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+quantization:
+  enabled: true
+  mode: quant_forward
+  method: pot_fp8_outlier
+  scale_dir: scales/phaseE_sensitivity
+  quantize_matmul: true
+  matmul_scale_granularity: per_site
+  linear_scale_granularity: per_site
+  outlier_ratio: 0.01
+  calibration_policy:
+    default: auto
+    layer_policy:
+      q_proj: recalibrate
+      k_proj: recalibrate
+      v_proj: recalibrate
+      o_proj: recalibrate
+      gate_proj: recalibrate
+      up_proj: recalibrate
+      down_proj: recalibrate
+      qk_matmul: recalibrate
+      pv_matmul: recalibrate
+    per_layer_policy: {}
+  q_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  k_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  v_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  o_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  gate_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  up_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  down_proj:
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  qk_matmul:
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  pv_matmul:
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  linear:
+    enabled: true
+    include:
+    - '*'
+    exclude: []
+test:
+  enabled: true
+  method: gaussian_rms_output
+  seed: 0
+  site: output
+  use_outlier_protection: false
+  residual_lambda: 1.0
+  outlier_ratio: 0.01
+  targets:
+  - target:
+      component: vlm
+    alpha: 0.01
+  - target:
+      component: expert
+    alpha: 0.01
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: null
+  batch_size: 8
+  frame_stride: 4
+  seed: 42
+evaluation:
+  env:
+    type: libero
+    task: libero_object
+    max_parallel_tasks: 1
+  n_episodes: 10
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2

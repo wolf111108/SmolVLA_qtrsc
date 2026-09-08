@@ -288,15 +288,21 @@ def _matches_target(module_id: str, target: dict[str, Any]) -> bool:
     if not target:
         return False
 
+    # module_id / module_ids act as filters: when specified, a module that
+    # does not match them must be excluded (previously the code fell through
+    # to `return True`, silently matching ALL modules).
+    id_matched = None  # None = no id selector present
     ids = target.get("module_ids")
     if ids:
-        if any(fnmatch(module_id, p) for p in ids):
-            return True
+        id_matched = any(fnmatch(module_id, str(p)) for p in ids)
 
     mid = target.get("module_id")
     if mid:
-        if fnmatch(module_id, str(mid)):
-            return True
+        m = fnmatch(module_id, str(mid))
+        id_matched = m if id_matched is None else (id_matched or m)
+
+    if id_matched is False:
+        return False
 
     component = target.get("component")
     if component:
@@ -332,6 +338,29 @@ def _matches_target(module_id: str, target: dict[str, Any]) -> bool:
     return True
 
 
+def _apply_test_params(
+    module: nn.Module,
+    method: str,
+    test_cfg: dict[str, Any],
+    group_cfg: dict[str, Any],
+) -> None:
+    """Set test_forward params on a module, with per-group overrides.
+
+    Resolution order (group wins over global `test.*` defaults).
+    """
+    merged = {**test_cfg, **{k: v for k, v in group_cfg.items() if k != "target"}}
+    module.mode = "test_forward"
+    module.test_method = str(merged.get("method", "gaussian_rms_output"))
+    module.test_noise_alpha = float(merged.get("alpha", 0.03))
+    module.test_noise_seed = int(merged.get("seed", 0))
+    module.test_site = str(merged.get("site", "output"))
+    module.test_use_outlier_protection = bool(
+        merged.get("use_outlier_protection", False)
+    )
+    module.test_residual_lambda = float(merged.get("residual_lambda", 1.0))
+    module.test_outlier_ratio = float(merged.get("outlier_ratio", 0.01))
+
+
 def apply_sensitivity_target(
     model: nn.Module,
     config: dict[str, Any],
@@ -352,9 +381,20 @@ def apply_sensitivity_target(
           target:
             module_id: expert.layer.7.qk   # or component/layer/operator selectors
 
-    Every QuantizedLinear / QuantizedMatMul matching `target` is switched to
-    mode="test_forward" with the given test method + params; all others are
-    switched to "raw". This isolates a single physical site's sensitivity.
+    OR, for multi-group experiments (e.g. separate alpha per component):
+
+        test:
+          enabled: true
+          targets:
+            - target: {component: vlm}
+              alpha: 0.01
+            - target: {component: expert}
+              alpha: 0.05
+
+    Every QuantizedLinear / QuantizedMatMul matching a group's `target` is
+    switched to mode="test_forward" with that group's test method + params
+    (group-level keys override the global `test.*` defaults); all others are
+    switched to "raw".
 
     Returns the number of targeted modules.
     """
@@ -363,7 +403,12 @@ def apply_sensitivity_target(
         return 0
 
     method = str(test_cfg.get("method", "gaussian_rms_output"))
-    target = test_cfg.get("target", {})
+
+    groups = test_cfg.get("targets")
+    if groups is None:
+        groups = [{"target": test_cfg.get("target", {})}]
+    if not groups:
+        groups = [{"target": {}}]
 
     n_target = 0
     for module in model.modules():
@@ -375,27 +420,24 @@ def apply_sensitivity_target(
             f"{getattr(module, 'layer_idx', 0)}"
         )
 
-        if _matches_target(mid, target):
-            module.mode = "test_forward"
-            module.test_method = method
-            module.test_noise_alpha = float(test_cfg.get("alpha", 0.03))
-            module.test_noise_seed = int(test_cfg.get("seed", 0))
-            module.test_site = str(test_cfg.get("site", "output"))
-            module.test_use_outlier_protection = bool(
-                test_cfg.get("use_outlier_protection", False)
-            )
-            module.test_residual_lambda = float(
-                test_cfg.get("residual_lambda", 1.0)
-            )
-            module.test_outlier_ratio = float(
-                test_cfg.get("outlier_ratio", 0.01)
-            )
+        matched_group = None
+        for g in groups:
+            if _matches_target(mid, g.get("target", g)):
+                matched_group = g
+                break
+
+        if matched_group is not None:
+            _apply_test_params(module, method, test_cfg, matched_group)
             n_target += 1
         else:
             module.mode = "raw"
 
+    group_desc = [
+        {"target": g.get("target", g), **{k: v for k, v in g.items() if k != "target"}}
+        for g in groups
+    ]
     print(
-        f"[sensitivity] method={method} target={target} "
+        f"[sensitivity] method={method} targets={group_desc} "
         f"-> {n_target} modules in test_forward, rest raw"
     )
     return n_target
