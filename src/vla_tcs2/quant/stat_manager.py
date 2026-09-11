@@ -297,6 +297,10 @@ class QuantStatManager:
         sparse_bits_total: int,
         amplitude_zero_bits_total: int,
     ):
+        # Canonical label is "denoise" (manual §5); the legacy counters use
+        # "decode" — normalize so both labels hit the same bucket.
+        if phase == "denoise":
+            phase = "decode"
         if phase not in self.phase_sparsity:
             self.phase_sparsity[phase] = self._new_sparsity_counter()
 
@@ -1947,15 +1951,22 @@ class QuantStatManager:
 
         for module in model.modules():
             cls_name = type(module).__name__
-            is_linear = cls_name == "QuantizedLinear" or (
-                hasattr(module, "in_features")
-                and hasattr(module, "weight")
-                and not hasattr(module, "A_spec")
-            )
-            is_matmul = cls_name == "QuantizedMatMul" or (
-                hasattr(module, "A_spec") and hasattr(module, "B_spec")
-            )
-            if not (is_linear or is_matmul):
+            # Strict class check first; duck-typing fallback ONLY for test
+            # fakes (a real nn.Linear must never be picked up: it lacks
+            # a_spec / A_spec).
+            if cls_name == "QuantizedLinear":
+                is_linear, is_matmul = True, False
+            elif cls_name == "QuantizedMatMul":
+                is_linear, is_matmul = False, True
+            elif hasattr(module, "A_spec") and hasattr(module, "B_spec"):
+                is_linear, is_matmul = False, True
+            elif (
+                hasattr(module, "a_spec")
+                and hasattr(module, "w_spec")
+                and hasattr(module, "in_features")
+            ):
+                is_linear, is_matmul = True, False
+            else:
                 continue
             module_id = getattr(module, "module_id", "") or (
                 f"{getattr(module, 'layer_name', '')}_"

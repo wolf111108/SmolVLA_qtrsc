@@ -37,6 +37,7 @@ VLA_tcs2/
 ├── configs/experiments/     # 实验 YAML 配置
 ├── scripts/                 # LIBERO 评测 / 审计 / 汇总脚本
 ├── checkpoints/             # 本地模型 checkpoint（大文件，不纳入文档）
+├── experiments/             # ★ 实验管理（新实验统一在此建子目录，见 experiments/README.md）
 ├── outputs/                 # 评测原始产出（eval_info.json / videos / reports / figures）
 ├── doc/                     # ★ 项目文档（见下，含每日工作日志 doc/logs/）
 ├── lerobot_current/         # 主 LeRobot（LIBERO 评测环境，固定 commit）
@@ -198,6 +199,7 @@ python main.py --config configs/experiments/smolvla_int8.yaml --skip-evaluation
 | 新设备环境重建手册 | [`doc/guides/rebuild_manual.md`](doc/guides/rebuild_manual.md) |
 | Meta-World 评估手册 | [`doc/manual/metaworld_manual.md`](doc/manual/metaworld_manual.md) |
 | 每日工作日志 | [`doc/logs/`](doc/logs/) |
+| 实验管理规范（新实验入口） | [`experiments/README.md`](experiments/README.md) |
 | 结果汇总与对比分析 | [`outputs/reports/`](outputs/reports/) |
 | 图表 | [`outputs/figures/`](outputs/figures/) |
 | Table-2 严格复现审计记录 | [`outputs/table2_repro_audit/`](outputs/table2_repro_audit/) |
