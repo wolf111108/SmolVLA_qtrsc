@@ -541,6 +541,165 @@ def quant_forward_pot_fp8_per_tensor(
         stat_collector,
     )
 
+
+def _w_scale_is_per_channel(layer) -> bool:
+    """True when layer.w_interval is a per-output-channel [N_out] tensor."""
+    return (
+        isinstance(layer.w_interval, torch.Tensor)
+        and layer.w_interval.dim() == 1
+    )
+
+
+def quant_forward_pot_ao_outlier_channel(
+    layer,
+    x,
+    stat_collector=None,
+) -> torch.Tensor:
+    """
+    Per-output-channel W4 forward (G2-B), companion to
+    ``scales_with_pot_ao_outlier_channel``.
+
+    Same outlier decomposition as ``quant_forward_with_outlier``
+    (Y = Y_QaQw + Y_FaFw + Y_FaQw + Y_QaFw), but the weight scale is a
+    [N_out] tensor applied EXPLICITLY on the output feature dimension:
+
+        Y_QaQw = s_a * diag(s_w) @ (q(x) @ q(W)^T)   → per output channel j:
+                 s_a * s_w[j] * Σ_k q(a_k) q(w_jk)
+        Y_FaQw = diag(s_w) @ (x_fp @ q(W)^T)
+        Y_QaFw / Y_FaFw: FP weight path, unaffected by s_w granularity.
+
+    The scalar-M integer compensation trick (M_aw / M_fa_qb in
+    quant_forward_with_outlier) does not extend to per-channel s_w, so this
+    path dequantizes explicitly: w_sim = q(w_normal) * s_w.view(-1, 1).
+    """
+    ratio = layer.outlier_ratio
+
+    # a/o scales must be scalar PoT (same contract as pot_ao_outlier).
+    if not getattr(layer, "_pot_ao_ch_scales_verified", False):
+        for name, interval in (
+            ("activation", layer.a_interval),
+            ("output", layer.o_interval),
+        ):
+            if not _is_power_of_two_scalar(interval):
+                raise ValueError(
+                    f"{layer.layer_name}_{layer.layer_idx}: "
+                    f"{name} scale {interval!r} is not power-of-two. "
+                    "Recalibrate into a fresh scale_dir before using "
+                    "method=pot_ao_outlier_channel."
+                )
+        if not _w_scale_is_per_channel(layer):
+            raise ValueError(
+                f"{layer.layer_name}_{layer.layer_idx}: w_interval is not "
+                "a per-output-channel [N_out] tensor. Use method="
+                "pot_ao_outlier_channel with scales calibrated by the "
+                "matching scale method."
+            )
+        if not torch.isfinite(layer.w_interval).all():
+            raise ValueError(
+                f"{layer.layer_name}_{layer.layer_idx}: per-channel w "
+                "scale contains non-finite values."
+            )
+        layer._pot_ao_ch_scales_verified = True
+
+    w_scale = layer.w_interval.view(-1, 1)                # [N_out, 1]
+
+    channel_mask = get_outlier_mask_channel(x, ratio)
+    x_channel_mask = channel_mask.view(1, 1, -1)
+    w_channel_mask = channel_mask.view(1, -1)
+    w_outlier_mask = get_outlier_mask_1d(layer.weight, ratio)
+    w_channel_mask = w_channel_mask | w_outlier_mask
+
+    x_fp = x * x_channel_mask.to(torch.float32)
+    x_normal_fp = (x * (~x_channel_mask).to(dtype=x.dtype)).to(torch.float32)
+    w_fp = layer.weight * w_channel_mask.to(torch.float32)
+    w_normal_fp = (
+        layer.weight * (~w_channel_mask).to(dtype=layer.weight.dtype)
+    ).to(torch.float32)
+
+    # normal-part weight quantization with per-row scale (dequantized form)
+    w_code = quant_awo(
+        w_normal_fp,
+        w_scale,
+        layer.w_spec,
+        out_dtype=torch.float32,
+        chunk_size=1_048_576,
+    )
+    w_sim = w_code * w_scale                              # [N_out, K]
+
+    # normal-part activation quantization (scalar PoT scale).
+    # quant_awo returns the scaled CODE (x / a_interval); dequantize by
+    # multiplying a_interval back — the four-path sum below operates on
+    # dequantized magnitudes (unlike the scalar path's integer-compensation
+    # M_aw trick, which does the rescaling at the end).
+    x_code = quant_awo(
+        x_normal_fp,
+        layer.a_interval,
+        layer.a_spec,
+        out_dtype=torch.float32,
+        chunk_size=1_048_576,
+    )
+    x_sim = x_code * layer.a_interval
+
+    in_features = layer.weight.size(1)
+    out_features = layer.weight.size(0)
+    if stat_collector is not None:
+        stat_collector.collect_quant_activation(
+            layer.layer_name,
+            layer.layer_idx,
+            x_code,
+            x_sim.to(torch.float16),
+            layer.a_spec,
+            layer.digit_size,
+            layer.parallelism,
+            in_features,
+            out_features,
+        )
+
+    if layer.bias is not None:
+        bias = layer.bias.to(torch.float32)
+    else:
+        bias = None
+
+    x_sim_fp32 = x_sim.to(torch.float32)
+    w_sim_fp32 = w_sim.to(torch.float32)
+
+    # Four-path outlier decomposition (§8.4): per-channel s_w enters only
+    # the quantized-weight paths, already embedded in w_sim.
+    out_qa_qb = F.linear(x_sim_fp32, w_sim_fp32)          # q(a)·q(w)·s_w
+    out_fa_fb = F.linear(x_fp, w_fp)                      # FP outliers
+    out_fa_qb = F.linear(x_fp, w_sim_fp32)                # FP x · q(w)·s_w
+    out_qa_fb = F.linear(x_sim_fp32, w_fp)                # q(x) · FP w
+
+    out_with_outlier = out_qa_qb + out_fa_fb + out_fa_qb + out_qa_fb
+    if bias is not None:
+        out_with_outlier = out_with_outlier + bias
+
+    # output re-quantization: same as quant_forward_with_outlier
+    M_q = layer.round(torch.tensor(layer.o_interval) * (2 ** 16))
+    out_outlier_mask = get_outlier_mask_channel(out_with_outlier, ratio)
+    out_normal = out_with_outlier * (~out_outlier_mask).to(torch.float32)
+    out_outlier = out_with_outlier * out_outlier_mask.to(torch.float32)
+
+    out_normal_quant = quant_awo(
+        out_normal,
+        layer.o_interval,
+        layer.o_spec,
+        out_dtype=out_normal.dtype,
+        chunk_size=1_048_576,
+    )
+    out_normal_dequant = out_normal_quant.to(torch.float32).mul_(M_q)
+    out_normal_dequant = torch.div(out_normal_dequant, 2 ** 16).to(x.dtype)
+    out_outlier = out_outlier.to(x.dtype)
+
+    _collect_linear_runtime(
+        layer,
+        stat_collector,
+        output_code=out_normal_quant.to(torch.float32),
+        output_spec=layer.o_spec,
+    )
+
+    return out_normal_dequant + out_outlier
+
 # ============================================================================
 # MatMul quantized-forward methods (attention QK^T / PV)
 # Signature: fn(layer, A, B, stat_collector=None) -> Tensor
@@ -890,6 +1049,8 @@ QUANT_METHODS: dict[str, Callable] = {
         quant_forward_pot_fp8_outlier,
     "pot_ao_outlier":
         quant_forward_pot_ao_outlier,
+    "pot_ao_outlier_channel":
+        quant_forward_pot_ao_outlier_channel,
     "pot_fp8_per_tensor":
         quant_forward_pot_fp8_per_tensor,
     # matmul variants (attention QK^T / PV)

@@ -38,6 +38,7 @@ import torch
 from vla_tcs2.quant.quant_spec import (
     QuantSpec,
     safe_scale_from_tensor,
+    safe_scale_per_output_channel,
 )
 
 
@@ -281,6 +282,70 @@ def scales_with_pot_ao_outlier(
     o_pot = _ceil_power_of_two_scale(o)
 
     return a_pot, w, o_pot
+
+
+def scales_with_pot_ao_outlier_channel(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    out: torch.Tensor,
+    a_spec: QuantSpec,
+    w_spec: QuantSpec,
+    o_spec: QuantSpec,
+    outlier_ratio: float = 0.01,
+    **kwargs,
+) -> Tuple[
+    Optional[float],
+    Optional[torch.Tensor],
+    Optional[float],
+]:
+    """
+    Per-output-channel W4 variant of ``pot_ao_outlier`` (G2-B).
+
+    - activation / output scales: identical to pot_ao_outlier
+      (scalar PoT, computed over the outlier-masked normal part);
+    - weight scale: PER OUTPUT ROW, computed over the normal part of
+      each row (outlier channels/elements excluded), returned as a
+      [N_out] float32 tensor (NOT PoT — INT weights keep continuous
+      scales, same as pot_ao_outlier).
+
+    Outlier masking semantics identical to scales_with_outlier:
+      - x: channel mask (absmax-ranked along hidden dim);
+      - weight: same channel mask OR element-level mask.
+    """
+    _validate_fp8_or_passthrough(a_spec, "activation")
+    _validate_fp8_or_passthrough(o_spec, "output")
+
+    if outlier_ratio <= 0.0:
+        channel_mask = torch.zeros(
+            weight.size(1), dtype=torch.bool, device=weight.device
+        )
+    else:
+        channel_mask = get_outlier_mask_channel(x, outlier_ratio)
+
+    w_channel_mask = channel_mask.view(1, -1)            # [1, H]
+    w_outlier_mask = get_outlier_mask_1d(weight, outlier_ratio)
+    w_channel_mask = w_channel_mask | w_outlier_mask
+
+    x_normal = (x * (~channel_mask.view(1, 1, -1)).to(dtype=x.dtype)).to(torch.float32)
+    w_normal = (weight * (~w_channel_mask).to(dtype=weight.dtype)).to(torch.float32)
+
+    # activation / output scales: scalar, PoT (same as pot_ao_outlier)
+    a = safe_scale_from_tensor(x_normal, a_spec)
+    if a == 0:
+        a = None
+    o_channel_mask = get_outlier_mask_channel(out, outlier_ratio)
+    normal_idx = torch.nonzero(~o_channel_mask, as_tuple=False).flatten()
+    o_normal = out.index_select(dim=-1, index=normal_idx).to(torch.float32)
+    o = safe_scale_from_tensor(o_normal, o_spec)
+
+    # weight scale: per output row over the normal part
+    w = safe_scale_per_output_channel(w_normal, w_spec)  # [N_out]
+
+    return (
+        _ceil_power_of_two_scale(a),
+        w,
+        _ceil_power_of_two_scale(o),
+    )
 
 
 # ============================================================================
@@ -537,6 +602,7 @@ SCALE_METHODS: dict[str, Callable] = {
     "outlier": scales_with_outlier,
     "pot_fp8_outlier": scales_with_pot_fp8_outlier,
     "pot_ao_outlier": scales_with_pot_ao_outlier,
+    "pot_ao_outlier_channel": scales_with_pot_ao_outlier_channel,
     "pot_fp8_per_tensor": scales_with_pot_fp8_per_tensor,
     # matmul variants (QuantizedMatMul appends/prefixes these)
     "matmul_per_tensor": matmul_scales_per_tensor,

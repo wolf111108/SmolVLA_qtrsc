@@ -120,6 +120,29 @@ def create_quantized_linear(
         quant_config.get("method", "per_tensor"),
     )
 
+    # Intra-weight-tensor scale granularity (G2). ORTHOGONAL to
+    # linear_scale_granularity (site-level sharing). When set to
+    # per_output_channel and the layer method is pot_ao_outlier, the
+    # method is switched to the per-channel implementation
+    # (pot_ao_outlier_channel) which pairs a matching scale/forward.
+    weight_granularity = quant_config.get("weight_quant_granularity", None)
+    if weight_granularity == "per_output_channel":
+        if quant_layer.method == "pot_ao_outlier":
+            quant_layer.method = "pot_ao_outlier_channel"
+        else:
+            raise ValueError(
+                "weight_quant_granularity=per_output_channel currently "
+                "supports method=pot_ao_outlier only (got "
+                f"{quant_layer.method!r})"
+            )
+    elif weight_granularity in (None, "per_tensor"):
+        pass  # legacy scalar weight scale path
+    else:
+        raise ValueError(
+            f"Unsupported weight_quant_granularity: {weight_granularity!r} "
+            "(per_output_channel is implemented; groupwise pending Gate 2)"
+        )
+
     # Pluggable test-forward method name (quant/test_methods.py), used when
     # mode == "test_forward". Per-layer config overrides the top-level
     # quantization.test_method.

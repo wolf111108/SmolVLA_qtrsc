@@ -26,7 +26,7 @@ Phase G 目标：归因 Phase F 中 F3（Linear W4）四 suite 平均 83.0% → 
 | G1-B w4_all | F3 anchor | **21.0%** | **done** |
 | G1-C w4_vlm_only | VLM 主导？ | **21.0%** | **done**（→ VLM 主导） |
 | G1-D w4_expert_only | Expert 主导？ | **84.0%** | **done**（→ Expert 无强贡献） |
-| G2 weight-granularity | tensor-wise 是根因？ | | pending（**需先实现 `weight_quant_granularity` 代码字段**，G1 后最高优先） |
+| G2 weight-granularity | tensor-wise 是根因？ | **23.0%**（vs 21.0%，Δ+2pp） | **done**（per-channel 失败，Gate 2 拦停 groupwise 闭环；根因收敛为 VLM 对 W4 噪声的闭环敏感度） |
 | G3 action-horizon | 开环放大？ | | pending（G1 后降为次要：组件归因已干净） |
 | G4 outlier-mask-diagnosis | mask 漂移？ | | conditional |
 

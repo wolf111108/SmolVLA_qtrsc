@@ -100,11 +100,28 @@ class QuantStatistics:
         """
         Finalize scales across calibration samples.
         Uses maximum value across all samples for robustness.
+
+        Per-output-channel weight scales (G2-B, [N_out] tensors from
+        scales_with_pot_ao_outlier_channel) aggregate elementwise via
+        torch.maximum; scalar scales keep the legacy max() path.
         """
         scales = {}
 
         if self.w_scales:
-            scales['w_scale'] = max(self.w_scales)
+            if any(
+                isinstance(s, torch.Tensor) for s in self.w_scales
+            ):
+                # Elementwise max over per-channel tensors (all samples
+                # must share shape [N_out]; pads with the scalar side by
+                # broadcasting a full-tensor fallback).
+                tensors = [
+                    s if isinstance(s, torch.Tensor)
+                    else torch.full_like(self.w_scales[0], float(s))
+                    for s in self.w_scales
+                ]
+                scales['w_scale'] = torch.stack(tensors).amax(dim=0)
+            else:
+                scales['w_scale'] = max(self.w_scales)
             scales['a_scale'] = max(self.a_scales)
             scales['o_scale'] = max(self.o_scales)
 
@@ -2091,7 +2108,16 @@ class QuantStatManager:
                 with open(filepath, 'wb') as f:
                     pickle.dump(scale_value, f)
 
-                print(f"  Saved {filename}: {scale_value:.6f}")
+                # Per-channel scales are [N_out] tensors (G2-B); print a
+                # compact summary instead of a scalar format string.
+                if isinstance(scale_value, torch.Tensor):
+                    print(
+                        f"  Saved {filename}: tensor{tuple(scale_value.shape)}"
+                        f" min={scale_value.min().item():.3e}"
+                        f" max={scale_value.max().item():.3e}"
+                    )
+                else:
+                    print(f"  Saved {filename}: {scale_value:.6f}")
 
         print(f"Total scales saved: {len(self.stats)} layers")
 
@@ -2158,7 +2184,15 @@ class QuantStatManager:
             print(f"  Samples: {info['sample_count']}")
             print(f"  Scales:")
             for scale_name, scale_value in info['scales'].items():
-                print(f"    {scale_name}: {scale_value:.6f}")
+                if isinstance(scale_value, torch.Tensor):
+                    # Per-channel [N_out] scales (G2-B): compact summary.
+                    print(
+                        f"    {scale_name}: tensor{tuple(scale_value.shape)}"
+                        f" min={scale_value.min().item():.3e}"
+                        f" max={scale_value.max().item():.3e}"
+                    )
+                else:
+                    print(f"    {scale_name}: {scale_value:.6f}")
 
         print("=" * 80 + "\n")
 

@@ -168,6 +168,38 @@ def safe_scale_per_token(
     raise ValueError(f"Unsupported spec: {spec}")
 
 
+def safe_scale_per_output_channel(
+    weight: torch.Tensor,
+    spec: QuantSpec,
+) -> torch.Tensor:
+    """
+    Per-output-channel scale for a weight tensor [N_out, K].
+
+    Mirrors safe_scale_from_tensor semantics (absmax / (qmax - 0.5) for
+    INT, absmax / fp8_max for FP), but computed per output row so each
+    row gets its own scale. Returns a [N_out] float32 tensor.
+    """
+    if spec.kind == "none" or not spec.enabled:
+        return torch.ones(
+            weight.size(0), device=weight.device, dtype=torch.float32
+        )
+
+    max_abs = weight.detach().abs().amax(dim=1)          # [N_out]
+    max_abs = torch.clamp(max_abs, min=1e-10)
+
+    if spec.kind == "int":
+        qmax = int_qmax(spec.bits)
+        return (max_abs / (qmax - 0.5)).to(torch.float32)
+
+    if spec.kind == "fp":
+        return (max_abs / fp8_max(spec.fmt)).to(torch.float32)
+
+    if spec.kind == "bf":
+        return torch.ones_like(max_abs)
+
+    raise ValueError(f"Unsupported spec: {spec}")
+
+
 def quant_awo(
     x: torch.Tensor,
     scale,
