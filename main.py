@@ -271,8 +271,12 @@ def main() -> None:
         if unit_cfg:
             sm.configure_unit_sparsity(
                 enable=unit_cfg.get("enabled", True),
-                bit_group_size=unit_cfg.get("rows", 2),
-                dim_group_size=unit_cfg.get("cols", 2),
+                bit_group_size=unit_cfg.get(
+                    "bit_group_size", unit_cfg.get("rows", 2)
+                ),
+                dim_group_size=unit_cfg.get(
+                    "dim_group_size", unit_cfg.get("cols", 2)
+                ),
             )
         print(
             "[sparsity] enabled (runtime context: phase / flow_step / "
@@ -382,10 +386,30 @@ def main() -> None:
 
     if sp_cfg.get("enabled", False) and wrapper.stat_manager is not None:
         sm = wrapper.stat_manager
+
+        # P0-1 (manual §2): actually collect static quantized weight
+        # sparsity. Must run AFTER rollout so every executed layer's
+        # w_interval has been loaded/calibrated.
+        n_weight_layers = sm.collect_model_weight_sparsity(model)
+        print(
+            "[sparsity] static weight collection finished: "
+            f"{n_weight_layers} QuantizedLinear layers"
+        )
+        if n_weight_layers <= 0:
+            raise RuntimeError(
+                "sparsity.enabled=true but no QuantizedLinear weight "
+                "sparsity was collected; check scale loading / wrapping."
+            )
+
         sparsity_dir = sp_cfg.get("export", {}).get(
             "dir", os.path.join(output_dir, "sparsity")
         )
         os.makedirs(sparsity_dir, exist_ok=True)
+        sm.export_quantization_manifest_csv(
+            model,
+            os.path.join(sparsity_dir, "quantization_manifest.csv"),
+            config_name=os.path.basename(args.config),
+        )
         sm.export_module_sparsity_csv(
             os.path.join(sparsity_dir, "module_sparsity.csv"),
             config_name=os.path.basename(args.config),
@@ -399,14 +423,18 @@ def main() -> None:
             os.path.join(sparsity_dir, "per_layer_sparsity.csv"),
         )
         sm.export_per_layer_weight_sparsity_csv(
-            os.path.join(sparsity_dir, "weight_sparsity.csv"),
+            os.path.join(sparsity_dir, "weight_sparsity_static.csv"),
         )
-        sm.export_unit_sparsity_csv(
+        sm.export_outlier_sidepath_csv(
+            os.path.join(sparsity_dir, "outlier_sidepath.csv"),
+        )
+        sm.export_unit_sparsity_structured_csv(
             os.path.join(sparsity_dir, "unit_sparsity.csv"),
         )
         print(
-            f"[sparsity] exported module/workload/per-layer/weight/unit "
-            f"CSVs to {sparsity_dir} (workload rows: {n_rows})"
+            f"[sparsity] exported module/workload/per-layer/weight-static/"
+            f"outlier-sidepath/unit CSVs to {sparsity_dir} "
+            f"(workload rows: {n_rows})"
         )
 
     # -------------------------------------------------------------------------

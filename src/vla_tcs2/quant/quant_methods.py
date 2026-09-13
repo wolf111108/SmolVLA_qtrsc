@@ -91,6 +91,35 @@ def _collect_linear_runtime(
         )
 
 
+def _collect_outlier_partition(
+    layer,
+    stat_collector,
+    *,
+    tensor_role: str,
+    total_elements: int,
+    protected_elements: int,
+    spec,
+):
+    """Record the outlier FP side-path partition (Phase H, manual §3).
+
+    No-op when the collector does not expose collect_outlier_partition.
+    """
+    if stat_collector is None or not hasattr(
+        stat_collector, "collect_outlier_partition"
+    ):
+        return
+
+    module_id = getattr(layer, "module_id", "") or layer.layer_name
+    stat_collector.collect_outlier_partition(
+        module_id=module_id,
+        tensor_role=tensor_role,
+        total_elements=total_elements,
+        protected_elements=protected_elements,
+        spec=spec,
+        layer_idx=getattr(layer, "layer_idx", None),
+    )
+
+
 def _collect_matmul_runtime(
     layer,
     stat_collector,
@@ -295,6 +324,36 @@ def quant_forward_with_outlier(layer, x, stat_collector=None) -> torch.Tensor:
     w_normal_fp = layer.weight * (~w_channel_mask).to(dtype=layer.weight.dtype)
     w_normal_fp = w_normal_fp.to(torch.float32)
 
+    # Phase H (manual §3.4): record the FP side-path partition BEFORE the
+    # masks are deleted so the native quant-path sparsity can exclude the
+    # positions this forward artificially zeroes in the normal path.
+    if stat_collector is not None and hasattr(
+        stat_collector, "collect_outlier_partition"
+    ):
+        # Activation: channel mask is [1, 1, K]; protected elements repeat
+        # across every token row.
+        protected_channels = int(x_channel_mask.sum().item())
+        repeat = x.numel() // max(x.shape[-1], 1)
+        _collect_outlier_partition(
+            layer,
+            stat_collector,
+            tensor_role="activation",
+            total_elements=x.numel(),
+            protected_elements=protected_channels * repeat,
+            spec=layer.a_spec,
+        )
+        # Weight: w_channel_mask is the broadcast union of the activation
+        # channel mask and the weight's own element-level outlier mask, so
+        # its sum is the true protected element count of the weight tensor.
+        _collect_outlier_partition(
+            layer,
+            stat_collector,
+            tensor_role="weight_runtime_mask",
+            total_elements=layer.weight.numel(),
+            protected_elements=int(w_channel_mask.sum().item()),
+            spec=layer.w_spec,
+        )
+
     del w_channel_mask
     del x_channel_mask
 
@@ -378,6 +437,24 @@ def quant_forward_with_outlier(layer, x, stat_collector=None) -> torch.Tensor:
 
     out_with_outlier_mask = get_outlier_mask_channel(out_with_outlier, ratio)
     out_without_outlier_mask = ~out_with_outlier_mask
+
+    # Phase H (manual §3.4): output FP side-path partition (role="output"
+    # so the native correction matches the structured output record).
+    if stat_collector is not None and hasattr(
+        stat_collector, "collect_outlier_partition"
+    ):
+        out_protected_channels = int(out_with_outlier_mask.sum().item())
+        out_repeat = out_with_outlier.numel() // max(
+            out_with_outlier.shape[-1], 1
+        )
+        _collect_outlier_partition(
+            layer,
+            stat_collector,
+            tensor_role="output",
+            total_elements=out_with_outlier.numel(),
+            protected_elements=out_protected_channels * out_repeat,
+            spec=layer.o_spec,
+        )
 
     out_outlier = out_with_outlier * out_with_outlier_mask.to(torch.float32)
     out_normal = out_with_outlier * out_without_outlier_mask.to(torch.float32)
@@ -840,6 +917,29 @@ def matmul_quant_forward_with_outlier(layer, A, B, stat_collector=None) -> torch
     B_normal_fp = B * (~B_channel_mask).to(dtype=B.dtype)
     B_normal_fp = B_normal_fp.to(torch.float32)
 
+    # Phase H (manual §3): record MatMul A/B FP side-path partitions.
+    if stat_collector is not None and hasattr(
+        stat_collector, "collect_outlier_partition"
+    ):
+        a_protected_channels = int(A_channel_mask.sum().item())
+        a_repeat = A.numel() // max(A.shape[-1], 1)
+        _collect_outlier_partition(
+            layer,
+            stat_collector,
+            tensor_role="A",
+            total_elements=A.numel(),
+            protected_elements=a_protected_channels * a_repeat,
+            spec=layer.A_spec,
+        )
+        _collect_outlier_partition(
+            layer,
+            stat_collector,
+            tensor_role="B",
+            total_elements=B.numel(),
+            protected_elements=int(B_channel_mask.sum().item()),
+            spec=layer.B_spec,
+        )
+
     del A_channel_mask, B_channel_mask
 
     M_q = torch.tensor(layer.O_interval)
@@ -917,6 +1017,23 @@ def matmul_quant_forward_with_outlier(layer, A, B, stat_collector=None) -> torch
 
     out_with_outlier_mask = get_outlier_mask_channel(out_with_outlier, ratio)
     out_without_outlier_mask = ~out_with_outlier_mask
+
+    # Phase H (manual §3): MatMul O FP side-path partition.
+    if stat_collector is not None and hasattr(
+        stat_collector, "collect_outlier_partition"
+    ):
+        o_protected_channels = int(out_with_outlier_mask.sum().item())
+        o_repeat = out_with_outlier.numel() // max(
+            out_with_outlier.shape[-1], 1
+        )
+        _collect_outlier_partition(
+            layer,
+            stat_collector,
+            tensor_role="O",
+            total_elements=out_with_outlier.numel(),
+            protected_elements=o_protected_channels * o_repeat,
+            spec=layer.O_spec,
+        )
 
     out_outlier = out_with_outlier * out_with_outlier_mask.to(torch.float32)
     out_normal = out_with_outlier * out_without_outlier_mask.to(torch.float32)

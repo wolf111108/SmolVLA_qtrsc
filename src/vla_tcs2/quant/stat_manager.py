@@ -229,6 +229,18 @@ class QuantStatManager:
         # protected element fraction (activation/weight sides).
         self.outlier_sidepath: Dict[str, Dict[str, float]] = {}
 
+        # Structured outlier FP side-path partition (Phase H, manual §3):
+        # key = (module_id, phase, flow_step, tensor_role, attention_kind),
+        # value accumulates protected/normal element & bit counters so the
+        # "native quant path" sparsity can exclude protected positions that
+        # the outlier forward artificially zeroes in the normal path.
+        self.outlier_partition: Dict[tuple, Dict[str, Any]] = {}
+
+        # Structured unit/block sparsity (Phase H, manual §5):
+        # key matches the main structured record (module_id, phase,
+        # flow_step, tensor_role, attention_kind).
+        self.per_role_unit_sparsity: Dict[tuple, Dict[str, int]] = {}
+
         # Per-layer WEIGHT sparsity records (static, collected once).
         self.per_layer_weight_sparsity: Dict[str, Dict[str, Any]] = {}
 
@@ -301,6 +313,8 @@ class QuantStatManager:
         self.tensor_role_calls = {}
         self.module_last_dims = {}
         self.outlier_sidepath = {}
+        self.outlier_partition = {}
+        self.per_role_unit_sparsity = {}
         self.per_layer_weight_sparsity = {}
         self.current_phase = "full_forward"
 
@@ -457,6 +471,23 @@ class QuantStatManager:
                 except ValueError:
                     break
         return -1
+
+    @staticmethod
+    def _parse_module_id(module_id: str) -> Tuple[str, str, int]:
+        """
+        Parse (component, operator, layer_idx) from a physical module_id.
+
+        Forms:
+            vlm.layers.3.mlp.down_proj       -> ("vlm", "down_proj", 3)
+            expert.layers.7.self_attn.q_proj -> ("expert", "q_proj", 7)
+            expert.layer.5.qk                 -> ("expert", "qk", 5)
+            model.model.action_head.proj      -> ("head", "proj", -1)
+        """
+        s = str(module_id)
+        component = s.split(".")[0] if s else "unknown"
+        operator = s.split(".")[-1] if s else "unknown"
+        layer_idx = QuantStatManager._layer_idx_from_module_id(s)
+        return component, operator, layer_idx
 
     def collect_quant_tensor(
         self,
@@ -628,25 +659,49 @@ class QuantStatManager:
                                         zero_bits_total, sparse_bits_total,
                                         amplitude_zero_bits_total)
 
-        # Structured per-role / per-phase record (module_id-aware).
-        role_key = (layer_key, phase, tensor_role)
+        # Structured per-role / per-phase / per-flow-step record.
+        # Phase H (manual §4): flow_step and attention_kind are first-class
+        # key dimensions so denoise steps 0..9 stay separate and attention
+        # self/cross matmuls are not merged.
+        component, operator, _ = self._parse_module_id(layer_name)
+        role_key = (
+            layer_name,
+            phase,
+            int(flow_step),
+            tensor_role,
+            attention_kind or "unknown",
+        )
         role_entry = self.per_role_sparsity.setdefault(
             role_key,
             {
                 "module_id": layer_name,
+                "component": component,
+                "operator": operator,
                 "layer_idx": layer_idx,
                 "phase": phase,
+                "flow_step": int(flow_step),
                 "tensor_role": tensor_role,
+                "attention_kind": attention_kind or "unknown",
             },
         )
         self._accumulate_sparsity_entry(role_entry, total_num, abs_less_th,
                                         total_bits, zero_bits_total,
                                         sparse_bits_total,
                                         amplitude_zero_bits_total)
+        role_entry["calls"] = role_entry.get("calls", 0) + 1
 
         # Unit/block sparsity.
         if self.enable_unit_sparsity:
-            self.collect_unit_sparsity(layer_name, layer_idx, activation, spec)
+            self.collect_unit_sparsity_structured(
+                module_id=layer_name,
+                layer_idx=layer_idx,
+                tensor=activation,
+                spec=spec,
+                phase=phase,
+                flow_step=int(flow_step),
+                tensor_role=tensor_role,
+                attention_kind=attention_kind or "unknown",
+            )
 
     @staticmethod
     def _accumulate_sparsity_entry(
@@ -682,11 +737,16 @@ class QuantStatManager:
             if entry["total_bits"] > 0
             else 0.0
         )
-        entry["ideal_speed_up"] = (
+        # Phase H (manual §7): 1/(1-S) is an ideal upper bound, NOT a
+        # measured hardware speedup. Keep the legacy name for back-compat.
+        upper_bound = (
             1 / (1 - entry["sparse_bit_rate"])
             if entry["sparse_bit_rate"] < 1
             else float("inf")
         )
+        entry["ideal_sparse_upper_bound"] = upper_bound
+        entry["ideal_speed_up"] = upper_bound
+        entry["ideal_speed_up_legacy"] = upper_bound
         entry["1_bits"] = entry["total_bits"] - entry["amplitude_zero_bits"]
 
     def collect_weight_sparsity(
@@ -738,9 +798,17 @@ class QuantStatManager:
             amplitude_zero_bits_total,
         ) = sparse
 
+        component, operator, _ = self._parse_module_id(layer_name)
         entry = self.per_layer_weight_sparsity.setdefault(
             layer_key,
-            {"layer_name": layer_name, "layer_idx": layer_idx},
+            {
+                "layer_name": layer_name,
+                "layer_idx": layer_idx,
+                "module_id": layer_name,
+                "component": component,
+                "operator": operator,
+                "weight_spec": spec.name(),
+            },
         )
         entry["total_elements"] = int(total_num)
         entry["zero_elements"] = int(abs_less_th)
@@ -760,10 +828,12 @@ class QuantStatManager:
             entry["amplitude_zero_bits"] / entry["total_bits"]
             if entry["total_bits"] > 0 else 0.0
         )
-        entry["ideal_speed_up"] = (
+        upper_bound = (
             1 / (1 - entry["sparse_bit_rate"])
             if entry["sparse_bit_rate"] < 1 else float("inf")
         )
+        entry["ideal_sparse_upper_bound"] = upper_bound
+        entry["ideal_speed_up"] = upper_bound
         entry["1_bits"] = entry["total_bits"] - entry["amplitude_zero_bits"]
 
     def export_per_layer_weight_sparsity_csv(
@@ -780,31 +850,35 @@ class QuantStatManager:
         with open(csv_path, "w", newline="") as f:
             weight_writer = csv.writer(f)
             weight_writer.writerow([
-                "config", "model_path", "layer_key", "layer_type",
-                "layer_idx",
+                "config", "model_path", "module_id", "component",
+                "operator", "layer_idx", "weight_spec", "stat_semantics",
                 "total_elements", "zero_elements", "zero_rate",
-                "total_bits", "zero_bits", "sparse_bits",
-                "amplitude_zero_bits", "sparse_bit_rate",
-                "amplitude_zero_bit_rate", "ideal_speed_up", "1_bits",
+                "total_bits", "sparse_bits", "sparse_bit_rate",
+                "amplitude_zero_bits", "amplitude_zero_bit_rate",
+                "ideal_sparse_upper_bound", "1_bits",
             ])
 
             for layer_key in sorted(self.per_layer_weight_sparsity.keys()):
                 entry = self.per_layer_weight_sparsity[layer_key]
-                layer_type, layer_idx = self._split_layer_key(layer_key)
+                layer_idx = entry.get("layer_idx", -1)
 
                 weight_writer.writerow([
-                    config_name, model_path, layer_key, layer_type,
+                    config_name, model_path,
+                    entry.get("module_id", entry.get("layer_name", layer_key)),
+                    entry.get("component", ""),
+                    entry.get("operator", ""),
                     layer_idx,
+                    entry.get("weight_spec", ""),
+                    "full_weight_quantized_no_dynamic_outlier_mask",
                     entry.get("total_elements", 0),
                     entry.get("zero_elements", 0),
                     entry.get("zero_rate", 0.0),
                     entry.get("total_bits", 0),
-                    entry.get("zero_bits", 0),
                     entry.get("sparse_bits", 0),
-                    entry.get("amplitude_zero_bits", 0),
                     entry.get("sparse_bit_rate", 0.0),
+                    entry.get("amplitude_zero_bits", 0),
                     entry.get("amplitude_zero_bit_rate", 0.0),
-                    entry.get("ideal_speed_up", 0.0),
+                    entry.get("ideal_sparse_upper_bound", 0.0),
                     entry.get("1_bits", 0),
                 ])
 
@@ -890,6 +964,76 @@ class QuantStatManager:
                 # collection (tensor_role="B"), not this static path.
                 continue
         return n
+
+    def _spec_bitwidth(self, spec: QuantSpec) -> int:
+        """
+        Statistics bit-width of a quantized code tensor (matches the
+        numerator/denominator width used by compute_sparse_stats / fp):
+        INT -> spec.bits; FP/bf -> mantissa_int width (mant_bits + 1).
+        """
+        if spec.kind == "int":
+            return int(spec.bits or 0)
+        if spec.kind in {"fp", "bf"}:
+            info = self._get_fp_format(spec.fmt)
+            return info["mant_bits"] + 1
+        return 0
+
+    def collect_outlier_partition(
+        self,
+        *,
+        module_id: str,
+        tensor_role: str,
+        total_elements: int,
+        protected_elements: int,
+        spec: QuantSpec,
+        layer_idx: Optional[int] = None,
+        runtime_context: Optional[Dict[str, Any]] = None,
+        attention_kind: Optional[str] = None,
+    ):
+        """
+        Phase H (manual §3): record the outlier FP side-path partition for
+        one quantized tensor, so the "native quant path" sparsity can exclude
+        positions that the outlier forward artificially zeroes in the normal
+        code path.
+
+        Key matches the main structured record. Accumulates numerator /
+        denominator counters (never averages per-call ratios).
+        """
+        if not self.sparsity_enabled:
+            return
+
+        ctx = runtime_context or get_runtime_context()
+        phase = ctx.get("phase", "unknown")
+        # Mirror collect_quant_tensor's legacy fallback so the partition key
+        # stays identical to the main structured record key.
+        if phase == "unknown" and self.current_phase != "full_forward":
+            phase = self.current_phase
+        flow_step = int(ctx.get("flow_step", -1))
+        attn = attention_kind or ctx.get("attention_kind", "unknown")
+
+        total_elements = int(total_elements)
+        protected_elements = int(protected_elements)
+        bitwidth = self._spec_bitwidth(spec)
+
+        key = (module_id, phase, flow_step, tensor_role, attn or "unknown")
+        entry = self.outlier_partition.setdefault(
+            key,
+            {
+                "module_id": module_id,
+                "phase": phase,
+                "flow_step": flow_step,
+                "tensor_role": tensor_role,
+                "attention_kind": attn or "unknown",
+                "calls": 0,
+                "total_elements": 0,
+                "protected_elements": 0,
+                "protected_bits": 0,
+            },
+        )
+        entry["calls"] += 1
+        entry["total_elements"] += total_elements
+        entry["protected_elements"] += protected_elements
+        entry["protected_bits"] += protected_elements * bitwidth
 
     # -------------------------------------------------------------------------
     # Sparsity: INT / FP bit statistics (chunked)
@@ -1328,6 +1472,61 @@ class QuantStatManager:
                 return
 
             counter = self._get_unit_counter(phase, layer_key)
+            counter["zero_units"] += int(zero_units)
+            counter["total_units"] += int(total_units)
+
+    def collect_unit_sparsity_structured(
+        self,
+        *,
+        module_id: str,
+        layer_idx: int,
+        tensor: torch.Tensor,
+        spec: QuantSpec,
+        phase: str,
+        flow_step: int,
+        tensor_role: str,
+        attention_kind: str = "unknown",
+    ):
+        """
+        Phase H (manual §5): accumulate unit sparsity into a record whose key
+        matches the main structured record (module_id, phase, flow_step,
+        tensor_role, attention_kind), so operator / flow-step / role unit
+        analysis is possible (unlike the legacy phase->layer_key container).
+        """
+        if tensor is None or spec is None:
+            return
+
+        with torch.no_grad():
+            a = self.unit_bit_group_size
+            b = self.unit_dim_group_size
+
+            if spec.kind == "int":
+                zero_units, total_units = self.compute_unit_sparsity_int(
+                    tensor, bits=spec.bits, bit_group_size=a, dim_group_size=b
+                )
+            elif spec.kind in {"fp", "bf"}:
+                zero_units, total_units = self.compute_unit_sparsity_fp(
+                    tensor, fmt=spec.fmt, bit_group_size=a, dim_group_size=b
+                )
+            else:
+                return
+
+            key = (
+                module_id,
+                phase,
+                int(flow_step),
+                tensor_role,
+                attention_kind or "unknown",
+            )
+            counter = self.per_role_unit_sparsity.setdefault(
+                key,
+                {
+                    "zero_units": 0,
+                    "total_units": 0,
+                    "unit_bit_group_size": int(a),
+                    "unit_dim_group_size": int(b),
+                },
+            )
             counter["zero_units"] += int(zero_units)
             counter["total_units"] += int(total_units)
 
@@ -1903,33 +2102,108 @@ class QuantStatManager:
             writer = csv.writer(f)
             writer.writerow([
                 "config", "model_path",
-                "module_id", "layer_idx", "phase", "tensor_role",
-                "total_elements", "zero_elements", "element_sparsity",
-                "total_bits", "zero_bits", "bit_sparsity",
-                "sm_zero_bits", "sm_bit_sparsity",
-                "one_bits",
+                "module_id", "component", "layer_idx", "operator",
+                "phase", "flow_step", "tensor_role", "attention_kind",
+                "calls",
+                "total_elements_reported", "zero_elements_reported",
+                "zero_rate_reported",
+                "protected_elements", "fp_sidepath_ratio",
+                "total_elements_native", "zero_elements_native",
+                "zero_rate_native",
+                "total_bits_reported", "sparse_bits_reported",
+                "sparse_bit_rate_reported",
+                "protected_bits", "total_bits_native",
+                "sparse_bits_native", "sparse_bit_rate_native",
+                "amplitude_zero_bits_native",
+                "amplitude_zero_bit_rate_native",
+                "ideal_sparse_upper_bound",
             ])
 
             for key in sorted(
                 self.per_role_sparsity.keys(),
-                key=lambda k: (str(k[0]), str(k[1]), str(k[2])),
+                key=lambda k: (
+                    str(k[0]), str(k[1]), k[2], str(k[3]), str(k[4])
+                ),
             ):
                 entry = self.per_role_sparsity[key]
+                module_id = entry.get("module_id", key[0])
+                phase = entry.get("phase", key[1])
+                flow_step = entry.get("flow_step", key[2])
+                tensor_role = entry.get("tensor_role", key[3])
+                attention_kind = entry.get("attention_kind", key[4])
+
+                total_elements = int(entry.get("total_elements", 0))
+                zero_elements = int(entry.get("zero_elements", 0))
+                total_bits = int(entry.get("total_bits", 0))
+                sparse_bits = int(entry.get("sparse_bits", 0))
+                amp_zero_bits = int(entry.get("amplitude_zero_bits", 0))
+
+                partition = self.outlier_partition.get(key, {})
+                protected_elements = int(
+                    partition.get("protected_elements", 0)
+                )
+
+                # Native quant path = reported minus FP side-path positions
+                # that the outlier forward forces to zero (manual §3.2).
+                total_elements_native = total_elements - protected_elements
+                zero_elements_native = zero_elements - protected_elements
+
+                # Bit-level: protected positions each contribute `bitwidth`
+                # zero bits to the reported numerator/denominator.
+                bitwidth = (
+                    total_bits // total_elements if total_elements > 0 else 0
+                )
+                protected_bits = protected_elements * bitwidth
+                total_bits_native = total_bits - protected_bits
+                sparse_bits_native = sparse_bits - protected_bits
+                amp_zero_bits_native = amp_zero_bits - protected_bits
+
+                zero_rate_reported = (
+                    zero_elements / total_elements
+                    if total_elements > 0 else 0.0
+                )
+                fp_sidepath_ratio = (
+                    protected_elements / total_elements
+                    if total_elements > 0 else 0.0
+                )
+                zero_rate_native = (
+                    zero_elements_native / total_elements_native
+                    if total_elements_native > 0 else 0.0
+                )
+                sparse_bit_rate_reported = (
+                    sparse_bits / total_bits if total_bits > 0 else 0.0
+                )
+                sparse_bit_rate_native = (
+                    sparse_bits_native / total_bits_native
+                    if total_bits_native > 0 else 0.0
+                )
+                amp_zero_bit_rate_native = (
+                    amp_zero_bits_native / total_bits_native
+                    if total_bits_native > 0 else 0.0
+                )
+                upper_bound = entry.get(
+                    "ideal_sparse_upper_bound",
+                    1 / (1 - sparse_bit_rate_native)
+                    if sparse_bit_rate_native < 1 else float("inf"),
+                )
+
                 writer.writerow([
                     config_name, model_path,
-                    entry.get("module_id", key[0]),
+                    module_id,
+                    entry.get("component", ""),
                     entry.get("layer_idx", -1),
-                    entry.get("phase", key[1]),
-                    entry.get("tensor_role", key[2]),
-                    entry.get("total_elements", 0),
-                    entry.get("zero_elements", 0),
-                    entry.get("zero_rate", 0.0),
-                    entry.get("total_bits", 0),
-                    entry.get("zero_bits", 0),
-                    entry.get("sparse_bit_rate", 0.0),
-                    entry.get("amplitude_zero_bits", 0),
-                    entry.get("amplitude_zero_bit_rate", 0.0),
-                    entry.get("1_bits", 0),
+                    entry.get("operator", ""),
+                    phase, flow_step, tensor_role, attention_kind,
+                    entry.get("calls", 0),
+                    total_elements, zero_elements, zero_rate_reported,
+                    protected_elements, fp_sidepath_ratio,
+                    total_elements_native, zero_elements_native,
+                    zero_rate_native,
+                    total_bits, sparse_bits, sparse_bit_rate_reported,
+                    protected_bits, total_bits_native,
+                    sparse_bits_native, sparse_bit_rate_native,
+                    amp_zero_bits_native, amp_zero_bit_rate_native,
+                    upper_bound,
                 ])
 
     def export_workload_csv(
@@ -1989,7 +2263,6 @@ class QuantStatManager:
                 f"{getattr(module, 'layer_name', '')}_"
                 f"{getattr(module, 'layer_idx', 0)}"
             )
-            layer_key = f"{module_id}_{self._layer_idx_from_module_id(module_id)}"
 
             if is_linear:
                 op_type = "linear"
@@ -2005,10 +2278,12 @@ class QuantStatManager:
                 a_bits = module.A_bit if module.A_spec.kind == "int" else 8
                 b_bits = module.B_bit if module.B_spec.kind == "int" else 8
 
-            for (lk, phase, role), entry in self.per_role_sparsity.items():
-                if lk != layer_key:
+            for (mid, phase, flow_step, role, attn), entry in (
+                self.per_role_sparsity.items()
+            ):
+                if mid != module_id:
                     continue
-                calls = self.tensor_role_calls.get(lk, {}).get(role, 0)
+                calls = entry.get("calls", 0)
                 elems = entry.get("total_elements", 0)
                 bits = entry.get("total_bits", 0)
                 bit_sparsity = entry.get("sparse_bit_rate", 0.0)
@@ -2027,7 +2302,7 @@ class QuantStatManager:
 
                 rows.append([
                     config_name, model_path,
-                    module_id, phase, role, op_type, calls,
+                    module_id, phase, flow_step, role, attn, op_type, calls,
                     M, K, N, elems, bits,
                     a_bits, b_bits,
                     entry.get("sparse_bit_rate", 0.0),
@@ -2038,7 +2313,8 @@ class QuantStatManager:
             writer = csv.writer(f)
             writer.writerow([
                 "config", "model_path",
-                "module_id", "phase", "tensor_role", "op_type", "calls",
+                "module_id", "phase", "flow_step", "tensor_role",
+                "attention_kind", "op_type", "calls",
                 "M", "K", "N", "elements", "bits",
                 "A_bitwidth", "B_bitwidth",
                 "bit_sparsity",
@@ -2047,6 +2323,179 @@ class QuantStatManager:
             writer.writerows(rows)
 
         return len(rows)
+
+    def export_quantization_manifest_csv(
+        self,
+        model,
+        csv_path: str,
+        config_name: str = "",
+        model_path: str = "",
+    ):
+        """
+        Phase H (manual §6): export a quantization / deployment coverage
+        manifest (quantization_manifest.csv). One row per wrapped physical
+        operator (QuantizedLinear / QuantizedMatMul) describing its actual
+        quantized method + operand formats, so per-component sparsity is
+        never mistaken for whole-model sparsity.
+        """
+        import csv
+
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+
+        rows = []
+        for module in model.modules():
+            cls_name = type(module).__name__
+            if cls_name == "QuantizedLinear":
+                is_linear, is_matmul = True, False
+            elif cls_name == "QuantizedMatMul":
+                is_linear, is_matmul = False, True
+            elif hasattr(module, "A_spec") and hasattr(module, "B_spec"):
+                is_linear, is_matmul = False, True
+            elif (
+                hasattr(module, "a_spec")
+                and hasattr(module, "w_spec")
+                and hasattr(module, "in_features")
+            ):
+                is_linear, is_matmul = True, False
+            else:
+                continue
+
+            module_id = getattr(module, "module_id", "") or getattr(
+                module, "layer_name", ""
+            )
+            component, operator, layer_idx = self._parse_module_id(module_id)
+            method = getattr(module, "method", "")
+
+            if is_linear:
+                rows.append([
+                    config_name, model_path, module_id, component, layer_idx,
+                    operator, "linear", "true", method,
+                    module.a_spec.name() if module.a_spec else "",
+                    module.w_spec.name() if module.w_spec else "",
+                    module.o_spec.name() if module.o_spec else "",
+                    "per_output_channel"
+                    if method == "pot_ao_outlier_channel" else "per_tensor",
+                    getattr(module, "outlier_ratio", 0.0),
+                    getattr(module, "in_features", None),
+                    getattr(module, "out_features", None),
+                    "",
+                ])
+            else:
+                rows.append([
+                    config_name, model_path, module_id, component, layer_idx,
+                    operator, "matmul", "true", method,
+                    module.A_spec.name() if module.A_spec else "",
+                    module.B_spec.name() if module.B_spec else "",
+                    module.O_spec.name() if module.O_spec else "",
+                    "",
+                    getattr(module, "outlier_ratio", 0.0),
+                    None, None,
+                    "",
+                ])
+
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "config", "model_path",
+                "module_id", "component", "layer_idx", "operator",
+                "op_type", "quantized", "method",
+                "a_or_A_kind", "w_or_B_kind", "o_or_O_kind",
+                "weight_quant_granularity", "outlier_ratio",
+                "in_features", "out_features", "attention_kind",
+            ])
+            writer.writerows(rows)
+
+        return len(rows)
+
+    def export_outlier_sidepath_csv(
+        self,
+        csv_path: str,
+        config_name: str = "",
+        model_path: str = "",
+    ):
+        """
+        Phase H (manual §8.3): export the outlier FP side-path partition
+        (outlier_sidepath.csv). One row per (module_id, phase, flow_step,
+        tensor_role, attention_kind); ratios from accumulated counters.
+        """
+        import csv
+
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "config", "model_path",
+                "module_id", "phase", "flow_step", "tensor_role",
+                "attention_kind", "calls",
+                "total_elements", "protected_elements", "fp_sidepath_ratio",
+            ])
+
+            for key in sorted(
+                self.outlier_partition.keys(),
+                key=lambda k: (
+                    str(k[0]), str(k[1]), k[2], str(k[3]), str(k[4])
+                ),
+            ):
+                e = self.outlier_partition[key]
+                total = int(e.get("total_elements", 0))
+                protected = int(e.get("protected_elements", 0))
+                ratio = protected / total if total > 0 else 0.0
+
+                writer.writerow([
+                    config_name, model_path,
+                    e.get("module_id", key[0]),
+                    e.get("phase", key[1]),
+                    e.get("flow_step", key[2]),
+                    e.get("tensor_role", key[3]),
+                    e.get("attention_kind", key[4]),
+                    e.get("calls", 0),
+                    total, protected, ratio,
+                ])
+
+    def export_unit_sparsity_structured_csv(
+        self,
+        csv_path: str,
+        config_name: str = "",
+        model_path: str = "",
+    ):
+        """
+        Phase H (manual §8.4): export structured unit sparsity aligned with
+        the main record key (module_id, phase, flow_step, tensor_role,
+        attention_kind).
+        """
+        import csv
+
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "config", "model_path",
+                "module_id", "phase", "flow_step", "tensor_role",
+                "attention_kind",
+                "unit_bit_group_size", "unit_dim_group_size",
+                "zero_units", "total_units", "unit_zero_rate",
+            ])
+
+            for key in sorted(
+                self.per_role_unit_sparsity.keys(),
+                key=lambda k: (
+                    str(k[0]), str(k[1]), k[2], str(k[3]), str(k[4])
+                ),
+            ):
+                c = self.per_role_unit_sparsity[key]
+                zero = int(c.get("zero_units", 0))
+                total = int(c.get("total_units", 0))
+                ratio = zero / total if total > 0 else 0.0
+
+                writer.writerow([
+                    config_name, model_path,
+                    key[0], key[1], key[2], key[3], key[4],
+                    c.get("unit_bit_group_size", 0),
+                    c.get("unit_dim_group_size", 0),
+                    zero, total, ratio,
+                ])
 
     def export_per_layer_sparsity_csv(
         self,
@@ -2067,7 +2516,7 @@ class QuantStatManager:
                 "total_elements", "zero_elements", "zero_rate",
                 "total_bits", "zero_bits", "sparse_bits",
                 "amplitude_zero_bits", "sparse_bit_rate",
-                "amplitude_zero_bit_rate", "ideal_speed_up", "1_bits",
+                "amplitude_zero_bit_rate", "ideal_sparse_upper_bound", "1_bits",
             ])
 
             for layer_key in sorted(self.per_layer_sparsity.keys()):
@@ -2086,7 +2535,7 @@ class QuantStatManager:
                     entry.get("amplitude_zero_bits", 0),
                     entry.get("sparse_bit_rate", 0.0),
                     entry.get("amplitude_zero_bit_rate", 0.0),
-                    entry.get("ideal_speed_up", 0.0),
+                    entry.get("ideal_sparse_upper_bound", 0.0),
                     entry.get("1_bits", 0),
                 ])
 
