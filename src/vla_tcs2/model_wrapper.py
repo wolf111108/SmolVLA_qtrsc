@@ -863,8 +863,16 @@ def install_runtime_hooks(model: SmolVLAPolicy) -> bool:
     original_sample_actions = flow_model.sample_actions
     original_denoise_step = flow_model.denoise_step
 
+    # Per-model denoise step counter. CURRENT_FLOW_STEP is a *context tag*
+    # (the current step being executed), NOT a persistent loop accumulator:
+    # resetting it in the `finally` restores the pre-entry value (-1), so
+    # `CURRENT_FLOW_STEP.get() + 1` would yield 0 on every step. The actual
+    # 0..num_steps-1 sequence must live in a separate bookkeeping cell.
+    denoise_step_counter = [-1]
+
     def hooked_sample_actions(*args, **kwargs):
         _generation_counter[0] += 1
+        denoise_step_counter[0] = -1
         gen_token = CURRENT_GENERATION_ID.set(_generation_counter[0])
         phase_token = CURRENT_PHASE.set("prefill")
         step_token = CURRENT_FLOW_STEP.set(-1)
@@ -878,7 +886,8 @@ def install_runtime_hooks(model: SmolVLAPolicy) -> bool:
     def hooked_denoise_step(*args, **kwargs):
         # flow_step 0..num_steps-1: euler_integrate calls denoise_step in
         # order, once per step, inside sample_actions.
-        step = CURRENT_FLOW_STEP.get() + 1
+        denoise_step_counter[0] += 1
+        step = denoise_step_counter[0]
         phase_token = CURRENT_PHASE.set("denoise")
         step_token = CURRENT_FLOW_STEP.set(step)
         try:

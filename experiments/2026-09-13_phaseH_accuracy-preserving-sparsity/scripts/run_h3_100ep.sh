@@ -8,6 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"
 
 export MUJOCO_GL=egl
+export PYOPENGL_PLATFORM=egl
+export MUJOCO_EGL_DEVICE_ID=2
 STAGE=h3_100ep
 
 cd "$SCRIPT_DIR"

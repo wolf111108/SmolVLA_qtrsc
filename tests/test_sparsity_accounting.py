@@ -325,6 +325,44 @@ def test_t8_no_double_collection_between_legacy_and_structured():
     assert int(row["zero_elements_reported"]) == 1
 
 
+# ---------------------------------------------------------------------------
+# T9: runtime hook must tag denoise steps 0..9 (not 0,0,...,0)
+# ---------------------------------------------------------------------------
+def test_t9_runtime_hook_flow_step_sequencing():
+    from vla_tcs2.model_wrapper import install_runtime_hooks
+    from vla_tcs2.runtime_context import get_runtime_context
+
+    observed = []
+
+    class FlowModel:
+        def __init__(self):
+            self._runtime_hooks_installed = False
+
+        def sample_actions(self, *args, **kwargs):
+            for _ in range(10):
+                self.denoise_step()
+
+        def denoise_step(self, *args, **kwargs):
+            observed.append(get_runtime_context()["flow_step"])
+
+    class Model:
+        def __init__(self):
+            self.model = FlowModel()
+
+    model = Model()
+    installed = install_runtime_hooks(model)
+    assert installed is True
+
+    model.model.sample_actions()
+    model.model.sample_actions()
+
+    # Two sample_actions calls -> two full 0..9 sequences.
+    assert observed == list(range(10)) + list(range(10)), observed
+
+    # Re-install is a no-op (marker present).
+    assert install_runtime_hooks(model) is False
+
+
 def _main():
     test_t1_no_outlier_reported_equals_native()
     test_t2_outlier_mask_native_correction()
@@ -334,6 +372,7 @@ def _main():
     test_t6_collector_does_not_mutate_input()
     test_t7_export_manifest_and_workload()
     test_t8_no_double_collection_between_legacy_and_structured()
+    test_t9_runtime_hook_flow_step_sequencing()
     print("all sparsity accounting tests passed")
 
 
