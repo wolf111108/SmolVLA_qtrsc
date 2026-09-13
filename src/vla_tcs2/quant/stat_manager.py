@@ -401,57 +401,18 @@ class QuantStatManager:
                B_spec, A_spec, digit_size, parallelism,
                in_features, out_features)
 
-        Always records the call for auditing; computes bit/unit sparsity
-        only when enable_sparsity() has been called.
+        Always records the call for auditing ONLY. Structured sparsity is
+        collected exactly once by _collect_linear_runtime /
+        _collect_matmul_runtime via collect_quant_tensor() (Phase H: keeps
+        activation / A / B from being double-counted, which would corrupt
+        the native sparsity correction whose outlier partition is recorded
+        once per forward).
         """
         key = f"{layer_name}_{layer_idx}"
         self.quant_activation_calls[key] = (
             self.quant_activation_calls.get(key, 0) + 1
         )
-
-        if not self.sparsity_enabled:
-            return
-
-        n_extra = len(args)
-        if n_extra == 7:
-            # Linear call site:
-            #   args = (x_code, x_fp16, a_spec, digit_size,
-            #           parallelism, in_features, out_features)
-            x_code, _x_fp16, a_spec = args[0], args[1], args[2]
-            tensors = [("activation", x_code, a_spec)]
-        elif n_extra == 9:
-            # MatMul call site:
-            #   args = (A_sim, A, B_sim, B_spec, A_spec, digit_size,
-            #           parallelism, in_features, out_features)
-            A_sim, _A, B_sim, B_spec, A_spec = (
-                args[0], args[1], args[2], args[3], args[4]
-            )
-            tensors = [("A", A_sim, A_spec), ("B", B_sim, B_spec)]
-        else:
-            raise ValueError(
-                f"collect_quant_activation: unsupported positional-arg "
-                f"count {n_extra} (expected 7 for linear or 9 for matmul); "
-                f"layer={key}"
-            )
-
-        # Compatibility adapter (manual §20): forward to the structured
-        # collect_quant_tensor API so legacy call sites get the same
-        # module_id / phase / role-aware records. layer_name here is the
-        # physical site name (module_id-like) at every current call site.
-        module_id = str(layer_name)
-        for role, tensor, spec in tensors:
-            if tensor is None or spec is None:
-                continue
-            if spec.kind == "none" or not getattr(spec, "enabled", True):
-                # FP16/BF16 pass-through档不参与稀疏统计
-                continue
-            self.collect_quant_tensor(
-                module_id=module_id,
-                tensor_role=role,
-                tensor_code=tensor,
-                spec=spec,
-                layer_idx=layer_idx,
-            )
+        return
 
     @staticmethod
     def _layer_idx_from_module_id(module_id: str) -> int:
@@ -2180,10 +2141,12 @@ class QuantStatManager:
                     amp_zero_bits_native / total_bits_native
                     if total_bits_native > 0 else 0.0
                 )
-                upper_bound = entry.get(
-                    "ideal_sparse_upper_bound",
-                    1 / (1 - sparse_bit_rate_native)
-                    if sparse_bit_rate_native < 1 else float("inf"),
+                # Phase H: the exported upper bound reflects NATIVE
+                # quant-path sparsity (not the masked reported one).
+                upper_bound = (
+                    1.0 / (1.0 - sparse_bit_rate_native)
+                    if sparse_bit_rate_native < 1.0
+                    else float("inf")
                 )
 
                 writer.writerow([

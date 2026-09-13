@@ -41,16 +41,18 @@ def main() -> None:
     assert zb == 10 and sb == 10 and azb == 10, f"zb={zb}"
     print("FP bit stats OK")
 
-    # --- linear (7 positional args) dispatch ---
+    # --- linear (7 positional args) audit-only dispatch ---
     m.reset_sparsity()
     m.collect_quant_activation(
         "q_proj", 0, t, t, QuantSpec(kind="int", bits=4), 4, 16, 16, 32
     )
-    assert m.total_element_count == 4 and m.total_bit_count == 16
-    assert "q_proj_0" in m.per_layer_sparsity
-    print("linear dispatch OK")
+    # audit-only: call counted, structured sparsity NOT forwarded (Phase H).
+    assert m.quant_activation_calls["q_proj_0"] == 1
+    assert m.total_element_count == 0
+    assert "q_proj_0" not in m.per_layer_sparsity
+    print("linear audit-only dispatch OK")
 
-    # --- matmul (9 positional args) dispatch: A(e4m3) + B(int8) ---
+    # --- matmul (9 positional args) audit-only dispatch ---
     m.reset_sparsity()
     A = torch.tensor([[1.0, 0.5], [0.0, -2.0]])
     B = torch.tensor([[1.0, -1.0], [0.0, 2.0]])
@@ -60,27 +62,28 @@ def main() -> None:
         QuantSpec(kind="fp", fmt="e4m3"),
         4, 16, 2, 2,
     )
-    # A: 4 elems * 4 bits = 16; B: 4 elems * 8 bits = 32
-    assert m.total_element_count == 8, m.total_element_count
-    assert m.total_bit_count == 48, m.total_bit_count
-    print("matmul dispatch OK")
+    # audit-only: call counted, no structured forwarding.
+    assert m.quant_activation_calls["qk_matmul_0"] == 1
+    assert m.total_element_count == 0
+    print("matmul audit-only dispatch OK")
 
-    # --- phase dispatch ---
+    # --- phase dispatch (structured collector) ---
     m.reset_sparsity()
-    m.set_phase("prefill")
-    m.collect_quant_activation(
-        "q_proj", 1, t, t, QuantSpec(kind="int", bits=4), 4, 16, 16, 32
+    spec4 = QuantSpec(kind="int", bits=4)
+    m.collect_quant_tensor(
+        module_id="q_proj", tensor_role="activation", tensor_code=t,
+        spec=spec4, runtime_context={"phase": "prefill", "flow_step": -1},
     )
-    m.set_phase("decode")
-    m.collect_quant_activation(
-        "q_proj", 1, t, t, QuantSpec(kind="int", bits=4), 4, 16, 16, 32
+    m.collect_quant_tensor(
+        module_id="q_proj", tensor_role="activation", tensor_code=t,
+        spec=spec4, runtime_context={"phase": "denoise", "flow_step": 0},
     )
     assert m.phase_sparsity["prefill"]["total_element_count"] == 4
     assert m.phase_sparsity["decode"]["total_element_count"] == 4
     assert m.phase_sparsity["full_forward"]["total_element_count"] == 0
     print("phase dispatch OK")
 
-    # --- passthrough tiers skipped ---
+    # --- passthrough tiers: audit counted, no structured sparsity ---
     m.reset_sparsity()
     m.collect_quant_activation(
         "x_proj", 0, t, t,
@@ -88,6 +91,7 @@ def main() -> None:
         4, 16, 16, 32,
     )
     assert m.total_element_count == 0
+    assert m.quant_activation_calls["x_proj_0"] == 1
     print("passthrough skip OK")
 
     # --- unit sparsity ---

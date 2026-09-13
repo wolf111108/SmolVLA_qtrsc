@@ -731,6 +731,33 @@ def quant_forward_pot_ao_outlier_channel(
             in_features,
             out_features,
         )
+        _collect_linear_runtime(
+            layer,
+            stat_collector,
+            input_code=x_code,
+            input_spec=layer.a_spec,
+        )
+        # Phase H: record FP side-path partition (matching the scalar
+        # outlier path) so native sparsity is not over-estimated here.
+        if hasattr(stat_collector, "collect_outlier_partition"):
+            protected_channels = int(x_channel_mask.sum().item())
+            repeat = x.numel() // max(x.shape[-1], 1)
+            _collect_outlier_partition(
+                layer,
+                stat_collector,
+                tensor_role="activation",
+                total_elements=x.numel(),
+                protected_elements=protected_channels * repeat,
+                spec=layer.a_spec,
+            )
+            _collect_outlier_partition(
+                layer,
+                stat_collector,
+                tensor_role="weight_runtime_mask",
+                total_elements=layer.weight.numel(),
+                protected_elements=int(w_channel_mask.sum().item()),
+                spec=layer.w_spec,
+            )
 
     if layer.bias is not None:
         bias = layer.bias.to(torch.float32)
@@ -754,6 +781,22 @@ def quant_forward_pot_ao_outlier_channel(
     # output re-quantization: same as quant_forward_with_outlier
     M_q = layer.round(torch.tensor(layer.o_interval) * (2 ** 16))
     out_outlier_mask = get_outlier_mask_channel(out_with_outlier, ratio)
+    # Phase H: output FP side-path partition.
+    if stat_collector is not None and hasattr(
+        stat_collector, "collect_outlier_partition"
+    ):
+        o_protected_channels = int(out_outlier_mask.sum().item())
+        o_repeat = out_with_outlier.numel() // max(
+            out_with_outlier.shape[-1], 1
+        )
+        _collect_outlier_partition(
+            layer,
+            stat_collector,
+            tensor_role="output",
+            total_elements=out_with_outlier.numel(),
+            protected_elements=o_protected_channels * o_repeat,
+            spec=layer.o_spec,
+        )
     out_normal = out_with_outlier * (~out_outlier_mask).to(torch.float32)
     out_outlier = out_with_outlier * out_outlier_mask.to(torch.float32)
 

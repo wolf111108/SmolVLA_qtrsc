@@ -281,6 +281,50 @@ def test_t7_export_manifest_and_workload():
     assert n2 == 0  # no collected per-role records -> no workload rows
 
 
+# ---------------------------------------------------------------------------
+# T8: collect_quant_activation is audit-only (no double collection)
+# ---------------------------------------------------------------------------
+def test_t8_no_double_collection_between_legacy_and_structured():
+    m = QuantStatManager(tempfile.mkdtemp())
+    m.enable_sparsity()
+    spec = QuantSpec(kind="int", bits=4)
+    x = torch.tensor([1.0, 0.0, 1.0, 1.0])
+    mid = "expert.layers.0.mlp.up_proj"
+
+    # legacy audit call (must NOT feed structured sparsity anymore)
+    m.collect_quant_activation(
+        "expert.layers.0.mlp.up_proj",
+        0,
+        x,          # x_code
+        x,          # x_fp16
+        spec,       # a_spec
+        4,          # digit_size
+        1,          # parallelism
+        4,          # in_features
+        4,          # out_features
+    )
+
+    # the single real structured collection
+    m.collect_quant_tensor(
+        module_id=mid,
+        tensor_role="activation",
+        tensor_code=x,
+        spec=spec,
+        runtime_context=_ctx(),
+    )
+
+    path = os.path.join(tempfile.mkdtemp(), "module_sparsity.csv")
+    m.export_module_sparsity_csv(path)
+    rows = _module_rows(_read_csv(path), mid, "activation")
+    assert len(rows) == 1, rows
+
+    row = rows[0]
+    # one zero element (index 1) out of 4, collected exactly once.
+    assert int(row["calls"]) == 1, row["calls"]
+    assert int(row["total_elements_reported"]) == 4
+    assert int(row["zero_elements_reported"]) == 1
+
+
 def _main():
     test_t1_no_outlier_reported_equals_native()
     test_t2_outlier_mask_native_correction()
@@ -289,6 +333,7 @@ def _main():
     test_t5_unit_role_separation()
     test_t6_collector_does_not_mutate_input()
     test_t7_export_manifest_and_workload()
+    test_t8_no_double_collection_between_legacy_and_structured()
     print("all sparsity accounting tests passed")
 
 

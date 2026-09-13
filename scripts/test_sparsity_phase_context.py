@@ -84,18 +84,22 @@ def test_structured_collector_identity():
     assert "vlm.layers.3.mlp.down_proj" in m.quant_activation_calls
     assert "expert.layer.7.qk" in m.quant_activation_calls
 
-    lk_vlm = "vlm.layers.3.mlp.down_proj_3"
+    lk_vlm = "vlm.layers.3.mlp.down_proj_3"   # legacy layer_key (flow_step bookkeeping)
     lk_exp = "expert.layer.7.qk_7"
-    assert (lk_vlm, "prefill", "activation") in m.per_role_sparsity
-    assert (lk_exp, "denoise", "A") in m.per_role_sparsity
+    mid_vlm = "vlm.layers.3.mlp.down_proj"    # module_id (structured key)
+    mid_exp = "expert.layer.7.qk"
+    # structured key = (module_id, phase, flow_step, role, attention_kind)
+    assert (mid_vlm, "prefill", -1, "activation", "unknown") in m.per_role_sparsity
+    assert (mid_exp, "denoise", 0, "A", "unknown") in m.per_role_sparsity
+    assert (mid_exp, "denoise", 1, "A", "unknown") in m.per_role_sparsity
 
     # flow-step split: 2 denoise calls across steps 0/1
     assert m.flow_step_sparsity[0][lk_exp] == 1
     assert m.flow_step_sparsity[1][lk_exp] == 1
 
-    # phase counters: prefill 4 elems, denoise 8 elems
+    # phase counters: prefill 4 elems, denoise 8 elems (legacy bucket "decode")
     assert m.phase_sparsity["prefill"]["total_element_count"] == 4
-    assert m.phase_sparsity["denoise"]["total_element_count"] == 8
+    assert m.phase_sparsity["decode"]["total_element_count"] == 8
     print("structured collector identity OK")
 
 
@@ -122,15 +126,15 @@ def test_matmul_abo_roles():
     CURRENT_FLOW_STEP.reset(s)
     CURRENT_PHASE.reset(d)
 
-    lk = "expert.layer.7.qk_7"
+    mid = "expert.layer.7.qk"
     roles = {
-        key[2] for key in m.per_role_sparsity if key[0] == lk
+        key[3] for key in m.per_role_sparsity if key[0] == mid
     }
     assert roles == {"A", "B", "O"}, roles
     # each role saw the same 4 elements
     for role in ("A", "B", "O"):
         assert (
-            m.per_role_sparsity[(lk, "denoise", role)]["total_elements"] == 4
+            m.per_role_sparsity[(mid, "denoise", 3, role, "cross")]["total_elements"] == 4
         )
     print("matmul A/B/O roles OK")
 
@@ -147,8 +151,8 @@ def test_weight_once_only():
     print("weight once-only OK")
 
 
-def test_legacy_adapter_module_id():
-    """Legacy collect_quant_activation routes through the structured path."""
+def test_legacy_adapter_audit_only():
+    """Legacy collect_quant_activation is audit-only (no structured forwarding)."""
     m = QuantStatManager(tempfile.mkdtemp())
     m.enable_sparsity()
     t = torch.tensor([1.0, -1.0, 2.0, 0.0])
@@ -160,12 +164,11 @@ def test_legacy_adapter_module_id():
     )
     CURRENT_PHASE.reset(p)
 
-    lk = "vlm.layers.0.self_attn.q_proj_0"
-    assert (lk, "prefill", "activation") in m.per_role_sparsity
-    assert m.phase_sparsity["prefill"]["total_element_count"] == 4
-    # legacy aggregate record still present for old tooling
-    assert lk in m.per_layer_sparsity
-    print("legacy adapter OK")
+    # audit-only: call counted, no structured sparsity forwarded.
+    assert m.quant_activation_calls["vlm.layers.0.self_attn.q_proj_0"] == 1
+    assert m.total_element_count == 0
+    assert not m.per_role_sparsity
+    print("legacy adapter audit-only OK")
 
 
 def test_export_bundle():
@@ -216,8 +219,10 @@ def test_export_bundle():
     with open(os.path.join(out, "workload.csv")) as f:
         lines = f.read().strip().splitlines()
     row = lines[1].split(",")
-    assert row[7] == "1", row  # M
-    assert row[8] == "6" and row[9] == "4"  # K, N
+    # header: config,model_path,module_id,phase,flow_step,tensor_role,
+    #         attention_kind,op_type,calls,M,K,N,elements,bits,...
+    assert row[9] == "1", row  # M
+    assert row[10] == "6" and row[11] == "4"  # K, N
     print("export bundle OK")
 
 
@@ -234,7 +239,7 @@ def main():
     test_structured_collector_identity()
     test_matmul_abo_roles()
     test_weight_once_only()
-    test_legacy_adapter_module_id()
+    test_legacy_adapter_audit_only()
     test_export_bundle()
 
     print("\nAll offline S0 tests passed.")
