@@ -1,0 +1,147 @@
+# S1 — G1-D Expert-W4（VLM raw FP，复用 Phase G scale，不重新校准）
+# 来源: experiments/2026-09-10_phaseG_w4-root-cause/tasks/component-localization/configs/g1d_w4_expert_only.yaml
+# 仅改: output_dir / 新增 sparsity section / task_ids 由 make_task_configs.py 覆盖
+output_dir: outputs/2026-09-13_phaseH_accuracy-preserving-sparsity/s1_expert_w4
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+quantization:
+  enabled: true
+  mode: quant_forward
+  method: pot_fp8_outlier
+  scale_dir: scales/2026-09-10_phaseG_w4-root-cause/component-localization/g1d_w4_expert_only
+  quantize_matmul: true
+  matmul_scale_granularity: per_site
+  linear_scale_granularity: per_site
+  outlier_ratio: 0.01
+  calibration_policy:
+    default: auto
+    layer_policy:
+      q_proj: recalibrate
+      k_proj: recalibrate
+      v_proj: recalibrate
+      o_proj: recalibrate
+      gate_proj: recalibrate
+      up_proj: recalibrate
+      down_proj: recalibrate
+      qk_matmul: recalibrate
+      pv_matmul: recalibrate
+    per_layer_policy: {}
+  q_proj:
+    a_bit: e4m3
+    w_bit: 4
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+    method: pot_ao_outlier
+  k_proj:
+    a_bit: e4m3
+    w_bit: 4
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+    method: pot_ao_outlier
+  v_proj:
+    a_bit: e4m3
+    w_bit: 4
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+    method: pot_ao_outlier
+  o_proj:
+    a_bit: e4m3
+    w_bit: 4
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+    method: pot_ao_outlier
+  gate_proj:
+    a_bit: e4m3
+    w_bit: 4
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+    method: pot_ao_outlier
+  up_proj:
+    a_bit: e4m3
+    w_bit: 4
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+    method: pot_ao_outlier
+  down_proj:
+    a_bit: e4m3
+    w_bit: 4
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+    method: pot_ao_outlier
+  qk_matmul:
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  pv_matmul:
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  linear:
+    enabled: true
+    include:
+    - expert.*
+    exclude: []
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8
+  batch_size: 8
+  frame_stride: 4
+  seed: 42
+evaluation:
+  env:
+    type: libero
+    task: libero_goal
+    max_parallel_tasks: 1
+  n_episodes: 10
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2
+sparsity:
+  enabled: true
+  chunk_size: 1048576
+  unit:
+    enabled: true
+    bit_group_size: 2
+    dim_group_size: 2
+  outlier_accounting:
+    enabled: true
+    export_reported: true
+    export_native: true
+  structured:
+    split_phase: true
+    split_flow_step: true
+    split_tensor_role: true
+    split_attention_kind: true
+  export:
+    dir: null
