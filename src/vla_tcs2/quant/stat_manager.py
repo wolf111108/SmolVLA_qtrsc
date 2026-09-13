@@ -544,8 +544,7 @@ class QuantStatManager:
         phase = ctx.get("phase", "unknown")
         if phase == "unknown" and self.current_phase != "full_forward":
             phase = self.current_phase
-        flow_step = ctx.get("flow_step", -1)
-        flow_step = ctx.get("flow_step", -1)
+        flow_step = int(ctx.get("flow_step", -1))
 
         self._collect_one_tensor_sparsity(
             module_id,

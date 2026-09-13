@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import copy
 import os
 import sys
 
@@ -68,7 +69,7 @@ def main():
     out_root = f"outputs/{exp_name}/{args.stage}/{config_name}"
 
     for tid in task_ids:
-        cfg = dict(base)
+        cfg = copy.deepcopy(base)
         cfg["output_dir"] = f"{out_root}/task{tid:02d}"
         cfg.setdefault("evaluation", {}).setdefault("env", {})["task_ids"] = [tid]
         cfg["evaluation"]["n_episodes"] = ep_per_task

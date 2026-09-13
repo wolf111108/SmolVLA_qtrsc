@@ -266,7 +266,10 @@ def main() -> None:
                 "sparsity.enabled=true requires quantization.enabled=true "
                 "(or a stat manager); see manual §37 for the raw-FP mode."
             )
-        sm.enable_sparsity()
+        sm.enable_sparsity(
+            enable=True,
+            chunk_size=sp_cfg.get("chunk_size"),
+        )
         unit_cfg = sp_cfg.get("unit", {})
         if unit_cfg:
             sm.configure_unit_sparsity(
@@ -401,8 +404,11 @@ def main() -> None:
                 "sparsity was collected; check scale loading / wrapping."
             )
 
-        sparsity_dir = sp_cfg.get("export", {}).get(
-            "dir", os.path.join(output_dir, "sparsity")
+        # NOTE: YAML may explicitly set `dir: null`; .get("dir", default)
+        # returns None (not the default), so use `or` to fall back correctly.
+        sparsity_dir = (
+            sp_cfg.get("export", {}).get("dir")
+            or os.path.join(output_dir, "sparsity")
         )
         os.makedirs(sparsity_dir, exist_ok=True)
         sm.export_quantization_manifest_csv(
