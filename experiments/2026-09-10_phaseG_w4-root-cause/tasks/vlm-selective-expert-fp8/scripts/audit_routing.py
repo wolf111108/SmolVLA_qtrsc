@@ -15,14 +15,26 @@ import argparse
 import csv
 import os
 import sys
+from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "src"))
+# __file__ = .../experiments/<exp>/tasks/<task>/scripts/audit_routing.py
+# 6 parents up = repo root.
+REPO_ROOT = Path(__file__).resolve().parents[5]
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import yaml  # noqa: E402
 
 from vla_tcs2.model_wrapper import ModelWrapper  # noqa: E402
 from vla_tcs2.quant_linear import QuantizedLinear  # noqa: E402
 from vla_tcs2.quant_matmul import QuantizedMatMul  # noqa: E402
+
+# Expected (FP8 Linear, W4 Linear, MatMul) per config (manual §6.2).
+EXPECTED = {
+    "g6a_all_fp8_control": (224, 0, 64),
+    "g6b_vlm_attn_w4_expert_fp8": (160, 64, 64),
+    "g6c_vlm_mlp_w4_expert_fp8": (176, 48, 64),
+    "g6d_vlm_all_w4_expert_fp8": (112, 112, 64),
+}
 
 
 def parse_args():
@@ -51,11 +63,25 @@ def main():
             operator = mid.split(".")[-1] if mid else ""
             layer_idx = getattr(module, "layer_idx", -1)
             w_bit = getattr(module, "w_bit", None)
-            is_w4 = str(w_bit) == "4"
-            if is_w4:
+            method = getattr(module, "method", "")
+
+            # Strict classification: only e4m3 counts as FP8, only 4 as W4
+            # (audit §9). Any other precision fails loudly instead of being
+            # silently folded into FP8.
+            if str(w_bit) == "4":
+                assert method == "pot_ao_outlier", (
+                    f"W4 module {mid} has unexpected method {method!r}"
+                )
                 n_w4 += 1
-            else:
+            elif str(w_bit).lower() == "e4m3":
+                assert method == "pot_fp8_outlier", (
+                    f"FP8 module {mid} has unexpected method {method!r}"
+                )
                 n_fp8 += 1
+            else:
+                raise AssertionError(
+                    f"Unexpected w_bit={w_bit!r} at {mid}"
+                )
 
             rows.append([
                 mid, component, layer_idx, operator,
@@ -98,6 +124,23 @@ def main():
     print(f"  Total Linear: {n_fp8 + n_w4}")
     print(f"  MatMul      : {n_matmul}")
     print(f"  CSV         : {csv_path}")
+
+    # Hard Gate (audit §10): exit non-zero on any mismatch.
+    if cfg_name not in EXPECTED:
+        raise SystemExit(
+            f"ERROR: no expected routing defined for {cfg_name}"
+        )
+    exp_fp8, exp_w4, exp_mm = EXPECTED[cfg_name]
+    assert n_fp8 == exp_fp8, (
+        f"{cfg_name}: FP8 Linear {n_fp8} != expected {exp_fp8}"
+    )
+    assert n_w4 == exp_w4, (
+        f"{cfg_name}: W4 Linear {n_w4} != expected {exp_w4}"
+    )
+    assert n_matmul == exp_mm, (
+        f"{cfg_name}: MatMul {n_matmul} != expected {exp_mm}"
+    )
+    print(f"  ROUTING GATE: PASS")
 
 
 if __name__ == "__main__":
