@@ -52,7 +52,17 @@ weight 静态稀疏度（与 episode 无关，作参考）：
 
 判定：**PASS**（可进入 H1）。
 
-> 说明：denoise 阶段 activation/output 的 runtime native bit sparsity ≈ 0%（FP8 e4m3 非零 code 的 mantissa 几乎无全零 bit），稀疏度主要来自 W4 权重（weight_sparsity_static.csv），符合预期。
+> runtime 稀疏度（significand 4-bit 口径，reported/native）：
+>
+> | component | phase | role | reported | native |
+> |---|---|---|---:|---:|
+> | vlm | prefill | activation | 41.10% | 40.53% |
+> | vlm | prefill | A / B | 50.61% / 41.17% | 50.20% / 39.89% |
+> | expert | denoise | activation | 41.00% | 40.43% |
+> | expert | denoise | A / B | 54.55% / 41.18% | 54.11% / 39.78% |
+> | expert | denoise | output / O | 1.32% / 1.09% | 0.36% / 0.15% |
+>
+> 说明：activation/A/B 的 significand sparse_bit_rate ≈ 40-54%，不是 0%；output/O 显著偏低（≈1%）。这一指标是「4-bit significand（1MMM）」口径，尚未做 exponent-alignment（EffLoc 的 ineffective-bit 口径），因此不等于硬件对齐后真正的 bit sparsity——该口径需 Phase I 单独实现。W4 权重侧（weight_sparsity_static）S1≈73.7% 仍是主要稀疏来源。
 
 ### 3.2 H1 vs H2 收敛
 
