@@ -35,6 +35,7 @@ component-aware Linear precision routing 升级（`linear.overrides`）已完成
 | Gate 2 | 四组 routing count | PASS（224/0、160/64、176/48、112/112，MatMul 64） |
 | Gate 3 | raw Linear equivalence | PASS（224 Linear，max|diff|=0） |
 | Gate 4 | calibration smoke | PASS（四组各 864 scale，无 NaN/Inf） |
+| Gate 5 | task0×1 smoke | PASS（四组各 SR=100%，无 crash/NaN） |
 
 分析：
 
@@ -62,3 +63,4 @@ component-aware Linear precision routing 升级（`linear.overrides`）已完成
 |---|---|---|
 | 2026-09-14 | 创建文档 | |
 | 2026-09-14 | 回填 Gate 0-4 结果（单测 8、路由、raw equiv、calibration） | |
+| 2026-09-14 | 回填 Gate 5（task0×1 四组 SR=100%，无 crash/NaN） | |

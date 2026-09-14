@@ -39,6 +39,7 @@ outputs/
 
 ### 实验临时生成 config（make_task_configs.py 产物，运行时重新生成） ###
 experiments/*/generated/
+experiments/*/tasks/*/generated/
 
 ### 工作日志（不进 git，仅本地保留） ###
 doc/logs/

@@ -29,7 +29,7 @@ for name in "${configs[@]}"; do
   fi
 
   echo "[RUN] $name"
-  conda run -n smolvla_eval python main.py --config "$cfg"
+  conda run -n smolvla_eval python main.py --config "$cfg" --skip-calibration
 done
 
 echo "G6 Goal run finished."

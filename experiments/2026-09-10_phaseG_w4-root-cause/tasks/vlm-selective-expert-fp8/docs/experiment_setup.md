@@ -104,7 +104,7 @@ bash experiments/2026-09-10_phaseG_w4-root-cause/tasks/vlm-selective-expert-fp8/
 - [x] Gate 2：四组 routing count 全部符合预期（G6-A 224/0、B 160/64、C 176/48、D 112/112，MatMul 64）
 - [x] Gate 3：raw Linear equivalence（224 Linear 与 F.linear bit-exact，max|diff|=0）
 - [x] Gate 4：calibration-only smoke 四组 PASS（各 864 scale，无 NaN/Inf）
-- [ ] Gate 5：task0×1 smoke 四组 PASS
+- [x] Gate 5：task0×1 smoke 四组 PASS（各 SR=100%，无 crash/NaN）
 - [ ] Gate 6：Goal ×100 四组完成
 
 ---
