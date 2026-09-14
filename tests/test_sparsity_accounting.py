@@ -427,14 +427,37 @@ def test_t11_output_code_not_mutated_by_dequant():
 
     x = torch.randn(32, 16)
 
+    # Spy on the collector to capture the exact `output` code tensor that
+    # gets passed to collect_quant_tensor (the post-quant FP8 code).
+    captured_codes = []
+    _orig_collect = m.collect_quant_tensor
+
+    def _spy_collect(**kwargs):
+        if kwargs.get("tensor_role") == "output":
+            captured_codes.append(kwargs["tensor_code"].detach().clone())
+        return _orig_collect(**kwargs)
+
+    m.collect_quant_tensor = _spy_collect
+
     out = quant_forward_with_outlier(layer, x, stat_collector=m)
 
     # Forward output must stay finite (dequant is unchanged).
     assert not torch.isnan(out).any(), "forward output has NaN"
 
-    # The collected output code must be the quantized code, i.e. its
-    # significand bit-sparsity must be a real ~30-60% rate, NOT the ~1%
-    # dilution caused by NaN (post-mul_ dequant magnitudes).
+    # Direct invariant: the collected output code must be the quantized
+    # FP8 code — all finite and within E4M3 representable range [-448, 448].
+    # If `mul_` had mutated it in place, it would be dequant magnitudes
+    # (e.g. ±294912) that round to NaN.
+    assert captured_codes, "no output code captured"
+    captured = captured_codes[0].to(torch.float32)
+    assert torch.isfinite(captured).all(), "collected output code has NaN/Inf"
+    assert captured.abs().max() <= 448.0, (
+        f"collected output code max abs={captured.abs().max().item()} > 448; "
+        "out_normal_quant was mutated in place"
+    )
+
+    # Second-layer sanity: significand sparse-bit rate must be a real
+    # ~10-80% value, NOT the ~1% dilution from NaN.
     out_records = [
         v
         for k, v in m.per_role_sparsity.items()
@@ -445,8 +468,8 @@ def test_t11_output_code_not_mutated_by_dequant():
     total_bits = role["total_bits"]
     sparse_bits = role["sparse_bits"]
     rate = sparse_bits / total_bits if total_bits else 0.0
-    assert rate > 0.10, (
-        f"output sparse_bit_rate={rate:.3f} is diluted; "
+    assert 0.10 < rate < 0.80, (
+        f"output sparse_bit_rate={rate:.3f} out of expected range; "
         "out_normal_quant was mutated in place"
     )
 

@@ -8,7 +8,7 @@
 
 ## 1. 摘要
 
-H0 correctness smoke 已通过全部 Gate；weight 静态稀疏度（与 episode 无关）：S0 sparse_bit_rate≈41.5%、S1≈73.7%，W4 权重确实产生显著更多 sparse bits。H1（10ep pilot）已完成：S0 FP8-all SR=90.0%、S1 Expert-W4 SR=80.0%（各 10 tasks × 1ep，task 级 0/1 粗粒度）。runtime significand sparse_bit_rate（native）：activation/A/B/output/O 全部 ≈ 40-56%（S0 与 S1 几乎一致，稀疏度由 FP8 激活主导，W4 权重差异不在 activation 侧体现）。**注：早期报告的 output/O ≈ 0.3-0.6% 为统计 bug，经 H1-Audit 独立 E4M3 审计确认真实值 ≈ 39.9%，已修正（见 §3.6）。** H2（30ep）待跑。
+H0 correctness smoke 已通过全部 Gate；weight 静态稀疏度（与 episode 无关）：S0 sparse_bit_rate≈41.5%、S1≈73.7%，W4 权重确实产生显著更多 sparse bits。H1（10ep pilot）已完成：S0 FP8-all SR=90.0%、S1 Expert-W4 SR=80.0%（各 10 tasks × 1ep，task 级 0/1 粗粒度）。runtime native significand sparse-bit rate：activation/A/B ≈ 40-56%，output/O 经 H1-Audit 独立 E4M3 审计确认为 ≈39.9%（修复 instrumentation in-place aliasing 后，S0 task0 × 1ep；原 H1/H0 的 output/O CSV 已污染标 INVALID，见 §3.6）。H2（30ep）待跑。
 
 ---
 
@@ -52,7 +52,7 @@ weight 静态稀疏度（与 episode 无关，作参考）：
 
 判定：**PASS**（可进入 H1）。
 
-> runtime 稀疏度（significand 4-bit 口径，reported/native）：
+> runtime 稀疏度（native significand sparse-bit rate，4-bit 1MMM 口径）：
 >
 > | component | phase | role | reported | native |
 > |---|---|---|---:|---:|
@@ -60,25 +60,25 @@ weight 静态稀疏度（与 episode 无关，作参考）：
 > | vlm | prefill | A / B | 50.61% / 41.17% | 50.20% / 39.89% |
 > | expert | denoise | activation | 41.00% | 40.43% |
 > | expert | denoise | A / B | 54.55% / 41.18% | 54.11% / 39.78% |
-> | expert | denoise | output / O | 40.48% / 40.46% | 39.90% / 39.91% |
+> | expert | denoise | output / O | **INVALID (pre-fix)** | **INVALID (pre-fix)** |
 >
-> 说明：activation/A/B/output/O 的 significand sparse_bit_rate 全部 ≈ 40-54%，不是 0%。**output/O 此前误报 ≈0.3-0.6% 是 H1-Audit 定位到的统计 bug（见 §3.6）**，修正后与独立 E4M3 审计完全一致。这一指标是「4-bit significand（1MMM）」口径，尚未做 exponent-alignment（EffLoc 的 ineffective-bit 口径），因此不等于硬件对齐后真正的 bit sparsity——该口径需 Phase I 单独实现。W4 权重侧（weight_sparsity_static）S1≈73.7% 仍是主要稀疏来源。
+> 说明：activation/A/B 的 native significand sparse_bit_rate ≈ 40-54%，不是 0%。**output/O 在原 H0/H1 中产生于 instrumentation bug 修复前（`mul_` in-place 污染了 output code），因此原始 CSV 的 output/O 字段已失效，标 INVALID**；修复后的唯一可靠测量来自 H1-Audit（S0 Goal task0 × 1ep）：output native ≈ 39.90%、O native ≈ 39.91%，与独立 E4M3 raw-code audit 完全一致（见 §3.6）。H2 将用修复后的 collector 得到正式 multi-task aggregate。这一指标是「4-bit significand（1MMM）」口径，尚未做 exponent-alignment（EffLoc 的 ineffective-bit 口径），因此不等于硬件对齐后真正的 bit sparsity——该口径需 Phase I 单独实现。W4 权重侧（weight_sparsity_static）S1≈73.7% 仍是主要稀疏来源。
 
 ### 3.2 H1 vs H2 收敛
 
-H1 结果（native sparse_bit_rate，10ep）：
+H1 结果（native significand sparse-bit rate，10ep）：
 
-| Metric | H1 S0 | H1 S1 | H2 | Δ(pp) |
+| Metric | H1 S0 | H1 S1 | H1-Audit S0 task0 | H2 |
 |---|---:|---:|---:|---:|
-| VLM prefill activation | 40.70% | 40.65%(N/A) | | |
-| Expert denoise A | 56.10% | 55.55% | | |
-| Expert denoise activation | 40.58% | 40.65% | | |
-| Expert denoise output | 39.9% | 39.9% | | |
-| QK/PV A native | 50.6-56.1% | 50.7-55.6% | | |
-| QK/PV O native | 39.9% | 39.9% | | |
-| FP sidepath | 1.23% | 1.27% | | |
+| VLM prefill activation | 40.70% | 40.65%(N/A) | — | |
+| Expert denoise A | 56.10% | 55.55% | — | |
+| Expert denoise activation | 40.58% | 40.65% | — | |
+| Expert denoise output | **INVALID (pre-fix)** | **INVALID (pre-fix)** | **39.90%** | |
+| QK/PV A native | 50.6-56.1% | 50.7-55.6% | — | |
+| QK/PV O native | **INVALID (pre-fix)** | **INVALID (pre-fix)** | **39.91%** | |
+| FP sidepath | 1.23% | 1.27% | — | |
 
-> 注：H1 是 1ep/task 的 pilot，SR 为 0/1 粗粒度（S0=9/10、S1=8/10）。sparsity 各指标 S0/S1 几乎一致（activation/A/B/output/O 由 FP8 主导，W4 只影响 weight 侧），符合预期。**output/O 此前误报 0.3-0.6%，经 H1-Audit 修正为 ≈39.9%。** H2（3ep/task）跑完后对比收敛。
+> 注：H1 是 1ep/task 的 pilot，SR 为 0/1 粗粒度（S0=9/10、S1=8/10）。activation/A/B/FP sidepath 这些指标 S0/S1 几乎一致（由 FP8 主导，W4 只影响 weight 侧），且产生于 output code mutation 之前或来自独立 static collector，因此仍然有效。**output/O 的原始 H1 10ep CSV 产生于修复前，已标 INVALID，不作为 H1 aggregate；修复后唯一可靠测量来自 H1-Audit（S0 Goal task0 ×1ep）= 39.90%/39.91%。** H2（3ep/task）将用修复后的 collector 得到正式 multi-task aggregate，届时判断是否稳定在 ≈39.9%。
 
 ### 3.3 Component / operator
 
@@ -113,13 +113,15 @@ TBD。
 
 **验证**：SR 保持 100%；新增回归测试 T11（`test_t11_output_code_not_mutated_by_dequant`）；全部 19 个测试通过。修复后 output/O 与 activation/A/B 的 sparsity 量级一致（≈40%），符合 FP8 激活主导稀疏度的预期。
 
+> **测量口径**：修复后的 39.90%/39.91% 是 **H1-Audit S0 Goal task0 × 1ep** 的测量值（不是原 H1 10ep 或 H0 的 aggregate——那些是 pre-fix 污染的）。正式 multi-task aggregate 待 H2（10 tasks × 3ep）用修复后的 collector 产出。
+
 ---
 
 ## 4. 结论
 
 - H0/H1 均已完成：S0（FP8-all）H1 SR=90.0%、S1（Expert-W4）H1 SR=80.0%，与 Phase G 参考（G1-A 88%、G1-D 84%）同量级。
-- runtime sparsity 由 FP8 激活主导（activation/A/B/output/O 全部 ≈ 40-56%）；W4 稀疏只在 weight 侧（S1 weight sparse_bit_rate≈73.7%）。
-- output/O 早前的 ≈0.5% 已确认为统计 bug（§3.6），修复后 ≈39.9%。
+- runtime native significand sparsity 由 FP8 激活主导（activation/A/B ≈ 40-56%，output/O ≈ 39.9% post-fix）；W4 稀疏只在 weight 侧（S1 weight sparse_bit_rate≈73.7%）。
+- output/O 早前的 ≈0.5% 已确认为 instrumentation bug（§3.6），修复后 S0 task0 audit ≈39.9%；正式 aggregate 待 H2。
 - 最终 SR 与 sparsity 的稳定结论待 H2（30ep）/H3（100ep）。
 
 ## 5. 问题与后续
@@ -136,3 +138,4 @@ TBD。
 - 2026-09-14：回填 H0 smoke 结果（Gate 全 PASS，S0/S1 SR=100%，weight sparse_bit_rate 41.5%/73.7%）。
 - 2026-09-14：回填 H1（10ep）结果（S0 SR=90.0%、S1 SR=80.0%，runtime sparsity 分布）。
 - 2026-09-14：回填 H1-Audit 结论（output/O 稀疏度 0.5%→39.9% 为统计 bug 修正，根因 `quant_methods.py` 3 处 `mul_` in-place，新增 T11 回归测试）。
+- 2026-09-14：按 er.md 审阅修正 results.md 语义——H1/H0 的 output/O 标 INVALID（pre-fix 污染），39.9% 归为 H1-Audit S0 task0 post-fix 测量，正式 aggregate 待 H2。

@@ -1,1296 +1,660 @@
-建议把这件事单独做成一个很小的 **H1-Audit**，不要马上改量化算法，也不要重跑整个 H1。目标只有一个：
-
-$$
-\boxed{\text{判断 output/O 的 }0.3\%-0.6\%\text{ bit sparsity 到底是真的，还是统计错误}}
-$$
-
-最合适的办法是：**直接对真正送进现有 sparsity collector 的 post-quant FP8 code 做独立 bit-pattern histogram**。当前 Linear 的 `output_code` 和 MatMul 的 `O_code` 本来就统一经过 `collect_quant_tensor()`，所以把 audit 放在那里，不需要改 forward 数值路径。
-
-另外有一点很重要：我当前重新读取到的远端 `stat_manager.py` 里，`_extract_sm_from_raw()` 仍然是旧的 `sign<<mant_bits | mant`，并用 `(exp != 0) | (mant != 0)` 判断 hidden bit 的版本。 所以这次 audit **不要调用现有 `_extract_sm_from_raw()`**，而是独立解析 E4M3 raw code。这样 audit 才能真正作为第二套独立验证器。
-
----
-
-# 1. 先定义这个 Audit 要回答什么
-
-对于每个：
-
-```text
-module_id
-phase
-flow_step
-tensor_role
-attention_kind
-```
-
-统计 E4M3 code 的：
-
-```text
-zero code ratio
-mantissa 000~111 histogram
-exponent 0000~1111 histogram
-significand 0000~1111 histogram
-non-zero significand bit sparsity
-mantissa=111 ratio
-saturation ratio
-NaN ratio
-```
-
-最关键的是这两个：
-
-$$
-S_{\text{sig,nonzero}}
-$$
-
-和
-
-$$
-P(\text{mantissa}=111\mid q\neq0)
-$$
-
-如果你真的得到：
-
-```text
-output:
-nonzero_significand_zero_rate ≈ 0.5%
-mantissa_111_nonzero_ratio ≈ 98~99%
-```
-
-那说明这个现象是真实的。
-
-如果 histogram 很正常，例如：
-
-```text
-mantissa 000~111 都有大量分布
-```
-
-但现有 `module_sparsity.csv` 仍然说 0.5%，那就是 sparsity collector 有 bug。
-
----
-
-# 2. 不改 `quant_methods.py`，先只改 `stat_manager.py`
-
-这是第一轮 audit 最重要的原则。
-
-当前 `collect_quant_tensor()` 已经拿到了真正的：
-
-```python
-tensor_code
-spec
-module_id
-phase
-flow_step
-tensor_role
-attention_kind
-```
-
-。
-
-而 `quant_awo()` 的 FP8 路径本身就是：
-
-```python
-q = x / scale
-q = clamp(q)
-q = q.to(torch.float8_e4m3fn)
-```
-
-scalar path 最后只是把这个已量化值存进指定的 output dtype，因此把 `tensor_code` 再 cast 回 `float8_e4m3fn` 可以恢复实际 FP8 code pattern。
-
-所以第一轮完全没有必要碰 forward。
-
----
-
-# 3. 在 `QuantStatManager.__init__()` 增加 Audit 状态
-
-在：
-
-```python
-src/vla_tcs2/quant/stat_manager.py
-```
-
-`__init__()` 里加入：
-
-```python
-# ------------------------------------------------------------------
-# Phase H FP-code audit
-# Debug-only: inspect the actual post-quant FP8 code distribution.
-# Must never modify model tensors or RNG state.
-# ------------------------------------------------------------------
-self.fp_code_audit_enabled = False
-
-# Deterministic maximum number of elements sampled from each
-# collect_quant_tensor() call. 0/None means all elements.
-self.fp_code_audit_max_elements_per_call = 262_144
-
-# Roles to inspect. Start with both operands and outputs so we have
-# a healthy input-side reference.
-self.fp_code_audit_roles = {
-    "activation",
-    "output",
-    "A",
-    "B",
-    "O",
-}
-
-# key:
-# (module_id, phase, flow_step, tensor_role, attention_kind)
-self.fp_code_audit: Dict[tuple, Dict[str, Any]] = {}
-```
-
-在：
-
-```python
-reset_sparsity()
-```
-
-也加入：
-
-```python
-self.fp_code_audit = {}
-```
-
----
-
-# 4. 增加配置函数
-
-在 `QuantStatManager` 中新增：
-
-```python
-def configure_fp_code_audit(
-    self,
-    enable: bool = False,
-    max_elements_per_call: int = 262_144,
-    roles=None,
-):
-    self.fp_code_audit_enabled = bool(enable)
-
-    if max_elements_per_call is None:
-        self.fp_code_audit_max_elements_per_call = 0
-    else:
-        self.fp_code_audit_max_elements_per_call = int(
-            max_elements_per_call
-        )
-
-    if roles is not None:
-        self.fp_code_audit_roles = set(roles)
-```
-
-这个 audit 默认关闭，不影响 H1/H2 正常实验。
-
----
-
-# 5. 增加独立的 E4M3 code collector
-
-这是核心。
-
-直接放进 `QuantStatManager`：
-
-```python
-def _collect_fp_code_audit(
-    self,
-    *,
-    module_id: str,
-    tensor_role: str,
-    tensor_code: torch.Tensor,
-    spec: QuantSpec,
-    phase: str,
-    flow_step: int,
-    attention_kind: str,
-):
-    """
-    Debug-only independent E4M3 raw-code audit.
-
-    IMPORTANT:
-    - Does NOT reuse _extract_sm_from_raw().
-    - Does NOT modify tensor_code.
-    - Does NOT use RNG.
-    - Deterministically subsamples large tensors.
-    """
-
-    if not self.fp_code_audit_enabled:
-        return
-
-    if tensor_role not in self.fp_code_audit_roles:
-        return
-
-    if tensor_code is None or spec is None:
-        return
-
-    if spec.kind != "fp":
-        return
-
-    fmt = (spec.fmt or "").lower().strip()
-
-    if fmt not in {
-        "e4m3",
-        "e4m3fn",
-        "fp8_e4m3",
-        "fp8_e4m3fn",
-    }:
-        return
-
-    x = tensor_code.detach().reshape(-1)
-
-    if x.numel() == 0:
-        return
-
-    # --------------------------------------------------------------
-    # Deterministic sampling.
-    # No torch.rand / RNG, so rollout behavior is unaffected.
-    # --------------------------------------------------------------
-    max_n = self.fp_code_audit_max_elements_per_call
-
-    if max_n and max_n > 0 and x.numel() > max_n:
-        stride = (
-            x.numel() + max_n - 1
-        ) // max_n
-
-        x = x[::stride][:max_n]
-
-    # tensor_code contains FP8-representable numerical values,
-    # generally stored as float32 for the simulator.
-    q8 = x.to(torch.float8_e4m3fn)
-
-    raw = (
-        q8.view(torch.uint8)
-        .reshape(-1)
-        .to(torch.int64)
-    )
-
-    q32 = q8.to(torch.float32)
-
-    # --------------------------------------------------------------
-    # Independent E4M3 parsing.
-    #
-    # raw:
-    #   bit7     = sign
-    #   bit6..3  = exponent
-    #   bit2..0  = mantissa
-    # --------------------------------------------------------------
-    sign = (raw >> 7) & 0x1
-    exp = (raw >> 3) & 0xF
-    mant = raw & 0x7
-
-    nan_mask = torch.isnan(q32)
-
-    # ±0 both count as zero.
-    zero_mask = (exp == 0) & (mant == 0)
-
-    # E4M3 subnormal: exponent zero, mantissa non-zero.
-    subnormal_mask = (exp == 0) & (mant != 0)
-
-    valid_mask = ~nan_mask
-
-    # --------------------------------------------------------------
-    # Magnitude significand for the metric used by Phase H:
-    #
-    # normal:    1MMM
-    # subnormal: 0MMM
-    # zero:      0000
-    #
-    # Sign is intentionally NOT part of these 4 bits.
-    # --------------------------------------------------------------
-    hidden = (exp != 0).to(torch.int64) << 3
-    sig = mant | hidden
-
-    # Force zero to exactly 0000.
-    sig = torch.where(
-        zero_mask,
-        torch.zeros_like(sig),
-        sig,
-    )
-
-    # Ignore NaN when computing numerical sparsity audit.
-    sig_valid = sig[valid_mask]
-
-    nonzero_valid_mask = valid_mask & (~zero_mask)
-    sig_nonzero = sig[nonzero_valid_mask]
-
-    mant_valid = mant[valid_mask]
-    mant_nonzero = mant[nonzero_valid_mask]
-    exp_valid = exp[valid_mask]
-
-    # --------------------------------------------------------------
-    # Histograms
-    # --------------------------------------------------------------
-    mant_hist = torch.bincount(
-        mant_valid,
-        minlength=8,
-    )
-
-    mant_nonzero_hist = torch.bincount(
-        mant_nonzero,
-        minlength=8,
-    )
-
-    exp_hist = torch.bincount(
-        exp_valid,
-        minlength=16,
-    )
-
-    sig_hist = torch.bincount(
-        sig_valid,
-        minlength=16,
-    )
-
-    # --------------------------------------------------------------
-    # Independent significand zero-bit count.
-    # --------------------------------------------------------------
-    sig_zero_bits = 0
-
-    for bit_idx in range(4):
-        bit = (sig_valid >> bit_idx) & 1
-        sig_zero_bits += int(
-            (1 - bit).sum().item()
-        )
-
-    sig_nonzero_zero_bits = 0
-
-    for bit_idx in range(4):
-        bit = (sig_nonzero >> bit_idx) & 1
-        sig_nonzero_zero_bits += int(
-            (1 - bit).sum().item()
-        )
-
-    max_val = float(
-        torch.finfo(torch.float8_e4m3fn).max
-    )
-
-    saturation_count = int(
-        (
-            torch.abs(q32[valid_mask])
-            >= max_val
-        ).sum().item()
-    )
-
-    key = (
-        module_id,
-        phase,
-        int(flow_step),
-        tensor_role,
-        attention_kind or "unknown",
-    )
-
-    entry = self.fp_code_audit.setdefault(
-        key,
-        {
-            "module_id": module_id,
-            "phase": phase,
-            "flow_step": int(flow_step),
-            "tensor_role": tensor_role,
-            "attention_kind": attention_kind or "unknown",
-
-            "calls": 0,
-            "sampled_elements": 0,
-            "valid_elements": 0,
-            "nonzero_elements": 0,
-
-            "zero_code_count": 0,
-            "subnormal_count": 0,
-            "nan_count": 0,
-            "negative_count": 0,
-            "saturation_count": 0,
-
-            "sig_zero_bits": 0,
-            "sig_total_bits": 0,
-
-            "sig_nonzero_zero_bits": 0,
-            "sig_nonzero_total_bits": 0,
-
-            "mant_hist": [0] * 8,
-            "mant_nonzero_hist": [0] * 8,
-            "exp_hist": [0] * 16,
-            "sig_hist": [0] * 16,
-        },
-    )
-
-    n_sampled = int(raw.numel())
-    n_valid = int(valid_mask.sum().item())
-    n_nonzero = int(nonzero_valid_mask.sum().item())
-
-    entry["calls"] += 1
-    entry["sampled_elements"] += n_sampled
-    entry["valid_elements"] += n_valid
-    entry["nonzero_elements"] += n_nonzero
-
-    entry["zero_code_count"] += int(
-        zero_mask.sum().item()
-    )
-
-    entry["subnormal_count"] += int(
-        subnormal_mask.sum().item()
-    )
-
-    entry["nan_count"] += int(
-        nan_mask.sum().item()
-    )
-
-    entry["negative_count"] += int(
-        (sign[valid_mask] != 0).sum().item()
-    )
-
-    entry["saturation_count"] += saturation_count
-
-    entry["sig_zero_bits"] += sig_zero_bits
-    entry["sig_total_bits"] += 4 * n_valid
-
-    entry[
-        "sig_nonzero_zero_bits"
-    ] += sig_nonzero_zero_bits
-
-    entry[
-        "sig_nonzero_total_bits"
-    ] += 4 * n_nonzero
-
-    for i in range(8):
-        entry["mant_hist"][i] += int(
-            mant_hist[i].item()
-        )
-
-        entry["mant_nonzero_hist"][i] += int(
-            mant_nonzero_hist[i].item()
-        )
-
-    for i in range(16):
-        entry["exp_hist"][i] += int(
-            exp_hist[i].item()
-        )
-
-        entry["sig_hist"][i] += int(
-            sig_hist[i].item()
-        )
-```
-
-这里最重要的是：
-
-```python
-hidden = (exp != 0) << 3
-sig = mant | hidden
-```
-
-而不是调用现有：
-
-```python
-_extract_sm_from_raw()
-```
-
-这样两个统计器真正独立。
-
----
-
-# 6. 在 `collect_quant_tensor()` 中只加一个调用
-
-当前 `collect_quant_tensor()` 大约在读取：
-
-```python
-phase
-flow_step
-attention_kind
-```
-
-之后调用：
-
-```python
-_collect_one_tensor_sparsity(...)
-```
-
-。
-
-改成：
-
-```python
-phase = ctx.get("phase", "unknown")
-
-if (
-    phase == "unknown"
-    and self.current_phase != "full_forward"
-):
-    phase = self.current_phase
-
-flow_step = int(
-    ctx.get("flow_step", -1)
-)
-
-resolved_attention_kind = (
-    attention_kind
-    or ctx.get("attention_kind", "unknown")
-)
-
-# Existing Phase-H collector.
-self._collect_one_tensor_sparsity(
-    module_id,
-    layer_idx,
-    tensor_code,
-    spec,
-    tensor_role=tensor_role,
-    phase=phase,
-    flow_step=flow_step,
-    attention_kind=resolved_attention_kind,
-)
-
-# H1-Audit: independent raw FP8-code inspection.
-self._collect_fp_code_audit(
-    module_id=module_id,
-    tensor_role=tensor_role,
-    tensor_code=tensor_code,
-    spec=spec,
-    phase=phase,
-    flow_step=flow_step,
-    attention_kind=resolved_attention_kind,
-)
-```
-
-到这里为止：
-
-$$
-\boxed{\text{quant\_methods.py 完全不用改}}
-$$
-
-因此它不可能改变：
-
-```text
-scale
-mask
-quantization
-outlier path
-model output
-SR
-```
-
----
-
-# 7. 增加 CSV exporter
-
-在 `stat_manager.py` 加：
-
-```python
-def export_fp_code_audit_csv(
-    self,
-    path: str,
-):
-    import csv
-    import os
-
-    os.makedirs(
-        os.path.dirname(path),
-        exist_ok=True,
-    )
-
-    fieldnames = [
-        "module_id",
-        "phase",
-        "flow_step",
-        "tensor_role",
-        "attention_kind",
-
-        "calls",
-        "sampled_elements",
-        "valid_elements",
-        "nonzero_elements",
-
-        "zero_code_count",
-        "zero_code_rate",
-
-        "subnormal_count",
-        "subnormal_rate",
-
-        "nan_count",
-        "nan_rate",
-
-        "negative_count",
-        "negative_rate",
-
-        "saturation_count",
-        "saturation_rate",
-
-        "sig_zero_bits",
-        "sig_total_bits",
-        "sig_zero_rate",
-
-        "sig_nonzero_zero_bits",
-        "sig_nonzero_total_bits",
-        "sig_nonzero_zero_rate",
-
-        "mant_111_nonzero_rate",
-    ]
-
-    fieldnames += [
-        f"mant_{i:03b}"
-        for i in range(8)
-    ]
-
-    fieldnames += [
-        f"mant_nonzero_{i:03b}"
-        for i in range(8)
-    ]
-
-    fieldnames += [
-        f"exp_{i:04b}"
-        for i in range(16)
-    ]
-
-    fieldnames += [
-        f"sig_{i:04b}"
-        for i in range(16)
-    ]
-
-    with open(
-        path,
-        "w",
-        newline="",
-        encoding="utf-8",
-    ) as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=fieldnames,
-        )
-
-        writer.writeheader()
-
-        for key, e in sorted(
-            self.fp_code_audit.items()
-        ):
-            sampled = e["sampled_elements"]
-            valid = e["valid_elements"]
-            nonzero = e["nonzero_elements"]
-
-            sig_total = e["sig_total_bits"]
-            sig_nz_total = e[
-                "sig_nonzero_total_bits"
-            ]
-
-            mant_nz_total = sum(
-                e["mant_nonzero_hist"]
-            )
-
-            row = {
-                "module_id": e["module_id"],
-                "phase": e["phase"],
-                "flow_step": e["flow_step"],
-                "tensor_role": e["tensor_role"],
-                "attention_kind": e[
-                    "attention_kind"
-                ],
-
-                "calls": e["calls"],
-                "sampled_elements": sampled,
-                "valid_elements": valid,
-                "nonzero_elements": nonzero,
-
-                "zero_code_count":
-                    e["zero_code_count"],
-
-                "zero_code_rate":
-                    e["zero_code_count"] / valid
-                    if valid else 0.0,
-
-                "subnormal_count":
-                    e["subnormal_count"],
-
-                "subnormal_rate":
-                    e["subnormal_count"] / valid
-                    if valid else 0.0,
-
-                "nan_count":
-                    e["nan_count"],
-
-                "nan_rate":
-                    e["nan_count"] / sampled
-                    if sampled else 0.0,
-
-                "negative_count":
-                    e["negative_count"],
-
-                "negative_rate":
-                    e["negative_count"] / valid
-                    if valid else 0.0,
-
-                "saturation_count":
-                    e["saturation_count"],
-
-                "saturation_rate":
-                    e["saturation_count"] / valid
-                    if valid else 0.0,
-
-                "sig_zero_bits":
-                    e["sig_zero_bits"],
-
-                "sig_total_bits":
-                    sig_total,
-
-                "sig_zero_rate":
-                    e["sig_zero_bits"] / sig_total
-                    if sig_total else 0.0,
-
-                "sig_nonzero_zero_bits":
-                    e["sig_nonzero_zero_bits"],
-
-                "sig_nonzero_total_bits":
-                    sig_nz_total,
-
-                "sig_nonzero_zero_rate":
-                    e["sig_nonzero_zero_bits"]
-                    / sig_nz_total
-                    if sig_nz_total else 0.0,
-
-                "mant_111_nonzero_rate":
-                    (
-                        e["mant_nonzero_hist"][7]
-                        / mant_nz_total
-                    )
-                    if mant_nz_total else 0.0,
-            }
-
-            for i in range(8):
-                row[f"mant_{i:03b}"] = (
-                    e["mant_hist"][i]
-                )
-
-                row[
-                    f"mant_nonzero_{i:03b}"
-                ] = e["mant_nonzero_hist"][i]
-
-            for i in range(16):
-                row[f"exp_{i:04b}"] = (
-                    e["exp_hist"][i]
-                )
-
-                row[f"sig_{i:04b}"] = (
-                    e["sig_hist"][i]
-                )
-
-            writer.writerow(row)
-```
-
----
-
-# 8. `main.py` 增加两个很小的接口
-
-在当前 sparsity setup 中，你现在已经有：
-
-```python
-sm.enable_sparsity(...)
-sm.configure_unit_sparsity(...)
-```
-
-。
-
-后面加：
-
-```python
-audit_cfg = sp_cfg.get(
-    "fp_code_audit",
-    {},
-)
-
-if audit_cfg.get("enabled", False):
-    sm.configure_fp_code_audit(
-        enable=True,
-        max_elements_per_call=audit_cfg.get(
-            "max_elements_per_call",
-            262_144,
-        ),
-        roles=audit_cfg.get(
-            "roles",
-            [
-                "activation",
-                "output",
-                "A",
-                "B",
-                "O",
-            ],
-        ),
-    )
-
-    print(
-        "[sparsity] FP-code audit enabled"
-    )
-```
-
-在现有 CSV export 后面加：
-
-```python
-if sm.fp_code_audit_enabled:
-    sm.export_fp_code_audit_csv(
-        os.path.join(
-            sparsity_dir,
-            "fp_code_audit.csv",
-        )
-    )
-```
-
----
-
-# 9. 建一个专门的 H1-Audit config
-
-不要污染原 H1。
-
-新建：
-
-```text
-experiments/
-2026-09-13_phaseH_accuracy-preserving-sparsity/
-configs/
-s0_fp8_all_h1_audit_task0.yaml
-```
-
-最保险的方法：
-
-> **直接复制 H1 S0 task00 已实际运行的 YAML。**
-
-只改：
-
-```yaml
-output_dir: outputs/2026-09-13_phaseH_accuracy-preserving-sparsity/h1_audit/s0/task00
-```
-
-以及：
-
-```yaml
-evaluation:
-  env:
-    task: libero_goal
-    task_ids: [0]
-
-  n_episodes: 1
-  batch_size: 1
-```
-
-在已有：
-
-```yaml
-sparsity:
-```
-
-下面增加：
-
-```yaml
-  fp_code_audit:
-    enabled: true
-
-    # 第一轮已经足够大。
-    # 使用 deterministic strided sampling，不使用随机数。
-    max_elements_per_call: 262144
-
-    roles:
-      - activation
-      - output
-      - A
-      - B
-      - O
-```
-
-其他所有字段：
-
-```text
-model
-scale_dir
-method
-outlier_ratio
-A/W/O formats
-n_action_steps
-num_steps
-seed
-```
-
-一个都不要改。
-
-尤其仍然：
-
-```text
-n_action_steps = 10
-num_steps = 10
-seed = 1000
-```
-
-以及：
-
-```bash
---skip-calibration
-```
-
----
-
-# 10. 运行
-
-先跑 tests：
-
-```bash
-cd ~/VLA_tcs2
-
-python -m pytest \
-    tests/test_sparsity_accounting.py \
-    -v
-```
-
-然后：
-
-```bash
-export MUJOCO_GL=egl
-export PYOPENGL_PLATFORM=egl
-export MUJOCO_EGL_DEVICE_ID=2
-
-python main.py \
-    --config experiments/2026-09-13_phaseH_accuracy-preserving-sparsity/configs/s0_fp8_all_h1_audit_task0.yaml \
-    --skip-calibration
-```
-
-最后应该多得到：
-
-```text
-outputs/.../h1_audit/s0/task00/sparsity/
-    module_sparsity.csv
-    weight_sparsity_static.csv
-    outlier_sidepath.csv
-    unit_sparsity.csv
-    fp_code_audit.csv        <-- 新增
-```
-
----
-
-# 11. 先不用写复杂分析程序，直接跑这个汇总
-
-新建：
-
-```text
-scripts/analyze_fp_code_audit.py
-```
-
-内容：
-
-```python
-#!/usr/bin/env python
-
-import csv
-import sys
-from collections import defaultdict
-
-
-path = sys.argv[1]
-
-rows = []
-
-with open(path, newline="") as f:
-    rows = list(csv.DictReader(f))
-
-
-def add(a, k, v):
-    a[k] += int(float(v))
-
-
-groups = defaultdict(
-    lambda: defaultdict(int)
-)
-
-for r in rows:
-    key = (
-        r["tensor_role"],
-        r["phase"],
-    )
-
-    g = groups[key]
-
-    for name in [
-        "valid_elements",
-        "nonzero_elements",
-        "zero_code_count",
-        "subnormal_count",
-        "nan_count",
-        "saturation_count",
-        "sig_zero_bits",
-        "sig_total_bits",
-        "sig_nonzero_zero_bits",
-        "sig_nonzero_total_bits",
-    ]:
-        add(g, name, r[name])
-
-    for i in range(8):
-        add(
-            g,
-            f"mant_nonzero_{i:03b}",
-            r[f"mant_nonzero_{i:03b}"],
-        )
-
-
-print(
-    f"{'role':12s} "
-    f"{'phase':10s} "
-    f"{'zero':>10s} "
-    f"{'sig-all':>10s} "
-    f"{'sig-nz':>10s} "
-    f"{'mant111':>10s} "
-    f"{'sat':>10s}"
-)
-
-for (role, phase), g in sorted(
-    groups.items()
-):
-    valid = g["valid_elements"]
-    nonzero = g["nonzero_elements"]
-
-    sig_total = g["sig_total_bits"]
-    sig_nz_total = g[
-        "sig_nonzero_total_bits"
-    ]
-
-    mant_nz_total = sum(
-        g[f"mant_nonzero_{i:03b}"]
-        for i in range(8)
-    )
-
-    zero_rate = (
-        g["zero_code_count"] / valid
-        if valid else 0
-    )
-
-    sig_rate = (
-        g["sig_zero_bits"] / sig_total
-        if sig_total else 0
-    )
-
-    sig_nz_rate = (
-        g["sig_nonzero_zero_bits"]
-        / sig_nz_total
-        if sig_nz_total else 0
-    )
-
-    mant111 = (
-        g["mant_nonzero_111"]
-        / mant_nz_total
-        if mant_nz_total else 0
-    )
-
-    sat = (
-        g["saturation_count"] / valid
-        if valid else 0
-    )
-
-    print(
-        f"{role:12s} "
-        f"{phase:10s} "
-        f"{zero_rate:10.3%} "
-        f"{sig_rate:10.3%} "
-        f"{sig_nz_rate:10.3%} "
-        f"{mant111:10.3%} "
-        f"{sat:10.3%}"
-    )
-```
-
-执行：
-
-```bash
-python \
-experiments/2026-09-13_phaseH_accuracy-preserving-sparsity/scripts/analyze_fp_code_audit.py \
-outputs/2026-09-13_phaseH_accuracy-preserving-sparsity/h1_audit/s0/task00/sparsity/fp_code_audit.csv
-```
-
----
-
-# 12. 最关键的是怎么读结果
-
-你最后大概会得到这种形式：
-
-```text
-role        phase      zero    sig-all     sig-nz    mant111        sat
-activation prefill    1.xx%     41.xx%     40.xx%      xx.xx%      0.xx%
-activation denoise    1.xx%     41.xx%     40.xx%      xx.xx%      0.xx%
-A          denoise    1.xx%     55.xx%     54.xx%      xx.xx%      0.xx%
-B          denoise    1.xx%     40.xx%     39.xx%      xx.xx%      0.xx%
-output     denoise    1.xx%      1.xx%      0.xx%      99.xx%      ?.??%
-O          denoise    1.xx%      1.xx%      0.xx%      99.xx%      ?.??%
-```
-
-然后按下面判断。
-
-### 情况 1：确认是真实 code distribution
-
-如果：
-
-```text
-output sig_nonzero_zero_rate ≈ 0~1%
-O      sig_nonzero_zero_rate ≈ 0~1%
-
-同时：
-
-mant111_nonzero ≈ 95~100%
-```
-
-那么：
-
-$$
-\boxed{
-0.5\%\text{ 是真实 post-quant E4M3 code 特征}
-}
-$$
-
-这时不要修 sparsity collector。
-
-下一步才进入 **Scale/Prequant Audit**。
-
----
-
-### 情况 2：独立 audit 是正常的 30–40%，原 CSV 却是 0.5%
-
-例如：
-
-```text
-fp_code_audit:
-output sig-nz = 37%
-
-module_sparsity:
-output native = 0.5%
-```
-
-那么：
-
-$$
-\boxed{
-\text{stat\_manager 主 bit accounting 仍有 bug}
-}
-$$
-
-这时重点检查：
-
-```python
-compute_sparse_stats_fp()
-_extract_sm_from_raw()
-native subtraction
-```
-
-尤其注意：我当前读取到的远端 `_extract_sm_from_raw()` 仍然是旧实现。
-
----
-
-### 情况 3：`mant111≈99%`，但 saturation 也非常高
-
-例如：
-
-```text
-mant111 = 98%
-saturation = 40%
-```
-
-说明 output quantization 很可能处在异常 scale/clipping 区域。
-
-这时进入第二阶段：
-
-$$
-\boxed{\text{prequant/scale audit}}
-$$
-
----
-
-### 情况 4：`mant111≈99%`，但 saturation≈0%
-
-这是最有意思的情况：
-
-```text
-mantissa 111 主导
-不是 clipping
-不是 native subtraction
-不是 statistic bug
-```
-
-说明 `out_normal_quant` 的数值本身大量落在每个 exponent bin 的高端，例如：
-
-$$
-1.875\times2^e
-$$
-
-附近。
-
-这时候才值得深入分析 output datapath。
-
----
-
-# 13. 如果确认是真实分布，再做第二阶段：Prequant/Scale Audit
-
-**不要现在就做。**
-
-只有第一阶段确认：
-
-```text
-mantissa_111_nonzero >> 90%
-```
-
-才去改 `quant_methods.py`。
-
-因为当前 Linear output 进入量化前明确是：
-
-```python
-out_normal
-```
-
-然后：
+我重新审阅了远端最新提交 `e4034aa`、`quant_methods.py`、`stat_manager.py`、T10/T11、H1-Audit 配置和 `results.md`。这次 audit **成功定位到了真正的 bug，根因判断成立，修复方式也正确**。但当前 `results.md` 还有一个比较重要的实验记录问题：**不能把单次 S0 task0 audit 得到的 39.90% 直接回填成原 H1 的 S0/S1 10-episode aggregate 结果。**
+
+## 审阅结论
+
+| 项目                                    | 判定                   |
+| ------------------------------------- | -------------------- |
+| H1-Audit 设计                           | ✅ 正确                 |
+| 独立 E4M3 raw-code audit                | ✅ 正确                 |
+| output/O≈0.5% 的根因                     | ✅ 已定位                |
+| `mul_ → mul` 修复                       | ✅ 正确                 |
+| forward/SR 不受 bug 影响                  | ✅ 结论成立               |
+| T10 FP significand 语义                 | ✅ 正确                 |
+| T11 回归测试                              | ✅ 有效，但可加强            |
+| 修复后 output/O≈39.9%                    | ✅ S0 task0 audit 可确认 |
+| 原 H1 activation/A/B/SR                | ✅ 仍有效                |
+| 原 H1 output/O                         | ❌ 原 CSV 已污染          |
+| `results.md` 中“H1 S0/S1 output=39.9%” | ⚠️ 目前证据不足            |
+| H2 是否可以开始                             | ✅ 可以，但建议先修正文档语义      |
+
+### 1. 根因定位完全合理
+
+当前 Linear 路径现在是：
 
 ```python
 out_normal_quant = quant_awo(
     out_normal,
     layer.o_interval,
-    ...
+    layer.o_spec,
+    out_dtype=out_normal.dtype,
+)
+
+out_normal_dequant = (
+    out_normal_quant
+    .to(torch.float32)
+    .mul(M_q)
+    .to(x.dtype)
 )
 ```
 
-。
+而旧代码这里是 `.mul_(M_q)`。
 
-MatMul 同理是：
+关键点在于 `out_normal` 是 FP32，因此 scalar-scale 的 `quant_awo()` 最终创建的 `out_normal_quant` 也是 **FP32 tensor，只是数值已经被限制到 E4M3 可表示值**。`quant_awo()` 的 scalar FP 路径确实是先转成 FP8，再写回 `out_dtype`。
+
+因此旧代码：
 
 ```python
-out_normal
-→ quant_awo(... layer.O_interval ...)
-→ out_normal_quant
+out_normal_quant.to(torch.float32).mul_(M_q)
+```
+
+这里的：
+
+```python
+out_normal_quant.to(torch.float32)
+```
+
+当输入已经是 FP32 时，不需要创建新的 tensor；随后 `mul_()` 就可能直接修改 `out_normal_quant` 自身。
+
+于是实际发生的是：
+
+$$
+q_O
+\overset{\text{mul\_}}{\longrightarrow}
+q_O M_q
+$$
+
+原本应该保留下来用于统计的：
+
+```text
+[-448,448] 内的 E4M3 code value
+```
+
+被覆盖成 dequant 中间值。
+
+而 collector 又是在 dequant 之后读取：
+
+```python
+output_code=out_normal_quant
+```
+
+因此之前统计的根本不是 FP8 output code。这个分析与你 commit 描述完全一致。([GitHub][1])
+
+---
+
+## 2. 为什么 forward 精度没受影响，也是说得通的
+
+这一点很容易让人疑惑：
+
+> 既然 `out_normal_quant` 被改坏了，为什么 SR 没坏？
+
+因为模型真正返回的是：
+
+$$
+O_{\rm dequant}
+=
+\frac{q_O M_q}{2^{16}}
+$$
+
+旧代码虽然把 `q_O` 原位覆盖成了 `q_OM_q`，但这正好也是 `out_normal_dequant` 接下来需要的中间结果。随后：
+
+```python
+torch.div(..., 2**16)
+```
+
+是 out-of-place 的，因此 forward 得到了正确的 dequantized output。
+
+也就是说旧代码相当于：
+
+```text
+qO tensor
+   ↓ in-place × Mq
+dequant intermediate
+   ↓ / 2^16
+correct model output
+```
+
+真正受害的是：
+
+```text
+qO 本身已经不存在了
+```
+
+而 sparsity collector 恰好在后面还把它当作 `qO`。
+
+所以：
+
+$$
+\boxed{\text{forward 正确，但 instrumentation 错误}}
+$$
+
+这是非常典型的“统计探针观察到了被复用的临时 buffer”问题。
+
+因此 H1 已有的：
+
+```text
+SR
+activation
+A
+B
+FP sidepath
+```
+
+没有因为这个问题失效。
+
+---
+
+## 3. 三处 `mul_ → mul` 修复都对
+
+你现在已经修了三个路径：
+
+```text
+Linear pot_fp8_outlier
+Linear pot_ao_outlier_channel
+MatMul pot_fp8_outlier
+```
+
+commit diff 中三处都是：
+
+```python
+.mul_(M_q)
+```
+
+变为：
+
+```python
+.mul(M_q)
+```
+
+。([GitHub][1])
+
+这样：
+
+```python
+out_normal_quant
+```
+
+继续保持原始 quantized code，
+
+而：
+
+```python
+out_normal_dequant
+```
+
+得到一个独立 tensor。
+
+所以现在：
+
+```text
+out_normal_quant
+        ├── collector → FP8 code sparsity
+        │
+        └── mul(Mq) → dequant → model forward
+```
+
+数据流终于是干净的。
+
+我没有在 output quant code 上发现新的同类 mutation。
+
+代码里还有：
+
+```python
+out_qa_qb.mul_(...)
+out_fa_qb.mul_(...)
+out_qa_fb.mul_(...)
+```
+
+这些 in-place 操作目前不是同一类问题，因为这些 tensor 本身就是 GEMM 临时 accumulator，之后没有被当成“原始 quantized operand code”送进 sparsity collector。
+
+所以**不要机械地把所有 `mul_` 都替换掉**。
+
+---
+
+## 4. 独立 audit 本身设计是可信的
+
+这一版 audit 最重要的地方是：它没有复用正式统计器的 `_extract_sm_from_raw()`。
+
+它独立执行：
+
+```text
+FP8 raw uint8
+    ↓
+exp/mant 解析
+    ↓
+normal:    1MMM
+subnormal: 0MMM
+zero:      0000
+```
+
+而且 sign 不进入 4-bit significand。这和当前 Phase H 定义一致。
+
+当前正式 `_unpack_sm_exp()` 也已经修正为：
+
+```python
+sm = mant
+normal = exp != 0
+```
+
+并明确规定：
+
+```text
++0/-0 -> 0000
+subnormal 不加 hidden 1
 ```
 
 。
 
-第二阶段只需统计：
+T10 也确实锁住了：
+
+```text
++0          -> 0000
+-0          -> 0000
++1          -> 1000
+-1          -> 1000
++subnormal  -> 0001
+-subnormal  -> 0001
+```
+
+。
+
+因此现在有两套独立路径：
 
 $$
-z=\frac{out_{\rm normal}}{s_O}
+\text{正式 collector}
+$$
+
+和
+
+$$
+\text{raw-code audit}
+$$
+
+最后 output/O 都得到约 39.9%。
+
+这是很强的交叉验证。
+
+---
+
+# 5. 所以 output/O 的正确结论是什么？
+
+Audit 后：
+
+$$
+S_{\rm output,native}\approx39.90\%
+$$
+
+$$
+S_{\rm O,native}\approx39.91\%
+$$
+
+而独立 raw-code audit：
+
+$$
+S_{\rm sig,nz}\approx39.90\%,39.91\%.
+$$
+
+`results.md` 记录了两边完全一致。
+
+因此可以正式推翻之前：
+
+$$
+0.3\%-0.6\%
+$$
+
+的结果。
+
+现在 runtime 的总体 picture 更合理：
+
+$$
+\boxed{
+A/O/B/\text{activation significand sparsity}
+\approx 40\%-56\%
+}
+$$
+
+而不是：
+
+```text
+input 40~56%
+output ~0%
+```
+
+这意味着我上一轮提出的“SmolVLA output 可能具有特殊 1.111 分布”的假设已经被 audit 否定。
+
+**不需要再做 prequant/scale audit。**
+
+问题不是模型 numerical distribution，也不是 output scale，而是 instrumentation aliasing。
+
+---
+
+# 6. 但现在 `results.md` 有一个重要问题
+
+这是我认为你提交后还应该修的一项。
+
+当前文档写：
+
+```text
+H1 结果（native sparse_bit_rate，10ep）
+
+Expert denoise output:
+S0 = 39.9%
+S1 = 39.9%
+
+QK/PV O:
+S0 = 39.9%
+S1 = 39.9%
+```
+
+。
+
+但你的 H1-Audit config 明确只跑了：
+
+```text
+S0 FP8-all
+libero_goal
+task_id = 0
+n_episodes = 1
+```
+
+。
+
+也就是说真正 post-fix 测量到的证据是：
+
+$$
+\boxed{\text{S0 task0 × 1ep}}
+$$
+
+而不是：
+
+$$
+\boxed{\text{S0 10ep + S1 10ep}}
+$$
+
+原来的 H1 10ep 是在 bug 存在时跑的，所以那些 H1 CSV 里的：
+
+```text
+output
+O
+```
+
+字段已经被污染。
+
+**修代码不会自动修复之前生成的 CSV。**
+
+因此现在不能把 audit 的：
+
+```text
+39.90%
+```
+
+直接当成：
+
+```text
+H1 S0 10ep aggregate = 39.90%
+H1 S1 10ep aggregate = 39.90%
+```
+
+---
+
+## 建议 `results.md` 改成这样
+
+H1 表里：
+
+| Metric                    |                 H1 S0 |                 H1 S1 | H1-Audit S0 task0 |
+| ------------------------- | --------------------: | --------------------: | ----------------: |
+| VLM prefill activation    |                40.70% |                40.65% |                 — |
+| Expert denoise A          |                56.10% |                55.55% |                 — |
+| Expert denoise activation |                40.58% |                40.65% |                 — |
+| Expert denoise output     | **INVALID (pre-fix)** | **INVALID (pre-fix)** |        **39.90%** |
+| QK/PV O                   | **INVALID (pre-fix)** | **INVALID (pre-fix)** |        **39.91%** |
+| FP sidepath               |                 1.23% |                 1.27% |                 — |
+
+然后写：
+
+> H1-Audit 在 S0 Goal task0 ×1ep 上确认修复后 output/O native significand sparsity 为 39.90%/39.91%，并与独立 E4M3 raw-code audit 一致。原 H1 10ep 的 output/O 统计产生于修复前，因此不作为 H1 aggregate 数值使用；H2 将使用修复后的 collector 得到正式 multi-task aggregate。
+
+这样最严谨。
+
+---
+
+# 7. H0 那张表也有相同问题
+
+现在 §3.1 写：
+
+```text
+expert denoise output/O:
+native = 39.90 / 39.91
+```
+
+。
+
+如果 H0 没有在 commit `e4034aa` 后重新执行，那么这也不是原 H0 的真实测量值。
+
+应写成：
+
+```text
+original H0 output/O:
+INVALID — instrumentation bug
+```
+
+然后单独注明：
+
+```text
+H1-Audit post-fix:
+output = 39.90%
+O      = 39.91%
+```
+
+除非你已经在修复后重新跑了一次 H0。
+
+从当前远端提交记录来看，我看到新增的是：
+
+```text
+s0_fp8_all_h1_audit_task0.yaml
+```
+
+没有看到 S1 audit 或完整 H0 rerun 的证据，所以建议按照“未 rerun”处理。([GitHub][1])
+
+---
+
+# 8. 不需要因此重跑整个 H1，H2 可以直接继续
+
+这里不必为了这个问题浪费实验时间。
+
+原 H1 仍然保留了很多有效信息：
+
+$$
+S0\,SR=90\%,\qquad S1\,SR=80\%
 $$
 
 以及：
 
 ```text
-|z| / 448
-clip ratio
-log2 magnitude histogram
+activation
+A
+B
+sidepath
+static weight
 ```
 
-从而判断到底是：
+这些统计发生在 output code mutation 之前，或者来自独立 static collector，因此仍然有效。
 
-```text
-scale 问题
-```
-
-还是：
-
-```text
-GEMM output 数值本身的 significand 分布
-```
-
-。
-
----
-
-## 我建议现在严格按这个顺序
-
-1. **先在已有 H1 CSV 上保留当前结果，不重跑 H1。**
-2. 加 `fp_code_audit`，只修改 `stat_manager.py + main.py`。
-3. 不改 `quant_methods.py`。
-4. 跑 `S0 Goal task0 × 1 episode`。
-5. 看：
-
-   * `sig_nonzero_zero_rate`
-   * `mant_111_nonzero_rate`
-   * `saturation_rate`
-6. 再决定是否需要第二阶段 scale audit。
-
-这样只需要一个很短的 rollout，就能明确回答现在最关键的问题：
+所以最合理的路线是：
 
 $$
 \boxed{
-\text{output/O 的 }0.5\%\text{ 到底是统计 bug，还是 SmolVLA 的真实 FP8 code 分布}
+\text{保留 H1 有效字段}
+\rightarrow
+\text{将 H1 output/O 标 INVALID}
+\rightarrow
+\text{直接跑修复后的 H2}
 }
 $$
 
-并且这套 audit 不改变 forward、scale、outlier mask、RNG 或 SR，因此不会污染你已经完成的 H1。
+H2 有：
+
+```text
+10 tasks × 3 episodes
+```
+
+它会自然给出真正可靠的：
+
+```text
+S0 output/O aggregate
+S1 output/O aggregate
+```
+
+届时 H2 本身就能告诉你它是不是稳定在 39.9%左右。
+
+如果你特别希望保留“H1→H2 收敛比较”中的 output/O，则需要重新跑：
+
+```text
+S0 10 tasks ×1ep
+S1 10 tasks ×1ep
+```
+
+总共 20 episodes。
+
+但从研究效率看，我认为**没有必要**。直接 H2 更划算。
+
+---
+
+# 9. T11 是好的 regression test，但还可以再加强
+
+当前 T11 检查：
+
+```python
+rate > 0.10
+```
+
+目的是确保不会再次掉回约 1% 的异常值。
+
+这足以防止本次 bug 回归，所以现在可以用。
+
+但它实际上没有直接验证：
+
+> `out_normal_quant` 没有被修改。
+
+建议未来改成更直接的 invariant：
+
+```text
+collected output code:
+all finite
+abs(code) <= 448
+```
+
+例如：
+
+```python
+assert torch.isfinite(captured_output_code).all()
+assert captured_output_code.abs().max() <= 448
+```
+
+然后 sparsity：
+
+```python
+assert 0.1 < rate < 0.8
+```
+
+作为第二层 sanity check。
+
+这样比只检查 `rate > 0.10` 更能指向真正的 regression。
+
+不过这属于 P2，不阻塞 H2。
+
+---
+
+# 10. 一个很重要的研究层面修正
+
+当前结果应当表述为：
+
+$$
+\boxed{
+\text{FP8 4-bit significand sparsity}
+}
+$$
+
+而不是笼统说：
+
+$$
+\text{FP8 bit sparsity}.
+$$
+
+因为你统计的宽度明确是：
+
+$$
+M+1
+$$
+
+E4M3：
+
+$$
+1MMM=4\ bits
+$$
+
+而不是存储编码：
+
+$$
+SEEEEMMM=8\ bits.
+$$
+
+`_spec_bitwidth()` 当前也明确返回 `mant_bits + 1`。
+
+所以目前得到：
+
+```text
+activation ≈40%
+A          ≈50–56%
+B          ≈40%
+output/O   ≈40%
+```
+
+严格名称最好统一成：
+
+```text
+native significand sparse-bit rate
+```
+
+这与后续 EffLoc 的：
+
+```text
+exponent-aligned effective bit sparsity
+```
+
+又是不同指标。
+
+现在 `results.md` 已经开始注明“4-bit significand（1MMM）口径”，这一点是正确的。
+
+---
+
+## 当前 Phase H Gate
+
+我现在会正式给出：
+
+```text
+H0 structural pipeline          PASS
+H1 pilot rollout               PASS
+H1-Audit                       PASS
+FP significand extractor        PASS
+output/O aliasing root cause    CONFIRMED
+mul_ -> mul fix                PASS
+T10/T11 regression protection  PASS
+
+H1 SR                           VALID
+H1 activation/A/B              VALID
+H1 weight sparsity             VALID
+H1 sidepath                    VALID
+H1 pre-fix output/O aggregate  INVALID
+
+Audit S0 task0 output/O        VALID (~39.9%)
+
+H2 READY                        YES
+```
+
+所以现在**不需要继续追 output/O 这个异常，也不需要做 scale audit**。这个问题已经闭环。
+
+在启动 H2 前我只建议做一件事：把 `results.md` 里 H1/H0 的 `39.9%` 标记成 **H1-Audit post-fix measurement，而不是原 H1/H0 aggregate**。然后 H2 用现在的修复版本直接跑，H2 的 output/O 才作为正式 multi-task 数据。
+
+这次 audit 实际上非常有价值：它确认了**模型本身的 runtime significand sparsity没有异常，异常来自 instrumentation 的 in-place aliasing**，因此 Phase H 后续的统计基础现在比之前可靠得多。
+
+[1]: https://github.com/wolf111108/SmolVLA_qtrsc/commit/HEAD "fix: H1-Audit 修正 output/O 稀疏度统计 bug (0.5%→39.9%) · wolf111108/SmolVLA_qtrsc@e4034aa · GitHub"
