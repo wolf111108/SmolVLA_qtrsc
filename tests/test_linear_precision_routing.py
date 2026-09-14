@@ -143,6 +143,17 @@ def test_t7_empty_target_no_match():
         resolve_linear_quant_config(q, "q_proj", "vlm.layers.0.self_attn.q_proj")
 
 
+def test_t8_target_typo_fail_fast():
+    # "componet" (typo) must NOT silently match all modules.
+    q = _cfg(overrides=[{
+        "name": "typo_target",
+        "target": {"componet": "vlm"},
+        "config": {"w_bit": 4},
+    }])
+    with pytest.raises(ValueError):
+        resolve_linear_quant_config(q, "q_proj", "vlm.layers.0.self_attn.q_proj")
+
+
 if __name__ == "__main__":
     test_t1_no_overrides_base_config()
     test_t2_vlm_attention_override()
@@ -151,4 +162,5 @@ if __name__ == "__main__":
     test_t5_later_override_wins()
     test_t6_per_site_guard()
     test_t7_empty_target_no_match()
+    test_t8_target_typo_fail_fast()
     print("all linear precision routing tests passed")

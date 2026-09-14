@@ -398,6 +398,17 @@ _ALLOWED_LINEAR_OVERRIDE_KEYS = {
     "test_method",
 }
 
+# Selectors an override `target` may use (mirrors _matches_target). A target
+# with an unknown key (e.g. "componet" typo) would otherwise silently match
+# ALL modules, so validate strictly (manual §3.3, audit §8).
+_ALLOWED_LINEAR_TARGET_KEYS = {
+    "module_id",
+    "module_ids",
+    "component",
+    "layer",
+    "operator",
+}
+
 
 def resolve_linear_quant_config(
     quant_config: dict[str, Any],
@@ -434,6 +445,18 @@ def resolve_linear_quant_config(
         if not isinstance(target, dict) or not target:
             raise ValueError(
                 f"linear.overrides[{idx}].target must be a non-empty dict"
+            )
+
+        unknown_target = set(target) - _ALLOWED_LINEAR_TARGET_KEYS
+        if unknown_target:
+            raise ValueError(
+                f"Unsupported linear override target fields at index "
+                f"{idx}: {sorted(unknown_target)}"
+            )
+
+        if not any(k in target for k in _ALLOWED_LINEAR_TARGET_KEYS):
+            raise ValueError(
+                f"linear.overrides[{idx}].target has no supported selector"
             )
 
         if not isinstance(patch, dict):
@@ -583,6 +606,11 @@ def _should_wrap(
     quant_config: dict[str, Any],
 ) -> bool:
     linear_cfg = quant_config.get("linear", {})
+
+    # linear.enabled=false must disable Linear wrapping (audit §11).
+    if not linear_cfg.get("enabled", True):
+        return False
+
     include_patterns = linear_cfg.get("include", ["*"])
     exclude_patterns = linear_cfg.get("exclude", [])
 
