@@ -1,668 +1,978 @@
-有问题，而且我认为当前 `results.md` 里“runtime activation/output 的 native bit sparsity ≈ 0% 是符合预期”的解释**不能成立**。
+我重新读了仓库当前 `main` 上的最新 `model_wrapper.py`、G6 四个配置和运行脚本。结论是：**component-aware precision routing 的核心实现方向是对的，G6 配置本身也基本正确，但现在还不建议直接开始 4×100 episodes。至少有 2 个阻塞问题、2 个框架安全问题需要先修。**
 
-我重新检查了最新远端 H0 结果、`stat_manager.py`、`quant_methods.py`、`quant_spec.py` 和汇总脚本。H0 的结构完整性确实很好：S0/S1 都成功、flow step 0–9 齐全、A/B/O 齐全、sidepath 约 1.3%、static weight 行数正确；但结果文档随后把 runtime ≈0% 解释成“E4M3 非零 code 的 mantissa 几乎无全零 bit”，这一解释和实际统计代码是矛盾的。
+## 审计结论
 
-## 1. 首先：按你现在的统计定义，FP8 activation 的 bit sparsity 不应该天然接近 0%
+| 项目                                   | 状态                       | 严重度         |
+| ------------------------------------ | ------------------------ | ----------- |
+| `resolve_linear_quant_config()`      | ✅ 正确                     | —           |
+| override → physical `module_id`      | ✅ 正确                     | —           |
+| VLM/Expert 同名 operator 可不同 precision | ✅ 已实现                    | —           |
+| `per_site` mixed-precision guard     | ✅ 正确                     | —           |
+| G6-A/B/C/D YAML precision routing    | ✅ 正确                     | —           |
+| 224 Linear / 64 MatMul 理论计数          | ✅ 正确                     | —           |
+| `run_smoke.sh` repo root             | ❌ 路径少一层 `..`             | **BLOCKER** |
+| `run_goal.sh` repo root              | ❌ 同上                     | **BLOCKER** |
+| `audit_routing.py` 本地 `src` 路径       | ❌ 少一层 `..`               | **HIGH**    |
+| override `target` typo safety        | ⚠️ 可能静默匹配全部 Linear       | **HIGH**    |
+| Gate 3 raw equivalence               | ⏳ 尚未完成                   | **必须先做**    |
+| Gate 5 task0×1                       | ⏳ 尚未完成                   | **必须先做**    |
+| audit count 自动 assert                | ⚠️ 目前只打印                 | MEDIUM      |
+| `linear.enabled`                     | ⚠️ `_should_wrap()` 没使用它 | LOW/旧问题     |
 
-当前 `compute_sparse_stats_fp()` 对 E4M3 **不是统计完整 8-bit `S EEEE MMM`**，而是统计：
+下面详细解释。
 
-$$
-1_{\text{hidden}} + 3_{\text{mantissa}}
-$$
+---
 
-总共 **4 bit significand**。代码明确设置 `n = mant_bits + 1`，E4M3 因此就是 4 bit，然后逐个 bit 累加 zero-bit 数。
+# 1. 核心 precision routing 实现是正确的
 
-因此它统计的是：
+现在 `create_quantized_linear()` 已经增加：
 
-$$
-S_{\rm sig}
-=
-\frac{\text{4-bit significand 中的 0 bit 数}}
-{4N}
-$$
-
-而不是“mantissa 是否整个为 000”。
-
-举几个最简单的 E4M3 正常数：
-
-| E4M3 数值 | 当前统计的 significand | zero-bit sparsity |
-| ------: | ----------------: | ----------------: |
-|     1.0 |            `1000` |               75% |
-|   1.125 |            `1001` |               50% |
-|    1.25 |            `1010` |               50% |
-|     1.5 |            `1100` |               50% |
-|    1.75 |            `1110` |               25% |
-|   1.875 |            `1111` |                0% |
-
-所以只有 significand 恰好接近：
-
-```text
-1111
+```python
+module_id: str | None = None
 ```
 
-时才是 0%。
+并在真正构造 `QuantizedLinear` 前执行：
 
-要让几千万甚至几亿个 runtime activation/output 聚合后趋近 0%，相当于说这些 FP8 数值的 significand 几乎全部都是 `1.111`。对于 VLM + Action Expert 所有 Linear/MatMul 的 activation/output，这极不合理。
+```python
+layer_config, matched_overrides = resolve_linear_quant_config(
+    quant_config=quant_config,
+    layer_type=layer_type,
+    module_id=physical_id,
+)
+```
 
-更强的内部 sanity check 是：H0 的 **S0 FP8 static weight 用的是同一个 `compute_sparse_stats_fp()`，结果却是 41.52%**。
+因此 precision 不再只由：
+
+```text
+q_proj
+k_proj
+...
+```
+
+决定，而是可以进一步根据 physical module identity 覆盖。并且最终 effective config 真正用于 `a_bit/w_bit/o_bit/method` 构造，不只是 metadata。
+
+同时你已经把：
+
+```python
+module_id=module_id
+```
+
+传入 VLM Attention、VLM MLP、Expert Attention、Expert MLP 的所有 `create_quantized_linear()` 调用。也就是说：
+
+```text
+vlm.layers.3.self_attn.q_proj
+expert.layers.3.self_attn.q_proj
+```
+
+现在确实可以获得不同的 effective precision。
+
+这一部分我认为 **PASS**。
+
+---
+
+# 2. Resolver 的 override precedence 也是正确的
+
+现在：
+
+```python
+base = dict(quant_config.get(layer_type, {}) or {})
+```
+
+先取 operator base config，然后按 YAML 顺序：
+
+```python
+if _matches_target(module_id, target):
+    base.update(patch)
+```
+
+因此实现的是：
+
+$$
+\text{operator default}
+\rightarrow
+\text{override 0}
+\rightarrow
+\text{override 1}
+\rightarrow\cdots
+$$
+
+后匹配项覆盖前匹配项，符合之前设计。你还限制了 override 可修改：
+
+```text
+a_bit
+w_bit
+o_bit
+d_bit
+p
+outlier_ratio
+method
+test_method
+```
+
+未知 **config field** 会直接报错，这是好的 fail-fast。
+
+---
+
+# 3. `per_site` guard 实现正确，而且非常必要
+
+你现在明确做了：
+
+```python
+if overrides and granularity != "per_site":
+    raise ValueError(...)
+```
+
+这是正确的。
+
+因为现在完全可能出现：
+
+```text
+VLM q_proj    = W4
+Expert q_proj = FP8
+```
+
+如果两者还共用一个 calibration scale，就会产生语义错误。
+
+而当前：
+
+```python
+resolve_linear_scale_group(..., "per_site")
+```
+
+产生：
+
+```text
+vlm_q_proj, layer_idx
+expert_q_proj, layer_idx
+```
+
+两套独立 scale identity。
 
 因此：
 
 $$
-\boxed{\text{“E4M3 本身导致 runtime bit sparsity ≈0” 基本可以排除}}
+\boxed{\text{precision routing 与 scale persistence 当前是相容的}}
 $$
+
+这一项也是 **PASS**。
 
 ---
 
-# 2. 当前 FP bit extractor 确实存在一个代码错误
+# 4. G6 四个配置本身是正确的
 
-当前代码先拆：
+G6-A：
+
+```text
+VLM Linear    = FP8
+Expert Linear = FP8
+```
+
+因为 include 同时包含：
+
+```yaml
+- vlm.*
+- expert.*
+```
+
+且没有 override。
+
+G6-B 默认所有 Linear FP8，然后：
+
+```yaml
+target:
+  module_id: vlm.layers.*.self_attn.*_proj
+config:
+  w_bit: 4
+  method: pot_ao_outlier
+```
+
+所以得到：
+
+$$
+\boxed{
+VLM\ Attention=A8W4O8,\quad
+VLM\ MLP=A8W8O8,\quad
+Expert=A8W8O8
+}
+$$
+
+完全正确。
+
+G6-C 对：
+
+```text
+vlm.layers.*.mlp.*_proj
+```
+
+做 W4，因此理论上：
+
+$$
+16\times3=48
+$$
+
+个 W4，其余 176 个 Linear FP8。
+
+G6-D：
+
+```text
+vlm.layers.*.*.*_proj
+```
+
+会覆盖 VLM 的 Attention + MLP：
+
+$$
+16\times7=112
+$$
+
+所以：
+
+```text
+112 VLM W4
+112 Expert FP8
+```
+
+也是正确的。
+
+而实验文档记录的 Gate 2：
+
+```text
+G6-A 224/0
+G6-B 160/64
+G6-C 176/48
+G6-D 112/112
+MatMul = 64
+```
+
+与理论完全一致。
+
+---
+
+# 5. BLOCKER 1：`run_smoke.sh` 的 `REPO_ROOT` 算错了
+
+现在代码：
+
+```bash
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+```
+
+
+
+但脚本实际位置是：
+
+```text
+repo/
+└── experiments/
+    └── 2026-09-10_phaseG_w4-root-cause/
+        └── tasks/
+            └── vlm-selective-expert-fp8/
+                └── scripts/
+                    └── run_smoke.sh
+```
+
+从 `scripts/` 回 repo：
+
+```text
+..          task
+../..       tasks
+../../..    experiment
+../../../.. experiments
+../../../../.. repo
+```
+
+需要 **5 个 `..`**。
+
+你现在只有 4 个，因此：
+
+```text
+REPO_ROOT = ~/VLA_tcs2/experiments
+```
+
+而不是：
+
+```text
+~/VLA_tcs2
+```
+
+后面：
+
+```bash
+TASK="$REPO_ROOT/experiments/..."
+```
+
+会变成：
+
+```text
+~/VLA_tcs2/experiments/experiments/...
+```
+
+而且：
+
+```bash
+cd "$REPO_ROOT"
+python main.py
+```
+
+会在：
+
+```text
+~/VLA_tcs2/experiments
+```
+
+寻找 `main.py`。
+
+### 应改成
+
+```bash
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
+```
+
+这不是 cosmetic issue，是 **会直接导致 smoke 脚本无法按预期执行的 blocker**。
+
+---
+
+# 6. BLOCKER 2：`run_goal.sh` 有完全相同的问题
+
+当前也是：
+
+```bash
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+```
+
+
+
+必须同样改成：
+
+```bash
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
+```
+
+否则正式 G6 运行脚本的：
+
+```text
+TASK
+out
+main.py
+```
+
+路径都会错。
+
+所以目前 **不要直接执行 `run_goal.sh`**。
+
+---
+
+# 7. HIGH：`audit_routing.py` 的 `sys.path` 也少了一层
+
+现在：
 
 ```python
-sign = (raw >> sign_shift) & 0x1
-mant = raw & ((1 << mant_bits) - 1)
-exp  = (raw >> mant_bits) & ((1 << exp_bits) - 1)
-
-sm = (sign << mant_bits) | mant
-nonzero = (exp != 0) | (mant != 0)
+sys.path.insert(
+    0,
+    os.path.join(
+        os.path.dirname(__file__),
+        "..", "..", "..", "..", "src"
+    )
+)
 ```
+
+
+
+从：
+
+```text
+.../task/scripts
+```
+
+四个 `..` 只能到：
+
+```text
+repo/experiments
+```
+
+所以实际插入的是：
+
+```text
+repo/experiments/src
+```
+
+而不是：
+
+```text
+repo/src
+```
+
+正确应该是五层：
+
+```python
+sys.path.insert(
+    0,
+    os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..", "..", "..", "..", "..", "src"
+        )
+    )
+)
+```
+
+更推荐彻底避免数 `..`：
+
+```python
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[5]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+```
+
+这里尤其需要修，因为现在 Gate 2 虽然显示已经跑通，但错误 `sys.path` 意味着：
+
+> audit 脚本可能依赖 conda 环境里已有的 editable install，而不是明确保证加载当前 checkout 的 `src/vla_tcs2`。
+
+换句话说，**Gate 2 的结果目前可信，但它的 reproducibility 不够强**。
+
+你脚本后面计算 output repo root 的“dirname 六次”反而是正确的；错的是最前面的 import path。
+
+---
+
+# 8. HIGH：override 的 `target` typo 可能造成“全模型误匹配”
+
+这是我这次审计里发现的最重要的 framework safety 问题。
+
+当前 `_matches_target()` 开头：
+
+```python
+if not target:
+    return False
+```
+
+然后只识别：
+
+```text
+module_id
+module_ids
+component
+layer
+operator
+```
+
+最后直接：
+
+```python
+return True
+```
+
+
+
+这意味着如果有人误写：
+
+```yaml
+target:
+  componet: vlm
+```
+
+注意把 `component` 写成了 `componet`。
+
+`target` 并不为空，所以不会在开头返回 False。
+
+之后：
+
+```python
+target.get("module_id")  -> None
+target.get("component")  -> None
+target.get("layer")      -> None
+target.get("operator")   -> None
+```
+
+最后：
+
+```python
+return True
+```
+
+结果是：
+
+$$
+\boxed{\text{这个 typo 可能匹配所有 Linear}}
+$$
 
 然后：
 
+```yaml
+w_bit: 4
+```
+
+可能把整个 wrapped model 全改成 W4。
+
+这是危险的。
+
+### 当前 G6 不受影响
+
+因为你的配置用的是合法：
+
+```yaml
+target:
+  module_id: vlm.layers.*.self_attn.*_proj
+```
+
+所以当前四组不会因此路由错误。
+
+但是既然你已经把它做成 framework feature，我建议正式 rollout 前就修。
+
+最小修法是在 `resolve_linear_quant_config()` 里验证 target：
+
 ```python
-hidden = nonzero << mant_bits
-sm_full = sm | hidden
+_ALLOWED_LINEAR_TARGET_KEYS = {
+    "module_id",
+    "module_ids",
+    "component",
+    "layer",
+    "operator",
+}
+
+unknown_target = set(target) - _ALLOWED_LINEAR_TARGET_KEYS
+if unknown_target:
+    raise ValueError(
+        f"Unsupported linear override target fields at index {idx}: "
+        f"{sorted(unknown_target)}"
+    )
+
+if not any(k in target for k in _ALLOWED_LINEAR_TARGET_KEYS):
+    raise ValueError(
+        f"linear.overrides[{idx}].target has no supported selector"
+    )
 ```
 
-但注释明明写的是：
+这样：
 
-```text
-Add hidden leading 1 for normal numbers (exp != 0)
+```yaml
+componet: vlm
 ```
 
-实际条件却用了：
-
-```python
-(exp != 0) | (mant != 0)
-```
-
-。
-
-这至少造成两个错误。
-
-### 错误 A：subnormal 被错误加 hidden 1
-
-E4M3 最小正 subnormal：
-
-```text
-raw = 0000 001
-```
-
-应该统计为：
-
-```text
-0001
-```
-
-当前代码却变成：
-
-```text
-1001
-```
-
-因为虽然 `exp=0`，但 `mant != 0`，于是错误加入 hidden 1。
-
-### 错误 B：`-0` 不会被统计成全零
-
-对于：
-
-```text
-+0 -> 0x00
--0 -> 0x80
-```
-
-当前逻辑得到：
-
-```text
-+0 -> 0000
--0 -> 1000
-```
-
-这对你现在的 outlier-native correction 尤其危险。
+立即 fail-fast。
 
 ---
 
-# 3. `-0` 问题会直接破坏当前 native bit sparsity 的扣除公式
+# 9. Audit 脚本目前“能看结果”，但还不是严格 Gate
 
-你的 outlier 路径现在确实是：
-
-```python
-x_normal_fp = x * (~x_channel_mask)
-```
-
-protected 的 activation 被 normal path 人工乘成 0，然后再进行 FP8 quantization。
-
-如果原值是负数，例如：
-
-```text
--2.5 × 0
-```
-
-IEEE 浮点很可能得到：
-
-```text
--0.0
-```
-
-而当前 extractor：
-
-```text
--0.0 -> 1000
-```
-
-因此这个人工 zero 实际在当前 4-bit statistic 中只有：
-
-$$
-3
-$$
-
-个 zero bits，不是 4 个。
-
-但是 export 时直接假设：
+当前：
 
 ```python
-protected_bits = protected_elements * bitwidth
+is_w4 = str(w_bit) == "4"
 
-sparse_bits_native
-    = sparse_bits_reported - protected_bits
+if is_w4:
+    n_w4 += 1
+else:
+    n_fp8 += 1
 ```
 
-即每个 protected E4M3 元素都被认为贡献了 **4 个人工 zero bits**。
 
-所以对于负 protected value，实际：
 
-$$
-3
-$$
-
-却扣：
-
-$$
-4
-$$
-
-native numerator 被过度扣减。
-
-这意味着：
-
-$$
-\boxed{\text{当前 FP sparse\_bit\_rate\_native 数值本身就不严格正确}}
-$$
-
-不过要注意：H0 总 sidepath 只有大约 1.3%。所以**仅仅这个 `-0` bug 通常不足以把一个约 40% 的 reported sparsity 一路打成 0%**。
-
-这说明还必须继续检查 H0 CSV 中：
-
-$$
-S_{\rm reported}
-$$
-
-本身到底是多少。
-
----
-
-# 4. 现在最关键的诊断：先区分 reported≈0，还是只有 native≈0
-
-当前汇总脚本只读取：
-
-```python
-sparse_bits_native
-total_bits_native
-```
-
-所以 `results.md` 现在只告诉我们：
-
-```text
-native ≈ 0
-```
-
-却没有告诉我们：
-
-```text
-reported 到底是多少
-```
-
-汇总脚本确实只聚合 native numerator/denominator。
-
-这两个情况意义完全不同。
-
-### 情况 A
-
-如果实际是：
-
-```text
-reported sparse bit rate ≈ 40%
-protected bit fraction   ≈ 1.3%
-native sparse bit rate   ≈ 0%
-```
-
-那几乎可以直接判定：
-
-> **native correction 的 partition 与 structured record 没有一一对应。**
+所以任何不是 `"4"` 的精度都会被算成 FP8。
 
 例如：
 
 ```text
-partition total_elements != structured total_elements
-partition calls != structured calls
+w_bit = 8
+w_bit = 16
+w_bit = e5m2
 ```
 
-或者某些 partition 被多次累计。
-
-### 情况 B
-
-如果：
+理论上都会落进：
 
 ```text
-reported sparse bit rate ≈ 1.3%
-protected bit fraction   ≈ 1.3%
-native sparse bit rate   ≈ 0%
+n_fp8 += 1
 ```
 
-那说明问题更靠前：
-
-> **runtime FP code 的 sparse-bit extraction 就已经异常。**
-
-因为几乎所有 reported zero bits 都只来自 outlier mask 人工制造的 zero。
-
-### 情况 C
-
-如果：
+G6 当前 YAML 确实只有：
 
 ```text
-reported ≈ 35~45%
-native  ≈ 35~45%
+e4m3
+4
 ```
 
-那代码基本正常，只是 `results.md`/summary 的解释或读取字段出了问题。
+因此当前统计数字没问题，但作为 audit gate 建议改成严格判断：
+
+```python
+if str(w_bit) == "4":
+    n_w4 += 1
+elif str(w_bit).lower() == "e4m3":
+    n_fp8 += 1
+else:
+    raise AssertionError(
+        f"Unexpected w_bit={w_bit!r} at {mid}"
+    )
+```
+
+还应该同时验证 method：
+
+```python
+if str(w_bit) == "4":
+    assert module.method == "pot_ao_outlier"
+else:
+    assert module.method == "pot_fp8_outlier"
+```
+
+现在 CSV 已经把 method 输出出来了，但脚本没有 assert。
 
 ---
 
-# 5. 现在马上运行这个诊断脚本
+# 10. 建议让 routing Gate 自动判断 count
 
-我建议先**不要重跑 H0**。已有 CSV 就足够定位。
+当前 audit 只是：
 
-在仓库根目录运行：
+```text
+print FP8
+print W4
+print Total
+print MatMul
+```
+
+不会因为 count 错误返回非零状态。
+
+建议增加：
+
+```python
+EXPECTED = {
+    "g6a_all_fp8_control": (224, 0, 64),
+    "g6b_vlm_attn_w4_expert_fp8": (160, 64, 64),
+    "g6c_vlm_mlp_w4_expert_fp8": (176, 48, 64),
+    "g6d_vlm_all_w4_expert_fp8": (112, 112, 64),
+}
+
+expected_fp8, expected_w4, expected_mm = EXPECTED[cfg_name]
+
+assert n_fp8 == expected_fp8
+assert n_w4 == expected_w4
+assert n_matmul == expected_mm
+```
+
+那么 Gate 2 才真正是：
+
+```text
+exit 0 = PASS
+non-zero = FAIL
+```
+
+而不是人工看日志。
+
+---
+
+# 11. `linear.enabled` 目前其实没有生效
+
+这是一个旧问题，不是本次新增的。
+
+配置里有：
+
+```yaml
+linear:
+  enabled: true
+```
+
+但是 `_should_wrap()` 只读取：
+
+```python
+include_patterns
+exclude_patterns
+```
+
+完全不读取：
+
+```python
+linear_cfg["enabled"]
+```
+
+
+
+所以理论上：
+
+```yaml
+linear:
+  enabled: false
+```
+
+只要 quantization 顶层：
+
+```yaml
+enabled: true
+```
+
+Linear 仍然会被 wrap。
+
+当前 G6 全部是：
+
+```yaml
+enabled: true
+```
+
+因此不影响当前实验。
+
+但顺手可以修成：
+
+```python
+def _should_wrap(module_name, quant_config):
+    linear_cfg = quant_config.get("linear", {})
+
+    if not linear_cfg.get("enabled", True):
+        return False
+
+    ...
+```
+
+我把它定为 LOW，是因为它不影响当前 G6，但属于 framework semantics bug。
+
+---
+
+# 12. G6 calibration 的 scale isolation 没问题
+
+这一点我专门核查了。
+
+当前 G6：
+
+```yaml
+linear_scale_granularity: per_site
+```
+
+
+
+对应：
+
+```python
+if granularity == "per_site":
+    return f"{component}_{name}", layer_idx
+```
+
+
+
+因此比如：
+
+```text
+VLM layer3 q_proj
+→ vlm_q_proj_w_scale_3.p
+
+Expert layer3 q_proj
+→ expert_q_proj_w_scale_3.p
+```
+
+不会发生：
+
+```text
+VLM W4 scale
+```
+
+覆盖：
+
+```text
+Expert FP8 scale
+```
+
+的情况。
+
+这部分可以放心。
+
+---
+
+# 13. Calibration policy 对当前 G6 也没问题
+
+现在所有：
+
+```text
+q/k/v/o/gate/up/down
+qk/pv
+```
+
+都明确：
+
+```yaml
+recalibrate
+```
+
+
+
+虽然 `resolve_calibration_policy()` 目前并没有 component-aware policy，只看：
+
+```text
+layer_type
+layer_idx
+```
+
+
+
+但因为 G6 所有 physical site 都重新校准，所以当前不产生错误。
+
+只是以后如果想做：
+
+```text
+VLM q_proj recalibrate
+Expert q_proj reuse
+```
+
+现有 `calibration_policy` 还表达不了。
+
+这不是 G6 blocker。
+
+---
+
+# 14. Gate 3 现在确实还缺
+
+你最新 `experiment_setup.md` 已经诚实记录：
+
+```text
+[x] Gate 0
+[x] Gate 1
+[x] Gate 2
+[ ] Gate 3 raw Linear equivalence
+[ ] Gate 4 calibration smoke
+[ ] Gate 5 task0×1
+[ ] Gate 6 Goal×100
+```
+
+
+
+这个顺序是对的。
+
+尤其现在 `create_quantized_linear()` signature 和 routing 都改过，我不建议跳过 Gate 3。
+
+需要验证：
+
+$$
+QLinear_{\text{mode=raw}}(x)
+=
+F.linear(x,W,b)
+$$
+
+至少抽：
+
+```text
+VLM q_proj
+VLM down_proj
+Expert q_proj
+Expert down_proj
+```
+
+并包含 G6-B/C/D 下实际被 override 的 module。
+
+实际上 raw path 仍然就是：
+
+```python
+if self.mode == "raw":
+    return F.linear(x, self.weight, self.bias)
+```
+
+
+
+所以理论上不会有问题，但 **Gate 的价值是确认 wrap/copy/routing 没有破坏参数**。
+
+---
+
+# 15. Gate 5 目前没有对应执行脚本
+
+现在 repo 里的 `run_smoke.sh` 实际只做：
 
 ```bash
-python - <<'PY'
-import csv
-import glob
-from collections import defaultdict
-
-ROOT = "outputs/2026-09-13_phaseH_accuracy-preserving-sparsity/h0_smoke"
-
-for cfg in ["s0_fp8_all", "s1_expert_w4"]:
-    paths = glob.glob(
-        f"{ROOT}/{cfg}/task*/sparsity/module_sparsity.csv"
-    )
-
-    print("\n" + "=" * 100)
-    print(cfg, "files =", len(paths))
-    print("=" * 100)
-
-    rows = []
-    for p in paths:
-        with open(p, newline="") as f:
-            rows.extend(csv.DictReader(f))
-
-    acc = defaultdict(lambda: {
-        "sb_r": 0,
-        "tb_r": 0,
-        "pb": 0,
-        "sb_n": 0,
-        "tb_n": 0,
-        "pe": 0,
-        "te": 0,
-    })
-
-    for r in rows:
-        k = (
-            r["component"],
-            r["phase"],
-            r["tensor_role"],
-        )
-        a = acc[k]
-
-        a["sb_r"] += int(float(r["sparse_bits_reported"]))
-        a["tb_r"] += int(float(r["total_bits_reported"]))
-        a["pb"]   += int(float(r["protected_bits"]))
-        a["sb_n"] += int(float(r["sparse_bits_native"]))
-        a["tb_n"] += int(float(r["total_bits_native"]))
-        a["pe"]   += int(float(r["protected_elements"]))
-        a["te"]   += int(float(r["total_elements_reported"]))
-
-    print(
-        f"{'component':10s} {'phase':10s} {'role':12s} "
-        f"{'reported':>10s} {'protected':>10s} {'native':>10s}"
-    )
-
-    for k, a in sorted(acc.items()):
-        reported = a["sb_r"] / a["tb_r"] if a["tb_r"] else 0
-        protected = a["pb"] / a["tb_r"] if a["tb_r"] else 0
-        native = a["sb_n"] / a["tb_n"] if a["tb_n"] else 0
-
-        print(
-            f"{k[0]:10s} {k[1]:10s} {k[2]:12s} "
-            f"{reported:10.4%} {protected:10.4%} {native:10.4%}"
-        )
-PY
+python main.py ... --skip-evaluation
 ```
 
-这个输出基本就能一锤定音。
+也就是 **Gate 4 calibration-only smoke**。
 
-我最想看到的是类似：
+它没有做：
 
 ```text
-expert denoise activation
-reported   = ?
-protected  = ?
-native     = ?
-
-expert denoise output
-reported   = ?
-protected  = ?
-native     = ?
-
-expert denoise A/B/O
-...
+task0 × 1 episode
 ```
+
+而实验文档又单独定义了 Gate 5。
+
+因此建议补：
+
+```text
+run_task0_smoke.sh
+```
+
+而不是拿完整 10-task config 直接试。
 
 ---
 
-# 6. 同时检查 partition 和 structured record 是否严格一一对应
+# 我建议现在修改这几处
 
-现在代码虽然使用相同的五维 key：
+按优先级：
 
 ```text
-module_id
-phase
-flow_step
-tensor_role
-attention_kind
+P0  修 run_smoke.sh REPO_ROOT
+P0  修 run_goal.sh REPO_ROOT
+
+P1  修 audit_routing.py local src path
+P1  override target unknown-key fail-fast
+P1  完成 Gate 3 raw equivalence
+
+P2  audit_routing 增加 exact bit/method/count assert
+P2  增加 task0×1 smoke
+P2  修 linear.enabled semantics
 ```
 
-，这是正确的。
+### Bash 路径统一改成
 
-但是 export 时只是：
+```bash
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
+```
+
+### Python 脚本统一用
 
 ```python
-partition = self.outlier_partition.get(key, {})
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[5]
+sys.path.insert(0, str(REPO_ROOT / "src"))
 ```
 
-随后直接做减法，没有验证：
-
-```python
-partition["calls"] == entry["calls"]
-
-partition["total_elements"]
-    == entry["total_elements"]
-```
-
-。
-
-这是一个缺失的 correctness invariant。
-
-应该加：
-
-```python
-if partition:
-    assert int(partition["calls"]) == int(entry["calls"]), (
-        key,
-        partition["calls"],
-        entry["calls"],
-    )
-
-    assert int(partition["total_elements"]) == total_elements, (
-        key,
-        partition["total_elements"],
-        total_elements,
-    )
-```
-
-再加：
-
-```python
-assert 0 <= protected_elements <= total_elements
-assert zero_elements >= protected_elements
-```
-
-等 FP significand extractor 修完后，再要求：
-
-```python
-assert sparse_bits >= protected_bits
-assert amp_zero_bits >= protected_bits
-```
-
-这样 native accounting 一旦失配，会直接 fail，而不是静默生成 `≈0%`。
+这样以后目录层级一眼就能审计。
 
 ---
 
-# 7. FP significand extraction 建议直接修掉
+## 最终判断
 
-你目前这个 4-bit metric 如果目标是后面的 bit-serial CIM，那么最合理的定义应该是：
+**Core routing：PASS。**
 
-> **unsigned significand，包括 hidden leading 1，但不包含 sign。**
-
-也就是 E4M3：
-
-```text
-1MMM
-```
-
-normal number；
-
-subnormal：
-
-```text
-0MMM
-```
-
-zero：
-
-```text
-0000
-```
-
-正负号另行处理，不应该挤进这 4 bit 中。
-
-建议替换现在的 `_extract_sm_from_raw()` 核心逻辑为：
-
-```python
-def _extract_significand_from_raw(
-    self,
-    raw_int: torch.Tensor,
-    fmt: str,
-):
-    fmt = fmt.lower().strip()
-
-    if fmt == "e5m10":
-        exp_bits = 5
-        mant_bits = 10
-    elif fmt == "e4m3":
-        exp_bits = 4
-        mant_bits = 3
-    elif fmt == "e2m1":
-        exp_bits = 2
-        mant_bits = 1
-    else:
-        raise ValueError(fmt)
-
-    raw = raw_int.to(torch.int64)
-
-    mant = raw & ((1 << mant_bits) - 1)
-
-    exp = (
-        raw >> mant_bits
-    ) & ((1 << exp_bits) - 1)
-
-    # Hidden 1 ONLY for normal numbers.
-    normal = exp != 0
-
-    significand = (
-        mant
-        | (
-            normal.to(torch.int64)
-            << mant_bits
-        )
-    )
-
-    return significand, mant_bits + 1
-```
-
-于是：
-
-```text
-+0          -> 0000
--0          -> 0000
-
-+1.0        -> 1000
--1.0        -> 1000
-
-+subnormal  -> 0MMM
--subnormal  -> 0MMM
-```
-
-这也使得你目前的 native correction：
+现在确实已经实现了你之前缺失的：
 
 $$
-protected\_bits
-=
-N_{\rm protected}\times 4
+\boxed{
+\text{VLM operator precision}
+\neq
+\text{Expert operator precision}
+}
 $$
 
-重新成立，因为 masked `+0/-0` 都真正统计为：
-
-```text
-0000
-```
-
----
-
-# 8. 加一个 T10，这次很重要
-
-目前 H0 tests 对 INT native accounting 测得比较多，但没有真正卡住 FP8 raw encoding 语义。
-
-建议：
-
-```python
-def test_t10_e4m3_significand_encoding():
-    raw = torch.tensor([
-        0x00,  # +0
-        0x80,  # -0
-        0x38,  # +1
-        0xB8,  # -1
-        0x01,  # + smallest subnormal
-        0x81,  # - smallest subnormal
-    ], dtype=torch.int64)
-
-    sig, width = sm._extract_significand_from_raw(
-        raw,
-        "e4m3",
-    )
-
-    assert width == 4
-
-    assert sig.tolist() == [
-        0b0000,
-        0b0000,
-        0b1000,
-        0b1000,
-        0b0001,
-        0b0001,
-    ]
-```
-
-这个测试能同时防：
-
-* negative zero；
-* sign/magnitude 混淆；
-* subnormal hidden-bit 错误。
-
----
-
-# 9. 还有一个更大的概念问题：当前指标和你以前 EffLoc 的 “>85% FP sparsity” 不是同一个东西
-
-这个也必须现在厘清，否则后面会越来越乱。
-
-当前 Phase H 的：
-
-```text
-E4M3 sparse_bit_rate
-```
-
-实际只看 **原始 FP8 significand 的 4 bits**：
+而且 G6 四个 YAML 的数学语义与我们的设计一致：
 
 $$
-1MMM
+\boxed{
+G6A: VLM8 + Expert8
+}
 $$
 
-代码自己也明确写的是 E4M3 → 4 bits。
-
-而你之前 EffLoc 的高 FP bit sparsity 研究依赖的是：
-
-> **不同 FP 值经过 exponent alignment 之后形成的 ineffective bits。**
-
-EffLoc 的 LAU 会先比较 exponent，利用 \(\Delta E\) 对 mantissa 做逐轮 alignment；当 \(\Delta E\neq0\) 时直接产生 0 bit，之后才 shift mantissa。这种“alignment-induced zeros”正是高 bit sparsity 的主要来源，而不是简单看原始 E4M3 `1MMM`。因此不能直接把 Phase H 当前 4-bit significand statistic 和之前 >85% 的 aligned-FP sparsity 对比。
-
-所以最好最终拆成三个概念：
-
-| 指标                               | 统计对象                            | 用途                                  |
-| -------------------------------- | ------------------------------- | ----------------------------------- |
-| `significand_zero_bit_rate`      | E4M3 的 `1MMM`                   | 数值本身的 significand sparsity          |
-| `encoding_zero_bit_rate`         | 完整 `S EEEE MMM` 8bit            | storage / memory representation     |
-| `aligned_effective_bit_sparsity` | exponent alignment 后 bit stream | **EffLoc/CIM 真正 hardware-relevant** |
-
-对于你现在的硬件研究，第三个其实最关键。
-
----
-
-# 10. 所以 H0 当前应该怎么判
-
-我建议把现在 `results.md` 的：
-
-> “runtime native bit sparsity ≈0%，符合预期”
-
-**删掉或标记为 INVALID / UNDER AUDIT**。
-
-当前可以保留的 H0 结论是：
-
-```text
-PASS:
-- rollout 正常
-- SR 正常
-- flow step 0..9 正常
-- Linear activation/output 完整
-- MatMul A/B/O 完整
-- self/cross 正常
-- static weight collection 正常
-- sidepath collection 正常
-- S0 static weight significand sparsity ≈41.5%
-- S1 static weight sparsity ≈73.7%
-```
-
-但应该把：
-
-```text
-FP8 runtime native bit sparsity
-```
-
-暂时标成：
-
 $$
-\boxed{\text{INVALID — pending FP statistic/native-accounting audit}}
+\boxed{
+G6B: VLM\ Attn4,\ VLM\ MLP8,\ Expert8
+}
 $$
 
-另外，**H1 如果已经在跑，不一定需要杀掉**：rollout 和 SR 数据仍然有价值，原始 `module_sparsity.csv` 的 reported counters 也可能可用于事后重新分析。但在修正 FP significand extractor 前，不要把 H1 的 FP native bit sparsity 写进正式结论。
+$$
+\boxed{
+G6C: VLM\ Attn8,\ VLM\ MLP4,\ Expert8
+}
+$$
 
-最关键的下一步不是重跑，而是先把上面诊断脚本的 **`reported / protected / native` 三列输出**拿出来。只要看到那三组数，我基本可以直接判断这个 `≈0%` 究竟是 **FP extractor、native subtraction，还是 H0 汇总/记录问题**。
+$$
+\boxed{
+G6D: VLM4 + Expert8
+}
+$$
+
+但**执行基础设施暂时不是 PASS**：两个 shell runner 的根目录计算存在确定性错误，routing audit 的 local source path 也有错误。另外 override selector 还有一个值得马上封死的“target typo → potentially match all”的安全漏洞。
+
+所以我建议当前状态定义成：
+
+$$
+\boxed{\text{Framework core PASS, experiment execution NOT YET READY}}
+$$
+
+把上面 P0/P1 修完，再跑 Gate 3 → Gate 4 → Gate 5；这三个全部 PASS 后，就可以放心开始 G6 Goal×100。
