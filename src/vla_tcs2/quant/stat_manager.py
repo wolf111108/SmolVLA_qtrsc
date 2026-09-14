@@ -1115,20 +1115,25 @@ class QuantStatManager:
         Unpack sign / exp / mantissa from a raw int bit pattern.
 
         Returns:
-            sm:       sign(1) << mant_bits | mantissa(mant_bits)
+            sm:       mantissa(mant_bits)  (sign NOT included — the
+                      significand metric is sign-agnostic)
             exp:      biased exponent
-            nonzero:  exp != 0 or mant != 0
+            normal:   exp != 0 (hidden leading 1 present)
+
+        NOTE: `sign_shift` is accepted for caller compatibility but the
+        sign bit is deliberately NOT folded into the significand; +0/-0
+        must both map to the all-zero code, and subnormals (exp==0) must
+        NOT receive the hidden leading 1.
         """
         raw = raw.to(torch.int64)
 
-        sign = (raw >> sign_shift) & 0x1
         mant = raw & ((1 << mant_bits) - 1)
         exp = (raw >> mant_bits) & ((1 << exp_bits) - 1)
 
-        sm = (sign << mant_bits) | mant
-        nonzero = (exp != 0) | (mant != 0)
+        sm = mant
+        normal = exp != 0
 
-        return sm, exp, nonzero
+        return sm, exp, normal
 
     def _extract_sm_from_raw(
         self,
@@ -1146,19 +1151,19 @@ class QuantStatManager:
         fmt = (fmt or "").lower().strip()
 
         if fmt == "e5m10":
-            sm, _exp, nonzero = self._unpack_sm_exp(
+            sm, _exp, normal = self._unpack_sm_exp(
                 raw_int, sign_shift=15, exp_bits=5, mant_bits=10,
             )
             width = 11
             mant_bits = 10
         elif fmt == "e4m3":
-            sm, _exp, nonzero = self._unpack_sm_exp(
+            sm, _exp, normal = self._unpack_sm_exp(
                 raw_int, sign_shift=7, exp_bits=4, mant_bits=3,
             )
             width = 4
             mant_bits = 3
         elif fmt == "e2m1":
-            sm, _exp, nonzero = self._unpack_sm_exp(
+            sm, _exp, normal = self._unpack_sm_exp(
                 raw_int, sign_shift=3, exp_bits=2, mant_bits=1,
             )
             width = 2
@@ -1166,8 +1171,9 @@ class QuantStatManager:
         else:
             raise ValueError(f"Unsupported fmt in _extract_sm_from_raw: {fmt}")
 
-        # Add hidden leading 1 for normal numbers (exp != 0).
-        hidden = nonzero.to(torch.int64) << mant_bits
+        # Add hidden leading 1 ONLY for normal numbers (exp != 0).
+        # Subnormals (exp==0, mant!=0) and zeros stay without hidden bit.
+        hidden = normal.to(torch.int64) << mant_bits
         sm_full = sm | hidden
 
         return sm_full, width

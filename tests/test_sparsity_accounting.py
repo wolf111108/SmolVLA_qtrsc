@@ -363,6 +363,34 @@ def test_t9_runtime_hook_flow_step_sequencing():
     assert install_runtime_hooks(model) is False
 
 
+# ---------------------------------------------------------------------------
+# T10: E4M3 significand encoding (+0/-0/subnormal hidden-bit semantics)
+# ---------------------------------------------------------------------------
+def test_t10_e4m3_significand_encoding():
+    m = QuantStatManager(tempfile.mkdtemp())
+
+    raw = torch.tensor([
+        0x00,  # +0
+        0x80,  # -0
+        0x38,  # +1.0
+        0xB8,  # -1.0
+        0x01,  # +smallest subnormal
+        0x81,  # -smallest subnormal
+    ], dtype=torch.int64)
+
+    sig, width = m._extract_sm_from_raw(raw, "e4m3")
+
+    assert width == 4
+    assert sig.tolist() == [
+        0b0000,  # +0
+        0b0000,  # -0 (sign must NOT leak)
+        0b1000,  # +1.0 (hidden 1)
+        0b1000,  # -1.0 (sign-agnostic)
+        0b0001,  # +subnormal (NO hidden 1)
+        0b0001,  # -subnormal (NO hidden 1, sign-agnostic)
+    ]
+
+
 def _main():
     test_t1_no_outlier_reported_equals_native()
     test_t2_outlier_mask_native_correction()
@@ -373,6 +401,7 @@ def _main():
     test_t7_export_manifest_and_workload()
     test_t8_no_double_collection_between_legacy_and_structured()
     test_t9_runtime_hook_flow_step_sequencing()
+    test_t10_e4m3_significand_encoding()
     print("all sparsity accounting tests passed")
 
 
