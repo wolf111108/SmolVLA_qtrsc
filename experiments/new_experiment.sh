@@ -69,6 +69,9 @@ sed -e "s/<exp_name>/${DOC_EXP_NAME}/g" \
 sed -e "s/<exp_name>/${DOC_EXP_NAME}/g" \
     -e "s/YYYY-MM-DD/${DATE_NOW}/g" \
     "${TEMPLATE_DIR}/docs/results.md" > "${EXP_DIR}/docs/results.md"
+sed -e "s/<exp_name>/${DOC_EXP_NAME}/g" \
+    -e "s/YYYY-MM-DD/${DATE_NOW}/g" \
+    "${TEMPLATE_DIR}/docs/logs.md" > "${EXP_DIR}/docs/logs.md"
 
 echo "已创建实验目录: ${EXP_DIR}"
 echo "已创建产出目录: ${OUT_DIR#${REPO_ROOT}/}"
@@ -77,12 +80,14 @@ if [[ "$MODE" == "top" ]]; then
   echo "  1. 复制/编写 configs 到 ${EXP_NAME}/configs/"
   echo "  2. 编写 scripts 到 ${EXP_NAME}/scripts/"
   echo "  3. 开跑前填写 docs/experiment_setup.md"
-  echo "  4. 跑完后更新 docs/results.md（状态改为 done）"
-  echo "  5. （可选）拆分子实验: bash experiments/new_experiment.sh --task ${EXP_NAME} <sub_name>"
+  echo "  4. 实验全程在 docs/logs.md 记录运行进度与后台任务"
+  echo "  5. 跑完后更新 docs/results.md（状态改为 done）"
+  echo "  6. （可选）拆分子实验: bash experiments/new_experiment.sh --task ${EXP_NAME} <sub_name>"
 else
   echo "下一步:"
   echo "  1. 复制/编写 configs 到 ${EXP_NAME}/configs/"
   echo "  2. 编写 scripts 到 ${EXP_NAME}/scripts/"
   echo "  3. 开跑前填写 docs/experiment_setup.md"
-  echo "  4. 跑完后更新 docs/results.md，并在父实验 results.md 中链接结论"
+  echo "  4. 实验全程在 docs/logs.md 记录运行进度与后台任务"
+  echo "  5. 跑完后更新 docs/results.md，并在父实验 results.md 中链接结论"
 fi

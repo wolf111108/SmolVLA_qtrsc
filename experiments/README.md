@@ -22,6 +22,7 @@ experiments/
     └── docs/
         ├── experiment_setup.md   # 实验设置（固定结构，创建时填写）
         ├── results.md            # 结果记录（固定结构，实验中/后填写）
+        ├── logs.md               # 运行日志/进度状态（固定结构，实验全程更新）
         └── figures/              # 结果图片（*.png / *.pdf，results.md 中相对路径引用）
 ```
 
@@ -47,7 +48,7 @@ experiments/
 |---|---|---|
 | `configs/` | 实验全部 YAML，按变量命名（如 `alpha003.yaml`、`alpha010.yaml`） | 与本实验无关的历史配置 |
 | `scripts/` | `run_*.sh`（批量启动）、`summarize_*.py`（汇总）、`plot_*.py`（绘图） | 通用工具（通用工具放仓库级 `scripts/`） |
-| `docs/` | `experiment_setup.md`、`results.md`、`figures/` | 原始评测数据（原始数据放 `outputs/<exp_name>/`，见 §5） |
+| `docs/` | `experiment_setup.md`、`results.md`、`logs.md`、`figures/` | 原始评测数据（原始数据放 `outputs/<exp_name>/`，见 §5） |
 
 ## 4. 实验生命周期
 
@@ -56,8 +57,9 @@ experiments/
 2. **配置**：把 YAML 复制进 `configs/`，脚本放进 `scripts/`；
 3. **开跑前**：填写完 `docs/experiment_setup.md`（尤其「变量控制」与「输出目录映射」两节）；
 4. **实验中**：每完成一个子实验，立即把结果追加进 `docs/results.md`（含日期、命令、输出目录）；
-5. **结束**：补全 `results.md` 的「结论与分析」「后续行动」，图片放入 `docs/figures/` 并在文中引用；
-6. **可选**：在实验 `results.md` 头部状态字段标记 `done / running / aborted`。
+5. **实验中**：每次启动/完成一次运行，在 `docs/logs.md` 追加一条运行记录（命令、状态、输出目录、后台 PID）；
+6. **结束**：补全 `results.md` 的「结论与分析」「后续行动」，图片放入 `docs/figures/` 并在文中引用；
+7. **可选**：在实验 `results.md` / `logs.md` 头部状态字段标记 `done / running / aborted`。
 
 ## 5. 与 outputs/ 的关系
 
@@ -78,6 +80,9 @@ experiments/
 
 - `experiment_setup.md`：目的 / 环境与版本 / 模型与数据 / 评测协议 / 实验变量与分组 / 运行命令 / 输出目录映射 / 风险与注意
 - `results.md`：摘要 / 总结果表 / 分组结果与分析 / 结论 / 问题与后续 / 修订记录
+- `logs.md`：当前状态 / 运行日志 / 后台任务 / 异常与处理 / 修订记录
+
+> `results.md` 记录**结果**（指标、SR、结论），`logs.md` 记录**过程**（运行记录、进度状态、后台任务、异常修复）。两者互补，不互相复制内容。
 
 ## 7. 子实验（tasks/，实验嵌套）
 
