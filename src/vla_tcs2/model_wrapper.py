@@ -77,6 +77,7 @@ def create_quantized_linear(
     layer_idx: int,
     quant_config: dict[str, Any],
     mode: str = "scale_inspection",
+    module_id: str | None = None,
 ) -> QuantizedLinear:
     """
     Build a QuantizedLinear from an nn.Linear (opt-qt style).
@@ -84,8 +85,17 @@ def create_quantized_linear(
     layer_config = quant_config[<layer_type>] provides a_bit/w_bit/o_bit/
     d_bit/p/outlier_ratio; top-level quant_config provides
     dynamic_activation / mixed_precision / scale_dir.
+
+    When `module_id` is given, component/module-aware `linear.overrides`
+    are resolved on top of the operator base config (G6 upgrade).
     """
-    layer_config = quant_config.get(layer_type, {})
+    physical_id = module_id or f"{layer_type}_{layer_idx}"
+
+    layer_config, matched_overrides = resolve_linear_quant_config(
+        quant_config=quant_config,
+        layer_type=layer_type,
+        module_id=physical_id,
+    )
 
     quant_layer = QuantizedLinear(
         in_features=original_layer.in_features,
@@ -163,6 +173,10 @@ def create_quantized_linear(
         quant_layer.bias.data = original_layer.bias.data.clone()
 
     quant_layer.set_layer_info(layer_type, layer_idx)
+
+    # Debug / manifest only (not read by forward).
+    quant_layer.quant_override_names = matched_overrides
+    quant_layer.effective_quant_config = dict(layer_config)
 
     return quant_layer
 
@@ -367,6 +381,82 @@ def _matches_target(module_id: str, target: dict[str, Any]) -> bool:
     return True
 
 
+# =============================================================================
+# Component-aware Linear precision routing (G6 upgrade)
+# =============================================================================
+
+# Fields an override is allowed to patch on a Linear's effective quant
+# config. Anything else is a typo and must fail fast (manual §3.3).
+_ALLOWED_LINEAR_OVERRIDE_KEYS = {
+    "a_bit",
+    "w_bit",
+    "o_bit",
+    "d_bit",
+    "p",
+    "outlier_ratio",
+    "method",
+    "test_method",
+}
+
+
+def resolve_linear_quant_config(
+    quant_config: dict[str, Any],
+    layer_type: str,
+    module_id: str,
+) -> tuple[dict[str, Any], list[str]]:
+    """Resolve effective quant config for one physical Linear.
+
+    Precedence (manual §3.4):
+        operator base config
+        -> matching linear.overrides in list order (later wins)
+
+    Returns:
+        resolved_config
+        matched_override_names
+    """
+    base = dict(quant_config.get(layer_type, {}) or {})
+
+    linear_cfg = quant_config.get("linear", {}) or {}
+    overrides = linear_cfg.get("overrides", []) or []
+
+    if not isinstance(overrides, list):
+        raise TypeError("quantization.linear.overrides must be a list")
+
+    matched_names: list[str] = []
+
+    for idx, override in enumerate(overrides):
+        if not isinstance(override, dict):
+            raise TypeError(f"linear.overrides[{idx}] must be a dict")
+
+        target = override.get("target")
+        patch = override.get("config")
+
+        if not isinstance(target, dict) or not target:
+            raise ValueError(
+                f"linear.overrides[{idx}].target must be a non-empty dict"
+            )
+
+        if not isinstance(patch, dict):
+            raise ValueError(
+                f"linear.overrides[{idx}].config must be a dict"
+            )
+
+        unknown = set(patch) - _ALLOWED_LINEAR_OVERRIDE_KEYS
+        if unknown:
+            raise ValueError(
+                f"Unsupported linear override fields at index {idx}: "
+                f"{sorted(unknown)}"
+            )
+
+        if _matches_target(module_id, target):
+            base.update(patch)
+            matched_names.append(
+                str(override.get("name", f"override_{idx}"))
+            )
+
+    return base, matched_names
+
+
 def _apply_test_params(
     module: nn.Module,
     method: str,
@@ -528,6 +618,19 @@ def _wrap_smolvla_linear_layers(
         quant_config.get("linear_scale_granularity", "per_site")
     ).lower()
 
+    # Component/module-aware overrides change per-module precision, which
+    # must never share calibration scales with a differently-quantized
+    # module. v1 forces per_site (manual §4.4).
+    overrides = (
+        (quant_config.get("linear", {}) or {}).get("overrides", []) or []
+    )
+    if overrides and granularity != "per_site":
+        raise ValueError(
+            "component/module-aware linear overrides currently require "
+            "linear_scale_granularity=per_site to prevent mixed-precision "
+            "modules from sharing calibration scales."
+        )
+
     # SmolVLMWithExpertModel lives under .vlm_with_expert
     vlm_expert = model_obj.vlm_with_expert
     text_model = vlm_expert.get_vlm_model().text_model
@@ -544,7 +647,9 @@ def _wrap_smolvla_linear_layers(
             module_id = f"{component}.layers.{layer_idx}.self_attn.{name}"
             if not _should_wrap(module_id, quant_config):
                 continue
-            ql = create_quantized_linear(mod, name, layer_idx, quant_config, mode)
+            ql = create_quantized_linear(
+                mod, name, layer_idx, quant_config, mode, module_id=module_id
+            )
             ql._stat_manager = stat_manager
             ql.set_layer_info(name, layer_idx, module_id=module_id)
             sg_name, sg_idx = resolve_linear_scale_group(
@@ -564,7 +669,9 @@ def _wrap_smolvla_linear_layers(
                 module_id = f"{component}.layers.{layer_idx}.mlp.{name}"
                 if not _should_wrap(module_id, quant_config):
                     continue
-                ql = create_quantized_linear(mod, name, layer_idx, quant_config, mode)
+                ql = create_quantized_linear(
+                    mod, name, layer_idx, quant_config, mode, module_id=module_id
+                )
                 ql._stat_manager = stat_manager
                 ql.set_layer_info(name, layer_idx, module_id=module_id)
                 sg_name, sg_idx = resolve_linear_scale_group(
@@ -594,7 +701,9 @@ def _wrap_smolvla_linear_layers(
         full_name = f"model.model.{name}"
         if not _should_wrap(full_name, quant_config):
             continue
-        ql = create_quantized_linear(mod, name, 0, quant_config, mode)
+        ql = create_quantized_linear(
+            mod, name, 0, quant_config, mode, module_id=full_name
+        )
         ql._stat_manager = stat_manager
         ql.set_layer_info(name, 0, module_id=full_name)
         ql.set_scale_group(f"head_{name}", 0)
