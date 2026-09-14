@@ -467,7 +467,7 @@ def quant_forward_with_outlier(layer, x, stat_collector=None) -> torch.Tensor:
         chunk_size=1_048_576,
     )
 
-    out_normal_dequant = out_normal_quant.to(torch.float32).mul_(M_q).to(x.dtype)
+    out_normal_dequant = out_normal_quant.to(torch.float32).mul(M_q).to(x.dtype)
     out_normal_dequant = torch.div(out_normal_dequant, 2 ** 16).to(x.dtype)
     out_outlier = out_outlier.to(x.dtype)
 
@@ -807,7 +807,7 @@ def quant_forward_pot_ao_outlier_channel(
         out_dtype=out_normal.dtype,
         chunk_size=1_048_576,
     )
-    out_normal_dequant = out_normal_quant.to(torch.float32).mul_(M_q)
+    out_normal_dequant = out_normal_quant.to(torch.float32).mul(M_q)
     out_normal_dequant = torch.div(out_normal_dequant, 2 ** 16).to(x.dtype)
     out_outlier = out_outlier.to(x.dtype)
 
@@ -1089,7 +1089,7 @@ def matmul_quant_forward_with_outlier(layer, A, B, stat_collector=None) -> torch
         chunk_size=1_048_576,
     )
 
-    out_normal_dequant = out_normal_quant.to(torch.float32).mul_(M_q).to(A.dtype)
+    out_normal_dequant = out_normal_quant.to(torch.float32).mul(M_q).to(A.dtype)
     out_normal_dequant = torch.div(out_normal_dequant, 2 ** 16).to(A.dtype)
     out_outlier = out_outlier.to(A.dtype)
 

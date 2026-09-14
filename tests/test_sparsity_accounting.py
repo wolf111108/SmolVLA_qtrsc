@@ -391,6 +391,66 @@ def test_t10_e4m3_significand_encoding():
     ]
 
 
+# ---------------------------------------------------------------------------
+# T11: quant_forward_with_outlier must NOT mutate the output code in place
+# (H1-Audit regression). The dequant step used `.mul_(M_q)` which
+# in-place rewrote out_normal_quant from quantized code ([-448,448]) into
+# the dequantized magnitude, so the collected output_code had ~98% values
+# > 448 that round to E4M3 NaN and diluted sparse_bit_rate to ~0.5%.
+# ---------------------------------------------------------------------------
+def test_t11_output_code_not_mutated_by_dequant():
+    from vla_tcs2.quant_linear import QuantizedLinear
+    from vla_tcs2.quant.quant_methods import quant_forward_with_outlier
+
+    torch.manual_seed(0)
+
+    m = QuantStatManager(tempfile.mkdtemp())
+    m.enable_sparsity()
+
+    layer = QuantizedLinear(
+        in_features=16,
+        out_features=16,
+        a_bit="e4m3",
+        w_bit="e4m3",
+        o_bit="e4m3",
+        outlier_ratio=0.01,
+    )
+    layer.set_layer_info(
+        "q_proj", 0, module_id="vlm.layers.0.self_attn.q_proj"
+    )
+    # Power-of-two scales (pot_fp8_outlier requirement).
+    layer.a_interval = 0.5
+    layer.w_interval = 0.5
+    layer.o_interval = 0.5
+    layer.weight.data = torch.randn(16, 16) * 0.1
+    layer.bias.data = torch.randn(16) * 0.1
+
+    x = torch.randn(32, 16)
+
+    out = quant_forward_with_outlier(layer, x, stat_collector=m)
+
+    # Forward output must stay finite (dequant is unchanged).
+    assert not torch.isnan(out).any(), "forward output has NaN"
+
+    # The collected output code must be the quantized code, i.e. its
+    # significand bit-sparsity must be a real ~30-60% rate, NOT the ~1%
+    # dilution caused by NaN (post-mul_ dequant magnitudes).
+    out_records = [
+        v
+        for k, v in m.per_role_sparsity.items()
+        if k[0] == "vlm.layers.0.self_attn.q_proj" and k[3] == "output"
+    ]
+    assert out_records, "output role record missing"
+    role = out_records[0]
+    total_bits = role["total_bits"]
+    sparse_bits = role["sparse_bits"]
+    rate = sparse_bits / total_bits if total_bits else 0.0
+    assert rate > 0.10, (
+        f"output sparse_bit_rate={rate:.3f} is diluted; "
+        "out_normal_quant was mutated in place"
+    )
+
+
 def _main():
     test_t1_no_outlier_reported_equals_native()
     test_t2_outlier_mask_native_correction()
@@ -402,6 +462,7 @@ def _main():
     test_t8_no_double_collection_between_legacy_and_structured()
     test_t9_runtime_hook_flow_step_sequencing()
     test_t10_e4m3_significand_encoding()
+    test_t11_output_code_not_mutated_by_dequant()
     print("all sparsity accounting tests passed")
 
 

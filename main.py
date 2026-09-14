@@ -281,6 +281,19 @@ def main() -> None:
                     "dim_group_size", unit_cfg.get("cols", 2)
                 ),
             )
+        audit_cfg = sp_cfg.get("fp_code_audit", {})
+        if audit_cfg.get("enabled", False):
+            sm.configure_fp_code_audit(
+                enable=True,
+                max_elements_per_call=audit_cfg.get(
+                    "max_elements_per_call", 262_144
+                ),
+                roles=audit_cfg.get(
+                    "roles",
+                    ["activation", "output", "A", "B", "O"],
+                ),
+            )
+            print("[sparsity] FP-code audit enabled")
         print(
             "[sparsity] enabled (runtime context: phase / flow_step / "
             "attention_kind auto-tagged)"
@@ -437,6 +450,11 @@ def main() -> None:
         sm.export_unit_sparsity_structured_csv(
             os.path.join(sparsity_dir, "unit_sparsity.csv"),
         )
+        if sm.fp_code_audit_enabled:
+            sm.export_fp_code_audit_csv(
+                os.path.join(sparsity_dir, "fp_code_audit.csv"),
+                config_name=os.path.basename(args.config),
+            )
         print(
             f"[sparsity] exported module/workload/per-layer/weight-static/"
             f"outlier-sidepath/unit CSVs to {sparsity_dir} "

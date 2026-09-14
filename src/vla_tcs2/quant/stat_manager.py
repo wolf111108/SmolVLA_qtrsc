@@ -244,6 +244,20 @@ class QuantStatManager:
         # Per-layer WEIGHT sparsity records (static, collected once).
         self.per_layer_weight_sparsity: Dict[str, Dict[str, Any]] = {}
 
+        # ------------------------------------------------------------------
+        # Phase H FP-code audit (H1-Audit)
+        # Debug-only: inspect the actual post-quant FP8 code distribution.
+        # Independent of _extract_sm_from_raw(); never modifies tensors/RNG.
+        # ------------------------------------------------------------------
+        self.fp_code_audit_enabled = False
+        # Deterministic max elements sampled per call (0/None = all).
+        self.fp_code_audit_max_elements_per_call = 262_144
+        self.fp_code_audit_roles = {
+            "activation", "output", "A", "B", "O",
+        }
+        # key: (module_id, phase, flow_step, tensor_role, attention_kind)
+        self.fp_code_audit: Dict[tuple, Dict[str, Any]] = {}
+
     # -------------------------------------------------------------------------
     # Sparsity: configuration & counters
     # -------------------------------------------------------------------------
@@ -273,6 +287,25 @@ class QuantStatManager:
             raise ValueError("unit_bit_group_size must be > 0")
         if self.unit_dim_group_size <= 0:
             raise ValueError("unit_dim_group_size must be > 0")
+
+    def configure_fp_code_audit(
+        self,
+        enable: bool = False,
+        max_elements_per_call: int = 262_144,
+        roles=None,
+    ):
+        """Configure the independent FP-code audit (H1-Audit, debug-only)."""
+        self.fp_code_audit_enabled = bool(enable)
+
+        if max_elements_per_call is None:
+            self.fp_code_audit_max_elements_per_call = 0
+        else:
+            self.fp_code_audit_max_elements_per_call = int(
+                max_elements_per_call
+            )
+
+        if roles is not None:
+            self.fp_code_audit_roles = set(roles)
 
     def set_phase(self, phase: str):
         """Tag subsequent collect calls with a phase (prefill/decode/...)."""
@@ -316,6 +349,7 @@ class QuantStatManager:
         self.outlier_partition = {}
         self.per_role_unit_sparsity = {}
         self.per_layer_weight_sparsity = {}
+        self.fp_code_audit = {}
         self.current_phase = "full_forward"
 
     def _accumulate_phase_sparsity(
@@ -506,6 +540,9 @@ class QuantStatManager:
         if phase == "unknown" and self.current_phase != "full_forward":
             phase = self.current_phase
         flow_step = int(ctx.get("flow_step", -1))
+        resolved_attention_kind = attention_kind or ctx.get(
+            "attention_kind", "unknown"
+        )
 
         self._collect_one_tensor_sparsity(
             module_id,
@@ -515,13 +552,177 @@ class QuantStatManager:
             tensor_role=tensor_role,
             phase=phase,
             flow_step=flow_step,
-            attention_kind=attention_kind
-            or ctx.get("attention_kind", "unknown"),
+            attention_kind=resolved_attention_kind,
+        )
+
+        # H1-Audit: independent raw FP8-code inspection (does NOT touch
+        # forward numerics, scale, mask, or RNG).
+        self._collect_fp_code_audit(
+            module_id=module_id,
+            tensor_role=tensor_role,
+            tensor_code=tensor_code,
+            spec=spec,
+            phase=phase,
+            flow_step=flow_step,
+            attention_kind=resolved_attention_kind,
         )
 
     # -------------------------------------------------------------------------
     # Sparsity: collection internals
     # -------------------------------------------------------------------------
+
+    def _collect_fp_code_audit(
+        self,
+        *,
+        module_id: str,
+        tensor_role: str,
+        tensor_code: torch.Tensor,
+        spec: QuantSpec,
+        phase: str,
+        flow_step: int,
+        attention_kind: str,
+    ):
+        """
+        Debug-only independent E4M3 raw-code audit (H1-Audit).
+
+        IMPORTANT:
+        - Does NOT reuse _extract_sm_from_raw().
+        - Does NOT modify tensor_code.
+        - Does NOT use RNG.
+        - Deterministically subsamples large tensors.
+        """
+        if not self.fp_code_audit_enabled:
+            return
+        if tensor_role not in self.fp_code_audit_roles:
+            return
+        if tensor_code is None or spec is None:
+            return
+        if spec.kind != "fp":
+            return
+
+        fmt = (spec.fmt or "").lower().strip()
+        if fmt not in {"e4m3", "e4m3fn", "fp8_e4m3", "fp8_e4m3fn"}:
+            return
+
+        x = tensor_code.detach().reshape(-1)
+        if x.numel() == 0:
+            return
+
+        # Deterministic strided subsampling (no RNG).
+        max_n = self.fp_code_audit_max_elements_per_call
+        if max_n and max_n > 0 and x.numel() > max_n:
+            stride = (x.numel() + max_n - 1) // max_n
+            x = x[::stride][:max_n]
+
+        q8 = x.to(torch.float8_e4m3fn)
+        raw = q8.view(torch.uint8).reshape(-1).to(torch.int64)
+        q32 = q8.to(torch.float32)
+
+        # Independent E4M3 parsing (bit7 sign, bit6..3 exp, bit2..0 mant).
+        sign = (raw >> 7) & 0x1
+        exp = (raw >> 3) & 0xF
+        mant = raw & 0x7
+
+        nan_mask = torch.isnan(q32)
+        zero_mask = (exp == 0) & (mant == 0)
+        subnormal_mask = (exp == 0) & (mant != 0)
+        valid_mask = ~nan_mask
+
+        # Magnitude significand (normal 1MMM, subnormal 0MMM, zero 0000).
+        hidden = (exp != 0).to(torch.int64) << 3
+        sig = mant | hidden
+        sig = torch.where(zero_mask, torch.zeros_like(sig), sig)
+
+        sig_valid = sig[valid_mask]
+        nonzero_valid_mask = valid_mask & (~zero_mask)
+        sig_nonzero = sig[nonzero_valid_mask]
+
+        mant_valid = mant[valid_mask]
+        mant_nonzero = mant[nonzero_valid_mask]
+        exp_valid = exp[valid_mask]
+
+        mant_hist = torch.bincount(mant_valid, minlength=8)
+        mant_nonzero_hist = torch.bincount(mant_nonzero, minlength=8)
+        exp_hist = torch.bincount(exp_valid, minlength=16)
+        sig_hist = torch.bincount(sig_valid, minlength=16)
+
+        sig_zero_bits = 0
+        for bit_idx in range(4):
+            bit = (sig_valid >> bit_idx) & 1
+            sig_zero_bits += int((1 - bit).sum().item())
+
+        sig_nonzero_zero_bits = 0
+        for bit_idx in range(4):
+            bit = (sig_nonzero >> bit_idx) & 1
+            sig_nonzero_zero_bits += int((1 - bit).sum().item())
+
+        max_val = float(torch.finfo(torch.float8_e4m3fn).max)
+        saturation_count = int(
+            (torch.abs(q32[valid_mask]) >= max_val).sum().item()
+        )
+
+        key = (
+            module_id,
+            phase,
+            int(flow_step),
+            tensor_role,
+            attention_kind or "unknown",
+        )
+
+        entry = self.fp_code_audit.setdefault(
+            key,
+            {
+                "module_id": module_id,
+                "phase": phase,
+                "flow_step": int(flow_step),
+                "tensor_role": tensor_role,
+                "attention_kind": attention_kind or "unknown",
+                "calls": 0,
+                "sampled_elements": 0,
+                "valid_elements": 0,
+                "nonzero_elements": 0,
+                "zero_code_count": 0,
+                "subnormal_count": 0,
+                "nan_count": 0,
+                "negative_count": 0,
+                "saturation_count": 0,
+                "sig_zero_bits": 0,
+                "sig_total_bits": 0,
+                "sig_nonzero_zero_bits": 0,
+                "sig_nonzero_total_bits": 0,
+                "mant_hist": [0] * 8,
+                "mant_nonzero_hist": [0] * 8,
+                "exp_hist": [0] * 16,
+                "sig_hist": [0] * 16,
+            },
+        )
+
+        n_sampled = int(raw.numel())
+        n_valid = int(valid_mask.sum().item())
+        n_nonzero = int(nonzero_valid_mask.sum().item())
+
+        entry["calls"] += 1
+        entry["sampled_elements"] += n_sampled
+        entry["valid_elements"] += n_valid
+        entry["nonzero_elements"] += n_nonzero
+        entry["zero_code_count"] += int(zero_mask.sum().item())
+        entry["subnormal_count"] += int(subnormal_mask.sum().item())
+        entry["nan_count"] += int(nan_mask.sum().item())
+        entry["negative_count"] += int((sign[valid_mask] != 0).sum().item())
+        entry["saturation_count"] += saturation_count
+        entry["sig_zero_bits"] += sig_zero_bits
+        entry["sig_total_bits"] += 4 * n_valid
+        entry["sig_nonzero_zero_bits"] += sig_nonzero_zero_bits
+        entry["sig_nonzero_total_bits"] += 4 * n_nonzero
+
+        for i in range(8):
+            entry["mant_hist"][i] += int(mant_hist[i].item())
+            entry["mant_nonzero_hist"][i] += int(
+                mant_nonzero_hist[i].item()
+            )
+        for i in range(16):
+            entry["exp_hist"][i] += int(exp_hist[i].item())
+            entry["sig_hist"][i] += int(sig_hist[i].item())
 
     def _collect_one_tensor_sparsity(
         self,
@@ -2464,6 +2665,147 @@ class QuantStatManager:
                     c.get("unit_dim_group_size", 0),
                     zero, total, ratio,
                 ])
+
+    def export_fp_code_audit_csv(
+        self,
+        csv_path: str,
+        config_name: str = "",
+        model_path: str = "",
+    ):
+        """Export the independent FP-code audit records (H1-Audit) to CSV."""
+        import csv
+
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+
+        fieldnames = [
+            "config", "model_path",
+            "module_id",
+            "phase",
+            "flow_step",
+            "tensor_role",
+            "attention_kind",
+
+            "calls",
+            "sampled_elements",
+            "valid_elements",
+            "nonzero_elements",
+
+            "zero_code_count",
+            "zero_code_rate",
+
+            "subnormal_count",
+            "subnormal_rate",
+
+            "nan_count",
+            "nan_rate",
+
+            "negative_count",
+            "negative_rate",
+
+            "saturation_count",
+            "saturation_rate",
+
+            "sig_zero_bits",
+            "sig_total_bits",
+            "sig_zero_rate",
+
+            "sig_nonzero_zero_bits",
+            "sig_nonzero_total_bits",
+            "sig_nonzero_zero_rate",
+
+            "mant_111_nonzero_rate",
+        ]
+
+        fieldnames += [f"mant_{i:03b}" for i in range(8)]
+        fieldnames += [f"mant_nonzero_{i:03b}" for i in range(8)]
+        fieldnames += [f"exp_{i:04b}" for i in range(16)]
+        fieldnames += [f"sig_{i:04b}" for i in range(16)]
+
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for key in sorted(self.fp_code_audit.keys()):
+                e = self.fp_code_audit[key]
+                sampled = e["sampled_elements"]
+                valid = e["valid_elements"]
+                nonzero = e["nonzero_elements"]
+                sig_total = e["sig_total_bits"]
+                sig_nz_total = e["sig_nonzero_total_bits"]
+                mant_nz_total = sum(e["mant_nonzero_hist"])
+
+                row = {
+                    "config": config_name,
+                    "model_path": model_path,
+                    "module_id": e["module_id"],
+                    "phase": e["phase"],
+                    "flow_step": e["flow_step"],
+                    "tensor_role": e["tensor_role"],
+                    "attention_kind": e["attention_kind"],
+
+                    "calls": e["calls"],
+                    "sampled_elements": sampled,
+                    "valid_elements": valid,
+                    "nonzero_elements": nonzero,
+
+                    "zero_code_count": e["zero_code_count"],
+                    "zero_code_rate": (
+                        e["zero_code_count"] / valid if valid else 0.0
+                    ),
+
+                    "subnormal_count": e["subnormal_count"],
+                    "subnormal_rate": (
+                        e["subnormal_count"] / valid if valid else 0.0
+                    ),
+
+                    "nan_count": e["nan_count"],
+                    "nan_rate": (
+                        e["nan_count"] / sampled if sampled else 0.0
+                    ),
+
+                    "negative_count": e["negative_count"],
+                    "negative_rate": (
+                        e["negative_count"] / valid if valid else 0.0
+                    ),
+
+                    "saturation_count": e["saturation_count"],
+                    "saturation_rate": (
+                        e["saturation_count"] / valid if valid else 0.0
+                    ),
+
+                    "sig_zero_bits": e["sig_zero_bits"],
+                    "sig_total_bits": sig_total,
+                    "sig_zero_rate": (
+                        e["sig_zero_bits"] / sig_total
+                        if sig_total else 0.0
+                    ),
+
+                    "sig_nonzero_zero_bits": e[
+                        "sig_nonzero_zero_bits"
+                    ],
+                    "sig_nonzero_total_bits": sig_nz_total,
+                    "sig_nonzero_zero_rate": (
+                        e["sig_nonzero_zero_bits"] / sig_nz_total
+                        if sig_nz_total else 0.0
+                    ),
+
+                    "mant_111_nonzero_rate": (
+                        e["mant_nonzero_hist"][7] / mant_nz_total
+                        if mant_nz_total else 0.0
+                    ),
+                }
+
+                for i in range(8):
+                    row[f"mant_{i:03b}"] = e["mant_hist"][i]
+                    row[f"mant_nonzero_{i:03b}"] = e[
+                        "mant_nonzero_hist"
+                    ][i]
+
+                for i in range(16):
+                    row[f"exp_{i:04b}"] = e["exp_hist"][i]
+                    row[f"sig_{i:04b}"] = e["sig_hist"][i]
+
+                writer.writerow(row)
 
     def export_per_layer_sparsity_csv(
         self,
