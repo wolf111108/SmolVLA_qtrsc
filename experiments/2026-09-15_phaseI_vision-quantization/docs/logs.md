@@ -26,6 +26,7 @@ Gate L0（legacy regression）与 V0（Vision workload audit）已完成并通�
 |---|---|---|---|---|---|
 | 2026-09-15 | Gate L0 | `gate_l0_legacy_regression.py --config g6a_all_fp8_control.yaml` | ✅ | — | 224 Linear/64 MatMul/0 vision/0 connector |
 | 2026-09-15 | V0 | `audit_vision_structure.py --config v0_workload_audit.yaml` | ✅ | `outputs/.../v0_workload_audit` | 1ep，SR=100%，cameras/sample=2.0 |
+| 2026-09-15 | V0 绘图 | `scripts/plot_phaseI_flops_pies.py` | ✅ | `docs/figures/phaseI_flops_pie_*.png` | FLOPs 占比饼图（V0 实测 + 手册 §0 整体） |
 
 ## 3. 后台任务
 
@@ -44,3 +45,4 @@ Gate L0（legacy regression）与 V0（Vision workload audit）已完成并通�
 |---|---|---|
 | 2026-09-15 | 创建文档 | |
 | 2026-09-15 | 回填 Gate L0 + V0 进度 | |
+| 2026-09-15 | 新增 V0 FLOPs 饼图记录 | |

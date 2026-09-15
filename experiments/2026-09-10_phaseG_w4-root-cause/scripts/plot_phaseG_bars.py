@@ -66,6 +66,7 @@ G1_RUNS = RUNS / "component-localization"
 G5_RUNS = RUNS / "vlm-selective-precision"
 
 sys.path.insert(0, str(ROOT / "scripts"))
+from figure_layout import stack_below_axes  # noqa: E402
 from figure_palette import (  # noqa: E402
     C_REF,
     GOAL_SHADES_4,
@@ -185,37 +186,6 @@ def anchor_legend_handles(anchor_label):
 
 
 SINGLE_LAYOUT = dict(left=0.105, right=0.975, top=0.90, bottom=0.42)
-
-
-def stack_below_axes(fig, ax, handles, notes, xc, gap_legend=0.024,
-                     gap_text=0.026, gap_line=0.013):
-    """Stack the legend and the footnote lines strictly below the axes.
-
-    Positions are MEASURED, not hand-tuned: the starting y comes from
-    ``ax.get_tightbbox()``, which includes the tick labels and the x-axis
-    label. Using ``ax.get_window_extent()`` instead would ignore those, and a
-    legend placed just under the plot rectangle would then sit right on top of
-    the multi-line x tick labels (that was the original bug here).
-    """
-    fig.canvas.draw()
-    r = fig.canvas.get_renderer()
-    inv = fig.transFigure.inverted()
-
-    y = ax.get_tightbbox(r).transformed(inv).y0 - gap_legend
-    leg = fig.legend(handles=handles, loc="upper center",
-                     bbox_to_anchor=(xc, y), fontsize=9.5, frameon=True,
-                     framealpha=0.95, borderpad=0.7, handlelength=2.4)
-
-    fig.canvas.draw()
-    y = leg.get_window_extent(r).transformed(inv).y0 - gap_text
-    for i, txt in enumerate(notes):
-        t = fig.text(xc, y, txt, ha="center", va="top", fontsize=8.2,
-                     color="gray")
-        fig.canvas.draw()
-        y = t.get_window_extent(r).transformed(inv).y0 - gap_line
-        if y < 0.01:          # never let a note fall off the canvas
-            print(f"[warn] note {i} would run off the figure (y={y:.3f})")
-    return leg
 
 
 def build_figure(labels, vals, colors, title, anchor_label, xlabel,

@@ -15,7 +15,6 @@ Usage:
     sys.path.insert(0, str(Path(__file__).resolve().parents[N] / "scripts"))
     from figure_palette import SUITE_SHADES, GOAL_SHADES_4, C_FP, readable_on
 """
-
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
@@ -37,6 +36,13 @@ SUITE_SHADES = {
 # The middle three entries are exactly SUITE_SHADES["Goal"] (ColorBrewer
 # Greens 3/6/8); the lightest entry extends the ramp with Greens 2.
 GOAL_SHADES_4 = ("#c7e9c0", "#a1d99b", "#31a354", "#006d2c")
+
+# Five-step blue ramp (ColorBrewer Blues 3/4/6/7/9). Used when a figure zooms
+# into one branch of the hierarchy and needs five distinguishable steps of the
+# same hue -- e.g. Phase I breaking Vision+Connector down into its sub-modules,
+# which mirrors the blue (first-hue) branch of the top-level breakdown.
+# Shares #9ecae1 and #4292c6 with the three-step Spatial family above.
+BLUE_SHADES_5 = ("#c6dbef", "#9ecae1", "#4292c6", "#2171b5", "#08306b")
 
 # ---------------------------------------------------------------------------
 # neutral / semantic colours

@@ -65,6 +65,46 @@ FLOPs（`vision_flops.csv`，1 MAC = 2 FLOPs，per sample_actions）：
 
 分析：Vision MLP 是 Vision 内部最大算力块（54%），其次 attention projection（27%）、QK/PV（18%）。与手册 §0 粗估一致，验证了「只补 Vision MLP + attention projection 即可覆盖约 80% Vision compute」的判断。
 
+### 3.3 FLOPs 占比（饼图）
+
+**Phase I 实测（V0）— Vision encoder + connector 内部拆分**（428.2 GFLOPs / `sample_actions()`）
+
+![Phase I Vision FLOPs](figures/phaseI_flops_pie_vision.png)
+
+| 子模块 | GFLOPs | Vision 内占比 |
+|---|---:|---:|
+| Vision MLP `fc1/fc2` | 231.93 | 54.16% |
+| Attention Q/K/V/out projection | 115.96 | 27.08% |
+| Attention `QK^T` | 38.65 | 9.03% |
+| Attention `P×V` | 38.65 | 9.03% |
+| Connector projection | 3.02 | 0.71% |
+| **合计** | **428.22** | **100%** |
+
+**整体推理 — 单次 `sample_actions()`**（手册 §0 粗估，595.7 GFLOPs ≈ 0.60 TFLOPs）
+
+![Phase I inference FLOPs](figures/phaseI_flops_pie_inference.png)
+
+| 组件 | GFLOPs | 占比 |
+|---|---:|---:|
+| Vision Encoder + pixel shuffle / connector | 430.60 | 72.28% |
+| VLM 16-layer prefix prefill | 57.60 | 9.67% |
+| Action Expert 10-step denoise | 107.50 | 18.05% |
+| **总计** | **595.70** | **100%** |
+
+两图并排（便于看出左图的蓝色扇区就是右图的放大）：
+
+![Phase I FLOPs 2-panel](figures/phaseI_flops_pie_2panel.png)
+
+**配色说明**：整体图给每个顶层分支一个色相（Vision 蓝 / VLM 橙 / Expert 绿）；Vision 内部图是对蓝色分支的放大，因此用**同一蓝色的 5 档明度**，按占比由大到小由深到浅。两份图共用 `scripts/figure_palette.py`，与 Phase F/G 图同源。
+
+**交叉验证**：手册 §0 粗估 Vision+Connector 为 430.6 G，V0 实测为 428.2 G，两者相差 **0.6%**，互相印证。
+
+生成命令（数值均从源文件解析，不硬编码；整体图的数字直接解析手册 §0 表格）：
+
+```bash
+python experiments/2026-09-15_phaseI_vision-quantization/scripts/plot_phaseI_flops_pies.py
+```
+
 ## 4. 结论
 
 - Phase I 新增代码向后兼容（Gate L0 PASS，224/64/0/0）。
@@ -83,3 +123,4 @@ FLOPs（`vision_flops.csv`，1 MAC = 2 FLOPs，per sample_actions）：
 |---|---|---|
 | 2026-09-15 | 创建文档 | |
 | 2026-09-15 | 回填 Gate L0 + V0（结构/运行时/FLOPs）结果 | |
+| 2026-09-15 | 新增 §3.3 FLOPs 占比饼图（V0 实测 + 手册 §0 整体推理） | |
