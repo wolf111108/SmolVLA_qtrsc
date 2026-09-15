@@ -768,9 +768,21 @@ def _wrap_smolvlm_vision_linear_layers(
       - connector.modality_projection.proj
         (module_id ``connector.layer.0.connector_proj``)
 
+    Operator-group selection (Phase I manual V1/V2/V3, er.md P0):
+      ``vision.enabled`` alone does NOT wrap anything. The sub-groups
+      ``vision.linear.mlp`` and ``vision.linear.attn_proj`` independently
+      gate wrapping, so the experiment stages map exactly to counts:
+
+        V1  connector only            -> +1   (vision.linear both false)
+        V2  vision MLP only           -> +24  (mlp=true,  attn_proj=false)
+        V3  vision MLP + attn proj    -> +72  (mlp=true,  attn_proj=true)
+
+    Both sub-groups default to false (explicit opt-in; never wrap the whole
+    Vision encoder just by setting ``vision.enabled``).
+
     Precision is resolved through the SAME ``quantization.linear.overrides``
-    as VLM/Expert (component / module_id selectors), so per-operator base
-    configs are shared but overrides keep vision/connector distinct.
+    as VLM/Expert (component / module_id selectors); ``linear.enabled`` /
+    ``include`` / ``exclude`` also apply via ``_should_wrap()``.
     """
     vision_cfg = quant_config.get("vision", {}) or {}
     connector_cfg = quant_config.get("connector", {}) or {}
@@ -779,6 +791,24 @@ def _wrap_smolvlm_vision_linear_layers(
 
     if not vision_enabled and not connector_enabled:
         return 0
+
+    # Operator-group gates (default false; explicit opt-in per er.md P0).
+    vision_linear_cfg = vision_cfg.get("linear", {}) or {}
+    wrap_vision_mlp = vision_enabled and bool(
+        vision_linear_cfg.get("mlp", False)
+    )
+    wrap_vision_attn_proj = vision_enabled and bool(
+        vision_linear_cfg.get("attn_proj", False)
+    )
+
+    # Vision/Connector first join must recalibrate (their scale files are
+    # component-specific and may not exist yet; er.md P1 calibration).
+    vision_cal_policy = str(
+        vision_cfg.get("calibration_policy", "recalibrate")
+    ).lower()
+    connector_cal_policy = str(
+        connector_cfg.get("calibration_policy", "recalibrate")
+    ).lower()
 
     granularity = str(
         quant_config.get("linear_scale_granularity", "per_site")
@@ -798,9 +828,14 @@ def _wrap_smolvlm_vision_linear_layers(
         op_name,
         submodule,
         module_id,
+        calibration_policy,
     ):
         nonlocal replaced
         if mod is None or not isinstance(mod, nn.Linear):
+            return
+        # Honor the global linear.enabled / include / exclude contract
+        # (er.md P0.5).
+        if not _should_wrap(module_id, quant_config):
             return
         ql = create_quantized_linear(
             mod, op_name, layer_idx, quant_config, mode, module_id=module_id
@@ -811,28 +846,37 @@ def _wrap_smolvlm_vision_linear_layers(
             component, layer_idx, op_name, granularity
         )
         ql.set_scale_group(sg_name, sg_idx)
+        # Component-specific calibration policy (er.md P1): vision/connector
+        # scale files are keyed by component, so force recalibrate on first
+        # join instead of inheriting a shared `layer_policy`/`per_layer_policy`
+        # that does not know about the vision component.
+        ql.calibration_policy = calibration_policy
         setattr(submodule, attr_name, ql)
         replaced += 1
         if stat_manager is not None:
             stat_manager.register_layer(sg_name, sg_idx)
 
-    # Vision encoder (12 layers × 6 Linear).
+    # Vision encoder (12 layers × 6 Linear, gated by sub-group).
     if vision_enabled:
         vision_model = vlm_model.vision_model
         encoder = vision_model.encoder
         for layer_idx, layer in enumerate(encoder.layers):
-            for name in VISION_ATTN_LINEAR_NAMES:
-                _replace_linear(
-                    getattr(layer.self_attn, name, None),
-                    "vision", layer_idx, name, name, layer.self_attn,
-                    f"vision.layers.{layer_idx}.self_attn.{name}",
-                )
-            for name in VISION_MLP_LINEAR_NAMES:
-                _replace_linear(
-                    getattr(layer.mlp, name, None),
-                    "vision", layer_idx, name, name, layer.mlp,
-                    f"vision.layers.{layer_idx}.mlp.{name}",
-                )
+            if wrap_vision_attn_proj:
+                for name in VISION_ATTN_LINEAR_NAMES:
+                    _replace_linear(
+                        getattr(layer.self_attn, name, None),
+                        "vision", layer_idx, name, name, layer.self_attn,
+                        f"vision.layers.{layer_idx}.self_attn.{name}",
+                        vision_cal_policy,
+                    )
+            if wrap_vision_mlp:
+                for name in VISION_MLP_LINEAR_NAMES:
+                    _replace_linear(
+                        getattr(layer.mlp, name, None),
+                        "vision", layer_idx, name, name, layer.mlp,
+                        f"vision.layers.{layer_idx}.mlp.{name}",
+                        vision_cal_policy,
+                    )
 
     # Connector projection (single Linear; attr is "proj").
     if connector_enabled:
@@ -841,6 +885,7 @@ def _wrap_smolvlm_vision_linear_layers(
             getattr(modality_projection, "proj", None),
             "connector", 0, "proj", "connector_proj", modality_projection,
             "connector.layer.0.connector_proj",
+            connector_cal_policy,
         )
 
     return replaced

@@ -109,19 +109,34 @@ def _make_policy():
     return _FakePolicy()
 
 
-def _cfg(vision_enabled=False, connector_enabled=False, overrides=None):
+def _cfg(
+    vision_enabled=False,
+    vision_mlp=False,
+    vision_attn_proj=False,
+    connector_enabled=False,
+    overrides=None,
+    linear_enabled=True,
+    linear_include=None,
+    linear_exclude=None,
+):
     return {
         "method": "pot_fp8_outlier",
         "scale_dir": tempfile.mkdtemp(),
         "outlier_ratio": 0.01,
         "linear_scale_granularity": "per_site",
         "linear": {
-            "enabled": True,
-            "include": ["*"],
-            "exclude": [],
+            "enabled": linear_enabled,
+            "include": linear_include or ["*"],
+            "exclude": linear_exclude or [],
             "overrides": overrides or [],
         },
-        "vision": {"enabled": vision_enabled},
+        "vision": {
+            "enabled": vision_enabled,
+            "linear": {
+                "mlp": vision_mlp,
+                "attn_proj": vision_attn_proj,
+            },
+        },
         "connector": {"enabled": connector_enabled},
     }
 
@@ -172,12 +187,81 @@ def test_t2_connector_only():
 
 
 # ---------------------------------------------------------------------------
-# Test 3 — full vision linear (12×6 = 72)
+# Test 3 — vision.enabled alone wraps NOTHING (explicit group gate, P0)
 # ---------------------------------------------------------------------------
-def test_t3_full_vision_linear():
+def test_t3_enabled_alone_wraps_nothing():
     policy = _make_policy()
     n = _wrap_smolvlm_vision_linear_layers(
         policy, _cfg(vision_enabled=True), "scale_inspection", None
+    )
+    assert n == 0
+    assert _quantized_count(policy) == 0
+
+    vlm = policy.model.vlm_with_expert.get_vlm_model()
+    assert isinstance(
+        vlm.vision_model.encoder.layers[0].self_attn.q_proj, nn.Linear
+    )
+    assert isinstance(vlm.vision_model.encoder.layers[0].mlp.fc1, nn.Linear)
+
+
+# ---------------------------------------------------------------------------
+# Test 4 — vision MLP only (12×2 = 24)
+# ---------------------------------------------------------------------------
+def test_t4_vision_mlp_only():
+    policy = _make_policy()
+    n = _wrap_smolvlm_vision_linear_layers(
+        policy,
+        _cfg(vision_enabled=True, vision_mlp=True),
+        "scale_inspection",
+        None,
+    )
+    assert n == 24
+    assert _quantized_count(policy) == 24
+
+    vlm = policy.model.vlm_with_expert.get_vlm_model()
+    layer0 = vlm.vision_model.encoder.layers[0]
+    assert isinstance(layer0.mlp.fc1, QuantizedLinear)
+    assert isinstance(layer0.mlp.fc2, QuantizedLinear)
+    # Attention projection stays plain.
+    assert isinstance(layer0.self_attn.q_proj, nn.Linear)
+    assert isinstance(layer0.self_attn.out_proj, nn.Linear)
+
+
+# ---------------------------------------------------------------------------
+# Test 5 — vision attention projection only (12×4 = 48)
+# ---------------------------------------------------------------------------
+def test_t5_vision_attn_proj_only():
+    policy = _make_policy()
+    n = _wrap_smolvlm_vision_linear_layers(
+        policy,
+        _cfg(vision_enabled=True, vision_attn_proj=True),
+        "scale_inspection",
+        None,
+    )
+    assert n == 48
+    assert _quantized_count(policy) == 48
+
+    vlm = policy.model.vlm_with_expert.get_vlm_model()
+    layer0 = vlm.vision_model.encoder.layers[0]
+    assert isinstance(layer0.self_attn.q_proj, QuantizedLinear)
+    assert isinstance(layer0.self_attn.k_proj, QuantizedLinear)
+    assert isinstance(layer0.self_attn.v_proj, QuantizedLinear)
+    assert isinstance(layer0.self_attn.out_proj, QuantizedLinear)
+    # MLP stays plain.
+    assert isinstance(layer0.mlp.fc1, nn.Linear)
+    assert isinstance(layer0.mlp.fc2, nn.Linear)
+
+
+# ---------------------------------------------------------------------------
+# Test 6 — full vision linear (mlp + attn_proj = 72)
+# ---------------------------------------------------------------------------
+def test_t6_full_vision_linear():
+    policy = _make_policy()
+    n = _wrap_smolvlm_vision_linear_layers(
+        policy,
+        _cfg(vision_enabled=True, vision_mlp=True, vision_attn_proj=True),
+        "scale_inspection",
+        None,
     )
     assert n == 72
     assert _quantized_count(policy) == 72
@@ -193,13 +277,18 @@ def test_t3_full_vision_linear():
 
 
 # ---------------------------------------------------------------------------
-# Test 4 — vision + connector (72 + 1 = 73)
+# Test 7 — vision + connector (72 + 1 = 73)
 # ---------------------------------------------------------------------------
-def test_t4_vision_plus_connector():
+def test_t7_vision_plus_connector():
     policy = _make_policy()
     n = _wrap_smolvlm_vision_linear_layers(
         policy,
-        _cfg(vision_enabled=True, connector_enabled=True),
+        _cfg(
+            vision_enabled=True,
+            vision_mlp=True,
+            vision_attn_proj=True,
+            connector_enabled=True,
+        ),
         "scale_inspection",
         None,
     )
@@ -208,13 +297,36 @@ def test_t4_vision_plus_connector():
 
 
 # ---------------------------------------------------------------------------
-# Test 5 — module IDs are unique and well-formed
+# Test 8 — V2 cumulative: connector + vision MLP = 1 + 24 = 25
 # ---------------------------------------------------------------------------
-def test_t5_module_ids_unique():
+def test_t8_v2_connector_plus_mlp():
+    policy = _make_policy()
+    n = _wrap_smolvlm_vision_linear_layers(
+        policy,
+        _cfg(
+            vision_enabled=True,
+            vision_mlp=True,
+            connector_enabled=True,
+        ),
+        "scale_inspection",
+        None,
+    )
+    assert n == 25
+
+
+# ---------------------------------------------------------------------------
+# Test 9 — module IDs are unique and well-formed
+# ---------------------------------------------------------------------------
+def test_t9_module_ids_unique():
     policy = _make_policy()
     _wrap_smolvlm_vision_linear_layers(
         policy,
-        _cfg(vision_enabled=True, connector_enabled=True),
+        _cfg(
+            vision_enabled=True,
+            vision_mlp=True,
+            vision_attn_proj=True,
+            connector_enabled=True,
+        ),
         "scale_inspection",
         None,
     )
@@ -236,9 +348,55 @@ def test_t5_module_ids_unique():
 
 
 # ---------------------------------------------------------------------------
-# Test 6 — _parse_module_id resolves vision/connector component/operator/idx
+# Test 10 — _should_wrap honored: linear.enabled=false disables vision wrap
 # ---------------------------------------------------------------------------
-def test_t6_parse_module_id_vision_connector():
+def test_t10_linear_disabled_disables_vision():
+    policy = _make_policy()
+    n = _wrap_smolvlm_vision_linear_layers(
+        policy,
+        _cfg(
+            vision_enabled=True,
+            vision_mlp=True,
+            vision_attn_proj=True,
+            linear_enabled=False,
+        ),
+        "scale_inspection",
+        None,
+    )
+    assert n == 0
+    assert _quantized_count(policy) == 0
+
+
+# ---------------------------------------------------------------------------
+# Test 11 — _should_wrap honored: linear.exclude isolates vision attention
+# ---------------------------------------------------------------------------
+def test_t11_linear_exclude_isolates_attn():
+    policy = _make_policy()
+    n = _wrap_smolvlm_vision_linear_layers(
+        policy,
+        _cfg(
+            vision_enabled=True,
+            vision_mlp=True,
+            vision_attn_proj=True,
+            linear_exclude=["vision.layers.*.self_attn.*"],
+        ),
+        "scale_inspection",
+        None,
+    )
+    # Only MLP (24) wraps; attention (48) is excluded.
+    assert n == 24
+
+    vlm = policy.model.vlm_with_expert.get_vlm_model()
+    assert isinstance(vlm.vision_model.encoder.layers[0].mlp.fc1, QuantizedLinear)
+    assert isinstance(
+        vlm.vision_model.encoder.layers[0].self_attn.q_proj, nn.Linear
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 12 — _parse_module_id resolves vision/connector component/operator/idx
+# ---------------------------------------------------------------------------
+def test_t12_parse_module_id_vision_connector():
     parse = QuantStatManager._parse_module_id
 
     assert parse("vision.layers.3.mlp.fc1") == ("vision", "fc1", 3)
@@ -253,9 +411,9 @@ def test_t6_parse_module_id_vision_connector():
 
 
 # ---------------------------------------------------------------------------
-# Test 7 — linear.overrides resolve vision/connector precision via module_id
+# Test 13 — linear.overrides resolve vision/connector precision via module_id
 # ---------------------------------------------------------------------------
-def test_t7_overrides_target_vision():
+def test_t13_overrides_target_vision():
     from vla_tcs2.model_wrapper import resolve_linear_quant_config
 
     cfg = _cfg(overrides=[{
@@ -284,12 +442,42 @@ def test_t7_overrides_target_vision():
     assert names3 == []
 
 
+# ---------------------------------------------------------------------------
+# Test 14 — vision/connector calibration policy defaults to recalibrate
+# ---------------------------------------------------------------------------
+def test_t14_calibration_policy_recalibrate():
+    policy = _make_policy()
+    _wrap_smolvlm_vision_linear_layers(
+        policy,
+        _cfg(
+            vision_enabled=True,
+            vision_mlp=True,
+            connector_enabled=True,
+        ),
+        "scale_inspection",
+        None,
+    )
+
+    vlm = policy.model.vlm_with_expert.get_vlm_model()
+    fc1 = vlm.vision_model.encoder.layers[0].mlp.fc1
+    proj = vlm.connector.modality_projection.proj
+    assert fc1.calibration_policy == "recalibrate"
+    assert proj.calibration_policy == "recalibrate"
+
+
 if __name__ == "__main__":
     test_t1_default_off()
     test_t2_connector_only()
-    test_t3_full_vision_linear()
-    test_t4_vision_plus_connector()
-    test_t5_module_ids_unique()
-    test_t6_parse_module_id_vision_connector()
-    test_t7_overrides_target_vision()
+    test_t3_enabled_alone_wraps_nothing()
+    test_t4_vision_mlp_only()
+    test_t5_vision_attn_proj_only()
+    test_t6_full_vision_linear()
+    test_t7_vision_plus_connector()
+    test_t8_v2_connector_plus_mlp()
+    test_t9_module_ids_unique()
+    test_t10_linear_disabled_disables_vision()
+    test_t11_linear_exclude_isolates_attn()
+    test_t12_parse_module_id_vision_connector()
+    test_t13_overrides_target_vision()
+    test_t14_calibration_policy_recalibrate()
     print("all vision quant routing tests passed")
