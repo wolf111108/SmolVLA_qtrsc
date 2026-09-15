@@ -61,6 +61,7 @@ $$\Delta SR_{W4} = \Delta_{component} + \Delta_{quant\text{-}grid} + \Delta_{clo
 ```
 G0 数值误差(weight-error-audit) → G1 组件定位(component-localization)
   → 看结果决定 G2(weight-granularity) / G3(action-horizon) 优先级 → 必要时 G4(outlier-mask-diagnosis)
+  → G5 定位 VLM 内部 attention vs MLP → G6 验证结论对 Expert-FP8 背景鲁棒
 ```
 
 | task | 问题 | 一句话设计 | 状态 |
@@ -70,6 +71,8 @@ G0 数值误差(weight-error-audit) → G1 组件定位(component-localization)
 | G2 weight-granularity | tensor-wise W4 是根因？ | 新增正交字段 `weight_quant_granularity`：per_tensor / per_output_channel / group 128/64/32 | pending（G1 后） |
 | G3 action-horizon | 开环放大？ | FP8 与 W4 两 anchor × n_action_steps∈{1,5,10}；n=10 可复用 G1-A/B | pending（G1 后） |
 | G4 outlier-mask-diagnosis | mask 漂移？ | 条件触发：calibration mask vs frozen mask vs runtime oracle 三对照 | conditional |
+| G5 vlm-selective-precision | VLM 内 attention 还是 MLP？ | Expert raw FP 背景，VLM attention(q/k/v/o) vs MLP(gate/up/down) 分别压 W4（G5-A/B/C + 复用 G1-C） | done（90/72/39/21） |
+| G6 vlm-selective-expert-fp8 | 结论对 Expert-FP8 鲁棒？ | 升级 `linear.overrides`，Expert FP8 背景重做 VLM selective precision（G6-A/B/C/D） | running（Gate 0-5 PASS，Gate 6 g6a=90%） |
 
 归因阈值：ΔSR ≥ 15pp 为主要贡献；6–15pp 中等；≤6pp 不做强归因（ep10 100-ep 噪声 ≈±5.7pp）。比较优先看 paired task-wise SR 而非仅 Goal overall。
 
@@ -88,6 +91,14 @@ bash $EXP/tasks/component-localization/scripts/run_component_localization.sh
 bash $EXP/tasks/weight-granularity/scripts/run_weight_granularity.sh
 bash $EXP/tasks/action-horizon/scripts/run_action_horizon.sh
 bash $EXP/tasks/outlier-mask-diagnosis/scripts/run_outlier_mask_diagnosis.sh   # conditional
+
+# G5：VLM 内部 selective precision（Expert raw FP 背景）
+bash $EXP/tasks/vlm-selective-precision/scripts/run_vlm_selective_precision.sh
+
+# G6：Expert-FP8 背景的 VLM selective precision（linear.overrides 升级）
+python $EXP/tasks/vlm-selective-expert-fp8/scripts/make_g6_configs.py
+bash $EXP/tasks/vlm-selective-expert-fp8/scripts/run_smoke.sh
+bash $EXP/tasks/vlm-selective-expert-fp8/scripts/run_goal.sh
 ```
 
 幂等规则：存在完整 eval_info.json → skip。**每个 config 独立 scale_dir**，Phase G 不跨 config 复用 calibration cache（规避 Phase F 的 reuse 失效混杂）。
