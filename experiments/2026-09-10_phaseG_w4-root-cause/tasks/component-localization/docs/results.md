@@ -52,6 +52,8 @@ libero_goal × 100 ep × 4 config，定位 F3 W4 退化的组件来源。核心�
 
 ### 3.2 组件归因（对照 §1 判读表）
 
+![G1 component localization](../../../docs/figures/phaseG_G1_component_localization.png)
+
 | 比较 | SR | 判读 |
 |---|---|---|
 | C (w4_vlm) vs B (w4_all) | 21.0 vs 21.0 | VLM-only W4 ≈ F3 → 满足「VLM 主导」第一条 |
@@ -82,3 +84,4 @@ libero_goal × 100 ep × 4 config，定位 F3 W4 退化的组件来源。核心�
 |---|---|---|
 | 2026-09-11 | 创建文档 | zyzhao |
 | 2026-09-12 | 回填 G1 四 config 结果（88/21/21/84）与 task-wise 明细、组件归因结论 | zyzhao |
+| 2026-09-15 | 在 §3.2 插入 G1 柱状图（复用 Phase F 四 suite 调色板，引用 `../../../docs/figures/`） | zyzhao |

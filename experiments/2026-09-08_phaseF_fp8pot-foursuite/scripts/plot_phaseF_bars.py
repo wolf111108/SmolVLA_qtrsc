@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -46,6 +47,17 @@ from matplotlib.patches import Patch
 # ---------------------------------------------------------------------------
 
 ROOT = Path(__file__).resolve().parents[3]
+
+# Palette is shared across experiments so a colour family never drifts.
+sys.path.insert(0, str(ROOT / "scripts"))
+from figure_palette import (  # noqa: E402
+    C_FP,
+    C_NEG,
+    C_POS,
+    SUITE_LABELS,
+    SUITE_SHADES,
+    readable_on,
+)
 EXP_OUT = ROOT / "outputs" / "experiments"
 VERIFY = ROOT / "outputs" / "verify_libero"
 FIG_DIR = (
@@ -58,7 +70,6 @@ ALT_FIG_DIR = ROOT / "outputs" / "figures"
 # ---------------------------------------------------------------------------
 
 SUITES = ["libero_spatial", "libero_object", "libero_goal", "libero_10"]
-SUITE_LABELS = ["Spatial", "Object", "Goal", "LIBERO-10"]
 
 # (key, output-dir prefix, chart title)
 PROTOCOLS = [
@@ -70,28 +81,8 @@ PROTOCOLS = [
      "F3   Linear W4 + FP8 a/out  ·  outlier protection 0.01"),
 ]
 
-# Four hues (one per suite) x three lightness steps (one per protocol).
-# Same hue inside a row, light -> dark down the row.
-SUITE_SHADES = {
-    "Spatial":   ("#9ecae1", "#4292c6", "#08519c"),  # blue
-    "Object":    ("#fdae6b", "#e6550d", "#a63603"),  # orange
-    "Goal":      ("#a1d99b", "#31a354", "#006d2c"),  # green
-    "LIBERO-10": ("#bcbddc", "#807dba", "#54278f"),  # purple
-}
-C_FP = "#d9d9d9"      # FP16 reference bar (constant across charts)
-C_POS = "#1a7f37"
-C_NEG = "#b3261e"
-
-
-def _luminance(hex_color: str) -> float:
-    h = hex_color.lstrip("#")
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
-
-
-def readable_on(hex_color: str) -> str:
-    """Pick black or white text for maximum contrast on a fill colour."""
-    return "white" if _luminance(hex_color) < 0.55 else "black"
+# Palette (including the four suite hues and their lightness steps) lives in
+# scripts/figure_palette.py and is imported above.
 
 
 def read_sr(d: Path) -> float:

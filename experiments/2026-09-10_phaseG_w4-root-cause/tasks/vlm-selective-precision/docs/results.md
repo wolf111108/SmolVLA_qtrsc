@@ -25,7 +25,7 @@
 ## 3. 分组结果与分析
 
 ### 3.1 VLM 内部组件敏感度（attention vs MLP）
-
+![G5 VLM internals](../../../docs/figures/phaseG_G5_vlm_internals.png)
 | 取值 | Success Rate | Δ vs control | 备注 |
 |---|---|---|---|
 | control（VLM 全 FP8） | 90.0% | — | Expert raw FP |
@@ -57,3 +57,4 @@
 |---|---|---|
 | 2026-09-13 | 创建文档 | |
 | 2026-09-14 | 回填 G5 三组 + G5-D 结果（90/72/39/21） | |
+| 2026-09-15 | 在 §3.1 插入 G5 柱状图（Goal 绿色四档深浅，引用 `../../../docs/figures/`） | |

@@ -38,6 +38,8 @@ Phase G 目标：归因 Phase F 中 F3（Linear W4）四 suite 平均 83.0% → 
 
 ### 3.1 G1 组件归因（libero_goal，100 ep/config）
 
+![G1 component localization](figures/phaseG_G1_component_localization.png)
+
 | 取值 | Success Rate | 备注 |
 |---|---:|---|
 | A fp8_all（anchor） | 88.0% | F1 复现（F1 goal 90%） |
@@ -49,6 +51,8 @@ Phase G 目标：归因 Phase F 中 F3（Linear W4）四 suite 平均 83.0% → 
 
 ### 3.2 G5 VLM 内部 selective precision（Expert raw FP）
 
+![G5 VLM internals](figures/phaseG_G5_vlm_internals.png)
+
 | 取值 | Success Rate | Δ vs control | 备注 |
 |---|---:|---:|---|
 | control（VLM 全 FP8） | 90.0% | — | Expert raw FP |
@@ -57,6 +61,8 @@ Phase G 目标：归因 Phase F 中 F3（Linear W4）四 suite 平均 83.0% → 
 | VLM all-W4（复用 G1-C） | 21.0% | -69pp | |
 
 分析：**MLP 是 VLM 内部 W4 掉精度的主要来源**——MLP-W4（39%）显著低于 attention-W4（72%），51+18 ≈ 69pp 与 all-W4 的 -69pp 近似可加。说明 W4 的精度损失主要来自 MLP 的 gate/up/down 权重。详见 `tasks/vlm-selective-precision/docs/results.md`。
+
+> 图上四根柱均为 Goal 绿色系，由浅到深对应对 W4 的敏感度递增（control → attention → MLP → all），与 Phase F 四 suite 图的配色体系一致。
 
 ### 3.3 G6 VLM selective precision（Expert-FP8 背景）
 
@@ -97,3 +103,4 @@ Phase G 目标：归因 Phase F 中 F3（Linear W4）四 suite 平均 83.0% → 
 | 2026-09-11 | 创建文档 | |
 | 2026-09-12 | 回填 G1 四 config 结果（88/21/21/84），结论：VLM 主导；G2 升为最高优先（需先实现 granularity 字段） | zyzhao |
 | 2026-09-14 | 回填 G5（90/72/39/21，MLP 主导）与 G6（Gate 0-5 PASS，g6a=90%） | zyzhao |
+| 2026-09-15 | 新增 G1 / G5 柱状图（`scripts/plot_phaseG_bars.py`）：G1 复用 Phase F 四 suite 调色板，G5 用 Goal 绿色四档深浅 | zyzhao |
