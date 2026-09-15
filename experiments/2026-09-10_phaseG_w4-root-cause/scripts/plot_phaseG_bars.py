@@ -5,20 +5,21 @@ Charts (one figure each, four bars per figure):
 
   G1  Component localization: which side owns the W4 collapse?
       G1-A FP8 all (anchor)  |  G1-B W4 all  |  G1-C W4 VLM only  |  G1-D W4 Expert only
-      Colours reuse the Phase F four-suite palette (blue / orange / green /
-      purple), so the F and G figure families read as one set.
 
   G5  VLM internals under W4: attention vs MLP
       control (VLM all FP8)  |  attention W4  |  MLP W4  |  VLM all W4
-      All bars use the Phase F Goal (green) hue with four lightness steps,
-      deepening with W4 aggressiveness.
 
-The FP8 anchor of each chart is drawn as a dashed reference line so the drop
-is readable at a glance, and each bar carries its delta against that anchor
-with an auto-picked black/white label colour.
+Both charts use the Phase F Goal (green) hue with four lightness steps,
+deepening along the bar order. The FP8 anchor of each chart is drawn as a
+dashed reference line so the drop is readable at a glance, and each bar
+carries its delta against that anchor with an auto-picked black/white label
+colour.
 
-Layout is collision-proof: apart from the bar labels every text block lives
-outside the axes, so a tall bar can never sit under the legend.
+The legend and the footnote lines are stacked below the axes at positions
+measured from ``ax.get_tightbbox()`` -- which includes the (multi-line) x tick
+labels and the x-axis label -- rather than hand-tuned fractions. Placing them
+just under the plot rectangle instead would put the legend on top of the tick
+text.
 
 All figures' text is English (avoids CJK font issues in matplotlib).
 Palette comes from scripts/figure_palette.py — the same source Phase F uses.
@@ -67,11 +68,7 @@ G5_RUNS = RUNS / "vlm-selective-precision"
 sys.path.insert(0, str(ROOT / "scripts"))
 from figure_palette import (  # noqa: E402
     C_REF,
-    C_NEG,
-    C_POS,
     GOAL_SHADES_4,
-    SUITE_LABELS,
-    SUITE_SHADES,
     readable_on,
 )
 
@@ -79,18 +76,17 @@ from figure_palette import (  # noqa: E402
 # data spec
 # ---------------------------------------------------------------------------
 
-# G1: four hues taken from the Phase F suite palette (mid lightness step).
+# Both charts use the Phase F Goal (green) hue with four lightness steps,
+# deepening with W4 aggressiveness.
+
 G1_BARS = [
-    ("G1-A\nFP8 all\n(anchor)", "g1a_fp8_all", G1_RUNS, SUITE_SHADES["Spatial"][1]),
-    ("G1-B\nW4 all\n(= F3 anchor)", "g1b_w4_all", G1_RUNS,
-     SUITE_SHADES["Object"][1]),
-    ("G1-C\nW4 VLM only", "g1c_w4_vlm_only", G1_RUNS, SUITE_SHADES["Goal"][1]),
-    ("G1-D\nW4 Expert only", "g1d_w4_expert_only", G1_RUNS,
-     SUITE_SHADES["LIBERO-10"][1]),
+    ("G1-A\nFP8 all\n(anchor)", "g1a_fp8_all", G1_RUNS, GOAL_SHADES_4[0]),
+    ("G1-B\nW4 all\n(= F3 anchor)", "g1b_w4_all", G1_RUNS, GOAL_SHADES_4[1]),
+    ("G1-C\nW4 VLM only", "g1c_w4_vlm_only", G1_RUNS, GOAL_SHADES_4[2]),
+    ("G1-D\nW4 Expert only", "g1d_w4_expert_only", G1_RUNS, GOAL_SHADES_4[3]),
 ]
 
-# G5: one hue (Goal green), four lightness steps, light -> dark with W4
-# aggressiveness. The last bar is G1-C re-measured, hence a different run dir.
+# The last G5 bar is G1-C re-measured, hence a different run directory.
 G5_BARS = [
     ("control\nVLM all FP8\nExpert raw FP", "g5a_vlm_fp8_control", G5_RUNS,
      GOAL_SHADES_4[0]),
@@ -188,25 +184,49 @@ def anchor_legend_handles(anchor_label):
                    linewidth=1.3, label=anchor_label)]
 
 
-SINGLE_LAYOUT = dict(left=0.105, right=0.975, top=0.88, bottom=0.335)
+SINGLE_LAYOUT = dict(left=0.105, right=0.975, top=0.90, bottom=0.42)
+
+
+def stack_below_axes(fig, ax, handles, notes, xc, gap_legend=0.024,
+                     gap_text=0.026, gap_line=0.013):
+    """Stack the legend and the footnote lines strictly below the axes.
+
+    Positions are MEASURED, not hand-tuned: the starting y comes from
+    ``ax.get_tightbbox()``, which includes the tick labels and the x-axis
+    label. Using ``ax.get_window_extent()`` instead would ignore those, and a
+    legend placed just under the plot rectangle would then sit right on top of
+    the multi-line x tick labels (that was the original bug here).
+    """
+    fig.canvas.draw()
+    r = fig.canvas.get_renderer()
+    inv = fig.transFigure.inverted()
+
+    y = ax.get_tightbbox(r).transformed(inv).y0 - gap_legend
+    leg = fig.legend(handles=handles, loc="upper center",
+                     bbox_to_anchor=(xc, y), fontsize=9.5, frameon=True,
+                     framealpha=0.95, borderpad=0.7, handlelength=2.4)
+
+    fig.canvas.draw()
+    y = leg.get_window_extent(r).transformed(inv).y0 - gap_text
+    for i, txt in enumerate(notes):
+        t = fig.text(xc, y, txt, ha="center", va="top", fontsize=8.2,
+                     color="gray")
+        fig.canvas.draw()
+        y = t.get_window_extent(r).transformed(inv).y0 - gap_line
+        if y < 0.01:          # never let a note fall off the canvas
+            print(f"[warn] note {i} would run off the figure (y={y:.3f})")
+    return leg
 
 
 def build_figure(labels, vals, colors, title, anchor_label, xlabel,
                  footnote1, footnote2):
-    fig, ax = plt.subplots(figsize=(9.0, 5.9), dpi=160)
+    fig, ax = plt.subplots(figsize=(9.0, 6.6), dpi=160)
     fig.subplots_adjust(**SINGLE_LAYOUT)
     xc = (SINGLE_LAYOUT["left"] + SINGLE_LAYOUT["right"]) / 2
 
     draw_chart(ax, labels, vals, colors, title, anchor_label, xlabel)
-
-    # everything below lives outside the axes (see anchor_legend_handles)
-    fig.legend(handles=anchor_legend_handles(anchor_label), loc="upper center",
-               bbox_to_anchor=(0.5, 0.275), fontsize=9.5, frameon=True,
-               framealpha=0.95, borderpad=0.7, handlelength=2.4)
-    fig.text(xc, 0.150, footnote1, ha="center", va="center", fontsize=8.2,
-             color="gray")
-    fig.text(xc, 0.062, footnote2, ha="center", va="center", fontsize=8.2,
-             color="gray")
+    stack_below_axes(fig, ax, anchor_legend_handles(anchor_label),
+                     [footnote1, footnote2], xc)
     return fig
 
 
@@ -238,8 +258,7 @@ def main():
         "Quantization configuration",
         ep_note(eps) + ".  Dashed line = G1-A FP8 anchor; "
         "in-bar numbers are Δ vs that anchor (pp).",
-        "Bar colours reuse the Phase F four-suite palette "
-        "(Spatial blue, Object orange, Goal green, LIBERO-10 purple).",
+        "All bars use the Phase F Goal (green) hue, light → dark in bar order.",
     )
     saved.append(save(fig, "phaseG_G1_component_localization.png"))
     plt.close(fig)

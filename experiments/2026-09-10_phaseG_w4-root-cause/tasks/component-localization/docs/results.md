@@ -54,6 +54,8 @@ libero_goal × 100 ep × 4 config，定位 F3 W4 退化的组件来源。核心�
 
 ![G1 component localization](../../../docs/figures/phaseG_G1_component_localization.png)
 
+> 四根柱均为 Goal 绿色系，明度由浅到深对应 A → B → C → D；其中后三档与 Phase F 的 Goal 柱同色。
+
 | 比较 | SR | 判读 |
 |---|---|---|
 | C (w4_vlm) vs B (w4_all) | 21.0 vs 21.0 | VLM-only W4 ≈ F3 → 满足「VLM 主导」第一条 |

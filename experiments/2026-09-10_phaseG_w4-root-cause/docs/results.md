@@ -49,6 +49,8 @@ Phase G 目标：归因 Phase F 中 F3（Linear W4）四 suite 平均 83.0% → 
 
 分析：VLM-only W4 完整复现 F3 崩溃，Expert-only W4 几乎无损 → **VLM 量化贡献 ≥95% 退化**。与 G0 交叉：vlm/expert 权重 NMSE 仅 1.3×，但闭环 SR 差 63pp → 根因是 VLM 对均匀 W4 噪声的闭环敏感度，非误差大小。详见 `tasks/component-localization/docs/results.md`。
 
+> G1 与 G5 两张图均使用 **Goal 绿色系** 的四档明度（由浅到深）。其中后三档 `#a1d99b / #31a354 / #006d2c` 与 Phase F 中 Goal 柱在 F1/F2/F3 使用的颜色**完全一致**，因此 F 与 G 两套图的绿色语言可以直接对读。
+
 ### 3.2 G5 VLM 内部 selective precision（Expert raw FP）
 
 ![G5 VLM internals](figures/phaseG_G5_vlm_internals.png)
