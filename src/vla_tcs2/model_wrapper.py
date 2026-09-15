@@ -592,6 +592,11 @@ def apply_sensitivity_target(
 SMOLVLA_ATTN_LINEAR_NAMES = ["q_proj", "k_proj", "v_proj", "o_proj"]
 SMOLVLA_MLP_LINEAR_NAMES = ["gate_proj", "up_proj", "down_proj"]
 
+# Vision encoder (transformers SmolVLM) Linear names. NOTE: vision attention
+# uses "out_proj" (NOT "o_proj" like VLM text), MLP uses fc1/fc2.
+VISION_ATTN_LINEAR_NAMES = ["q_proj", "k_proj", "v_proj", "out_proj"]
+VISION_MLP_LINEAR_NAMES = ["fc1", "fc2"]
+
 
 def _setattr_path(obj: nn.Module, dotted: str, value) -> None:
     parts = dotted.split(".")
@@ -739,6 +744,104 @@ def _wrap_smolvla_linear_layers(
         replaced += 1
         if stat_manager is not None:
             stat_manager.register_layer(f"head_{name}", 0)
+
+    return replaced
+
+
+def _wrap_smolvlm_vision_linear_layers(
+    model: SmolVLAPolicy,
+    quant_config: dict[str, Any],
+    mode: str,
+    stat_manager: QuantStatManager | None,
+) -> int:
+    """
+    Opt-in wrapping of the SmolVLM vision encoder Linear + connector
+    projection (Phase I vision quantization).
+
+    Default-off (backward-compat gate): when ``quantization.vision.enabled``
+    and ``quantization.connector.enabled`` are both false (or absent), this
+    returns 0 and leaves the legacy VLM/Expert wrapping (224 Linear) untouched.
+
+    Targets (transformers SmolVLM, accessed via ``vlm.model``):
+      - vision_model.encoder.layers.<i>.self_attn.{q,k,v,out}_proj
+      - vision_model.encoder.layers.<i>.mlp.{fc1,fc2}
+      - connector.modality_projection.proj
+        (module_id ``connector.layer.0.connector_proj``)
+
+    Precision is resolved through the SAME ``quantization.linear.overrides``
+    as VLM/Expert (component / module_id selectors), so per-operator base
+    configs are shared but overrides keep vision/connector distinct.
+    """
+    vision_cfg = quant_config.get("vision", {}) or {}
+    connector_cfg = quant_config.get("connector", {}) or {}
+    vision_enabled = bool(vision_cfg.get("enabled", False))
+    connector_enabled = bool(connector_cfg.get("enabled", False))
+
+    if not vision_enabled and not connector_enabled:
+        return 0
+
+    granularity = str(
+        quant_config.get("linear_scale_granularity", "per_site")
+    ).lower()
+
+    model_obj = model.model
+    vlm_expert = model_obj.vlm_with_expert
+    vlm_model = vlm_expert.get_vlm_model()
+
+    replaced = 0
+
+    def _replace_linear(
+        mod,
+        component,
+        layer_idx,
+        attr_name,
+        op_name,
+        submodule,
+        module_id,
+    ):
+        nonlocal replaced
+        if mod is None or not isinstance(mod, nn.Linear):
+            return
+        ql = create_quantized_linear(
+            mod, op_name, layer_idx, quant_config, mode, module_id=module_id
+        )
+        ql._stat_manager = stat_manager
+        ql.set_layer_info(op_name, layer_idx, module_id=module_id)
+        sg_name, sg_idx = resolve_linear_scale_group(
+            component, layer_idx, op_name, granularity
+        )
+        ql.set_scale_group(sg_name, sg_idx)
+        setattr(submodule, attr_name, ql)
+        replaced += 1
+        if stat_manager is not None:
+            stat_manager.register_layer(sg_name, sg_idx)
+
+    # Vision encoder (12 layers × 6 Linear).
+    if vision_enabled:
+        vision_model = vlm_model.vision_model
+        encoder = vision_model.encoder
+        for layer_idx, layer in enumerate(encoder.layers):
+            for name in VISION_ATTN_LINEAR_NAMES:
+                _replace_linear(
+                    getattr(layer.self_attn, name, None),
+                    "vision", layer_idx, name, name, layer.self_attn,
+                    f"vision.layers.{layer_idx}.self_attn.{name}",
+                )
+            for name in VISION_MLP_LINEAR_NAMES:
+                _replace_linear(
+                    getattr(layer.mlp, name, None),
+                    "vision", layer_idx, name, name, layer.mlp,
+                    f"vision.layers.{layer_idx}.mlp.{name}",
+                )
+
+    # Connector projection (single Linear; attr is "proj").
+    if connector_enabled:
+        modality_projection = vlm_model.connector.modality_projection
+        _replace_linear(
+            getattr(modality_projection, "proj", None),
+            "connector", 0, "proj", "connector_proj", modality_projection,
+            "connector.layer.0.connector_proj",
+        )
 
     return replaced
 
@@ -1173,6 +1276,16 @@ class ModelWrapper:
             self.stat_manager,
         )
         print(f"Replaced {n_linear} Linear modules.")
+
+        # Phase I vision quantization (default-off opt-in).
+        n_vision = _wrap_smolvlm_vision_linear_layers(
+            self.model,
+            self.quant_cfg,
+            mode,
+            self.stat_manager,
+        )
+        if n_vision > 0:
+            print(f"Replaced {n_vision} vision/connector Linear modules.")
 
         if self.quant_cfg.get("quantize_matmul", False):
             # get_attention_interface is a MODEL-level method on

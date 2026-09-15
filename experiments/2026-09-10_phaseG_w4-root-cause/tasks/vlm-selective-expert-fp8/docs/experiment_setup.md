@@ -95,6 +95,13 @@ bash experiments/2026-09-10_phaseG_w4-root-cause/tasks/vlm-selective-expert-fp8/
 
 预期输出目录：`outputs/2026-09-10_phaseG_w4-root-cause/tasks/vlm-selective-expert-fp8/<config_name>/`
 
+Gate 6 运行日志与断点续跑：
+
+- 汇总日志：`outputs/2026-09-10_phaseG_w4-root-cause/tasks/vlm-selective-expert-fp8/g6_goal_run2.log`
+- 分组日志：`outputs/.../vlm-selective-expert-fp8/<config_name>/run.log`
+- `run_goal.sh` 遇已有 `result.json` 的组会自动 `[SKIP]`，可直接重跑续做；单组失败**不连坐**后续组，但整体以非零码退出。
+- 运行进度与异常记录见 `docs/logs.md`。
+
 ---
 
 ## 7. 验收 Gate
