@@ -1,0 +1,134 @@
+# Q0 — INT8 (W8A8) 全算子量化 | libero_goal task0 × 1ep
+# 用途：sparsity quick scan。Linear A/W/O = INT8，QK/PV A/B/O = INT8，outlier 保护 0.01。
+# 需 fresh quick calibration（本实验自建 scale）。
+# 见 docs/experiment_setup.md §3 与 README_EXPERIMENT.md §4 Q0。
+output_dir: outputs/2026-09-15_sparsity-ratio-quickscan/q0_int8
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+quantization:
+  enabled: true
+  mode: quant_forward
+  method: outlier
+  scale_dir: scales/2026-09-15_sparsity-ratio-quickscan/q0_int8
+  quantize_matmul: true
+  matmul_scale_granularity: per_site
+  linear_scale_granularity: per_site
+  outlier_ratio: 0.01
+  calibration_policy:
+    default: auto
+    layer_policy:
+      q_proj: recalibrate
+      k_proj: recalibrate
+      v_proj: recalibrate
+      o_proj: recalibrate
+      gate_proj: recalibrate
+      up_proj: recalibrate
+      down_proj: recalibrate
+      qk_matmul: recalibrate
+      pv_matmul: recalibrate
+    per_layer_policy: {}
+  q_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  k_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  v_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  o_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  gate_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  up_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  down_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  qk_matmul:
+    A_bit: 8
+    B_bit: 8
+    O_bit: 8
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  pv_matmul:
+    A_bit: 8
+    B_bit: 8
+    O_bit: 8
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  linear:
+    enabled: true
+    include:
+    - '*'
+    exclude: []
+  weight_quant_granularity: per_tensor
+  weight_group_size: null
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 1
+  batch_size: 8
+  frame_stride: 16
+  seed: 42
+evaluation:
+  env:
+    type: libero
+    task: libero_goal
+    max_parallel_tasks: 1
+    task_ids:
+    - 0
+  n_episodes: 1
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2
+sparsity:
+  enabled: true
+  chunk_size: 4194304
+  unit:
+    enabled: false
+  export:
+    dir: null
