@@ -792,10 +792,15 @@ O = FP8 E4M3
 quantization:
   linear_scale_granularity: per_site
 
+  vision:
+    enabled: false
+
   connector:
     enabled: true
+    calibration_policy: recalibrate
 
   linear:
+    enabled: true
     overrides:
       - name: connector_fp8
         target:
@@ -807,7 +812,8 @@ quantization:
           method: pot_fp8_outlier
 ```
 
-`method` 字段名称必须以当前代码实际支持值为准，上面只是模板。
+`method` 字段名称必须以当前代码实际支持值为准，上面只是模板。Connector 首次加入强制
+`calibration_policy: recalibrate`（connector scale 文件 component-specific，尚不存在）。
 
 ---
 
@@ -860,19 +866,37 @@ Vision MLP FP8
 现有 canonical VLM/Expert quant background
 ```
 
-YAML target 示例：
+YAML 示例（cumulative：V1 Connector + V2 Vision MLP）：
 
 ```yaml
 quantization:
+  linear_scale_granularity: per_site
+
   vision:
     enabled: true
+    calibration_policy: recalibrate
+    linear:
+      mlp: true          # ★ 必须显式打开，否则 Vision MLP 不会被 wrap
+      attn_proj: false
     quantize_matmul: false
+    quantize_patch_embed: false
 
   connector:
     enabled: true
+    calibration_policy: recalibrate
 
   linear:
+    enabled: true
     overrides:
+      - name: connector_fp8
+        target:
+          component: connector
+        config:
+          a_bit: e4m3
+          w_bit: e4m3
+          o_bit: e4m3
+          method: pot_fp8_outlier
+
       - name: vision_mlp_fp8
         target:
           module_id: "vision.layers.*.mlp.*"
@@ -882,6 +906,11 @@ quantization:
           o_bit: e4m3
           method: pot_fp8_outlier
 ```
+
+此时应看到：`224 (legacy) + 1 (connector) + 24 (vision MLP) = 249 QuantizedLinear`。
+
+> ⚠ 关键：`vision.enabled=true` 本身**不会** wrap 任何 Linear；必须再设 `vision.linear.mlp=true`。
+> 否则 V2 实际只剩 225，Vision MLP 根本没被量化。
 
 如果现有 matcher 不支持 glob `module_id`，则使用当前框架已经支持的 component/operator selector，或扩展 matcher，但必须加 unit test。
 
@@ -959,14 +988,46 @@ out_proj
 
 ## 11.2 配置
 
+YAML 示例（cumulative：V1 Connector + V2 Vision MLP + V3 Vision attention projection）：
+
 ```yaml
 quantization:
+  linear_scale_granularity: per_site
+
   vision:
     enabled: true
+    calibration_policy: recalibrate
+    linear:
+      mlp: true          # 保留 V2 的 MLP wrap
+      attn_proj: true    # ★ 新增：打开 attention projection wrap
     quantize_matmul: false
+    quantize_patch_embed: false
+
+  connector:
+    enabled: true
+    calibration_policy: recalibrate
 
   linear:
+    enabled: true
     overrides:
+      - name: connector_fp8
+        target:
+          component: connector
+        config:
+          a_bit: e4m3
+          w_bit: e4m3
+          o_bit: e4m3
+          method: pot_fp8_outlier
+
+      - name: vision_mlp_fp8
+        target:
+          module_id: "vision.layers.*.mlp.*"
+        config:
+          a_bit: e4m3
+          w_bit: e4m3
+          o_bit: e4m3
+          method: pot_fp8_outlier
+
       - name: vision_attn_proj_fp8
         target:
           module_id: "vision.layers.*.self_attn.*"
@@ -976,6 +1037,11 @@ quantization:
           o_bit: e4m3
           method: pot_fp8_outlier
 ```
+
+此时应看到：`224 + 1 + 24 + 48 = 297 QuantizedLinear`。
+
+> ⚠ V3 是 cumulative 实验：必须**同时**保留 V2 的 `vision.linear.mlp=true` 与
+> `vision_mlp_fp8` override，再叠加 `attn_proj=true` 与 `vision_attn_proj_fp8` override。
 
 注意 `out_proj` 需要明确进入 resolver/operator list。
 
@@ -1861,11 +1927,16 @@ quantization:
 
   vision:
     enabled: true
+    calibration_policy: recalibrate
+    linear:
+      mlp: true          # 显式 group gate（er.md P0）：不设则不 wrap
+      attn_proj: true
     quantize_matmul: false
     quantize_patch_embed: false
 
   connector:
     enabled: true
+    calibration_policy: recalibrate
 
   linear:
     enabled: true
@@ -1898,6 +1969,9 @@ quantization:
           o_bit: e4m3
           method: <USE_CURRENT_VALID_METHOD>
 ```
+
+> ⚠ `vision.enabled=true` 本身不 wrap 任何 Linear；必须显式设 `vision.linear.mlp` /
+> `vision.linear.attn_proj`（默认 false）。
 
 如果 matcher 当前不支持 `module_id` glob：
 

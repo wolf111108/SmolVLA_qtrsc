@@ -136,8 +136,8 @@ action head 各层（均位于 `VLAFlowMatching` 顶层）：
 |------|---------|------|
 | VLM `text_model` 的 `q/k/v/o_proj` + `gate/up/down_proj` | ✅ 量化 | 16 层 LLM 的 self-attn 与 MLP |
 | `lm_expert` 的 `self_attn` + `mlp` | ✅ 量化 | 16 层 action expert |
-| SigLIP `vision_model` | 🔲 可选（opt-in） | 视觉编码器；`quantization.vision.enabled: true` 开启，默认关闭 |
-| `connector` | 🔲 可选（opt-in） | 视觉模态投影；`quantization.connector.enabled: true` 开启，默认关闭 |
+| SigLIP `vision_model` | 🔲 可选（opt-in） | 视觉编码器；`quantization.vision.enabled=true` + `vision.linear.{mlp,attn_proj}=true` 才开启，默认全关闭 |
+| `connector` | 🔲 可选（opt-in） | 视觉模态投影；`quantization.connector.enabled=true` 开启，默认关闭 |
 | action head（`state/action_in/action_out_proj` + `action_time_mlp_*`） | ❌ 未量化 | 位于 `VLAFlowMatching` 顶层，当前 `_wrap` 未触达 |
 | QK^T / PV matmul | ❌ 未量化 | 默认 `quantize_matmul: false` |
 
@@ -149,9 +149,14 @@ action head 各层（均位于 `VLAFlowMatching` 顶层）：
 > 支持对 SmolVLM 视觉编码器（`vision_model.encoder.layers[i].self_attn.{q,k,v,out}_proj`
 > 与 `.mlp.{fc1,fc2}`，12 层共 72 个 Linear）和 connector 投影
 > （`connector.modality_projection.proj`，`module_id=connector.layer.0.connector_proj`）
-> 做 opt-in 量化。二者由 `quantization.vision.enabled` / `quantization.connector.enabled`
-> 独立控制，默认 `false`（保持既有 VLM/Expert 224 Linear 不变）；precision 通过
-> `quantization.linear.overrides` 的 `component`/`module_id` selector 区分。详见
+> 做 opt-in 量化。二者由 `quantization.connector.enabled` 与 `quantization.vision.*`
+> 独立控制，默认 `false`（保持既有 VLM/Expert 224 Linear 不变）。
+>
+> **关键 gate**：`vision.enabled=true` 本身**不会** wrap 任何 Linear，必须再显式打开
+> `vision.linear.mlp`（24 个 fc1/fc2）和/或 `vision.linear.attn_proj`（48 个
+> q/k/v/out_proj），两者默认 `false`。precision 通过 `quantization.linear.overrides`
+> 的 `component`/`module_id` selector 区分；vision/connector 首次加入默认
+> `calibration_policy=recalibrate`。详见
 > `2026-09-15_phaseI_vision_quantization_experiment_manual.md`。
 
 ---
