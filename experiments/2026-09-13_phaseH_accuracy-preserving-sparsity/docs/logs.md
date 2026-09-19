@@ -5,14 +5,16 @@
 > 运行日志按时间**正序**追加，最新状态反映在「当前状态」与头部字段。
 
 - **实验名称**：2026-09-13_phaseH_accuracy-preserving-sparsity
-- **状态**：running（draft / running / done / aborted）
-- **最后更新**：2026-09-15
+- **状态**：done（draft / running / done / aborted）
+- **最后更新**：2026-09-19
 
 ---
 
 ## 1. 当前状态
 
-**H2（30ep convergence）已完成**（2026-09-15，20/20 tasks 全部 PIPELINE COMPLETED，无报错）。结果：**S0（FP8-all）= 90.0%（27/30）**、**S1（Expert-W4）= 86.7%（26/30）**，只差 1 个 episode；Wilson 95% CI 大幅重叠（见 results.md §2.1）。H2 sparsity 汇总与 er.md 二次审计修正已回填 `results.md`。**当前 H3（100ep formal，accuracy confirmation）已启动。**
+**实验已完成（done）。** **H3（100ep formal）已完成**（2026-09-19，20/20 tasks 无报错）：**S0（FP8-all）= 89.0%（89/100）**、**S1（Expert-W4）= 85.0%（85/100）**，gap = **4.0pp**；Wilson 95% CI `[81.4%, 93.7%]` / `[76.7%, 90.7%]` **仍重叠**（见 results.md §2.1）。H3 同时把 sparsity 收敛推到了 100ep：**H2→H3 的 §13 gate 全部 PASS（最大 |Δ| = 0.05pp）**，runtime aggregate 与 weight static 与 H2 几乎逐位相同（results.md §3.2.2）。
+
+**H2（30ep convergence，保留）**：S0 = 90.0%（27/30）、S1 = 86.7%（26/30），Wilson 95% CI 大幅重叠。
 
 | 阶段 | 状态 | 完成时间 | 备注 |
 |---|---|---|---|
@@ -21,7 +23,8 @@
 | H1-Audit | ✅ done | 2026-09-14 | output/O 0.5%→39.9% 统计 bug 定位+修复 |
 | H2 30ep convergence | ✅ done | 2026-09-15 | S0=90.0%、S1=86.7%（各 10 tasks × 3ep）；sparsity 汇总 + 审计修正完成 |
 | H2 审计修正 | ✅ done | 2026-09-15 | common-scope 比较、PV A 语义、unit 口径、BOP 降级、相关性实算 |
-| H3 100ep formal | 🔄 running | — | stats-on SR 正式确认，重点 task03/06/07 |
+| H3 100ep formal | ✅ done | 2026-09-19 | S0=89.0%（89/100）、S1=85.0%（85/100）；sparsity 收敛 gate 全 PASS |
+| H3 汇总回填 | ✅ done | 2026-09-19 | `build_results_tables.py --stage h3_100ep --compare h2_30ep`；results.md 回填 §1/§2/§3.2.2/§3.5/§4/§5 |
 
 ## 2. 运行日志
 
@@ -35,14 +38,15 @@
 | 2026-09-15 | H2 | S0/S1 各 10 tasks × 3ep | ✅ | `h2_30ep/s0|s1/taskXX` | 20/20 完成；S0=90.0%、S1=86.7%；S0 task06=33.3%、task07=66.7%，S1 task03=66.7%、task06=33.3%、task07=66.7% |
 | 2026-09-15 | H2 汇总 | `build_results_tables.py --stage h2_30ep --compare h1_10ep` | ✅ | — | results.md 回填 §14 全表；§13 收敛 gate 同口径全部 PASS；output/O INVALID 解除 |
 | 2026-09-15 | H2 审计修正 | er.md 二次审计 + `build_results_tables.py` v2 | ✅ | — | 加入 common-scope runtime/weight（去重）、Pearson/Spearman、Wilson CI；更正 PV A 语义、unit 口径、BOP 节 |
-| 2026-09-15 | H3 100ep formal | `run_h3_100ep.sh`（S0/S1 各 10 tasks × 10ep） | 🔄 running | `h3_100ep/s0|s1/taskXX` | stats-on SR 正式确认；重点 task03/06/07 |
+| 2026-09-15 | H3 100ep formal | `run_h3_100ep.sh`（S0/S1 各 10 tasks × 10ep） | ✅ | `h3_100ep/s0|s1/taskXX` | S0=89/100、S1=85/100；逐 task S0 `[10,10,10,8,10,9,5,9,10,8]`、S1 `[10,10,8,5,10,10,6,9,10,7]` |
+| 2026-09-19 | H3 汇总 | `build_results_tables.py --stage h3_100ep --compare h2_30ep` | ✅ | — | §13 gate H2→H3 全 PASS（max 0.05pp）；task03 确认为 S1 独有弱项，task06/07 排除 |
 
 ## 3. 后台任务
 
 | PID | 阶段 | 启动时间 | 状态 | 备注 |
 |---|---|---|---|---|
 | 3542208 | H2 30ep | 2026-09-14 | ✅ finished | `run_h2_30ep.sh`，S0+S1 各 10 tasks × 3ep，20/20 完成，日志 `outputs/.../h2_run.log` |
-| (见 §1) | H3 100ep | 2026-09-15 | 🔄 running | `run_h3_100ep.sh`，S0+S1 各 10 tasks × 10ep，日志 `outputs/.../h3_run.log` |
+| — | H3 100ep | 2026-09-15 | ✅ finished | `run_h3_100ep.sh`，S0+S1 各 10 tasks × 10ep，20/20 完成，日志 `outputs/.../h3_run.log` |
 
 ## 4. 异常与处理
 
@@ -66,4 +70,5 @@
 |---|---|---|
 | 2026-09-14 | 创建文档，记录 H0/H1/H1-Audit 完成状态与 H2 启动 | |
 | 2026-09-15 | 回填 H2 完成状态与结果（S0=90.0%、S1=86.7%） | |
+| 2026-09-19 | **状态改 done**；回填 H3（100ep）完成状态与结果（S0=89.0%、S1=85.0%）；记录 H2→H3 收敛 gate 全 PASS；后台任务表收尾 | |
 | 2026-09-15 | 回填 H2 sparsity 汇总到 results.md（§14 全表 + §13 收敛 gate）；新增 `build_results_tables.py`，修复 `summarize_sparsity.py` 路径 bug | |

@@ -1,16 +1,20 @@
 # Phase H 结果记录（Results）
 
 > 实验名称：2026-09-13_phaseH_accuracy-preserving-sparsity  
-> 状态：running  
-> 最后更新：2026-09-15
+> 状态：done  
+> 最后更新：2026-09-19
 
 ---
 
 ## 1. 摘要
 
-**H2（30ep convergence）已完成**（2026-09-15，20/20 tasks 无报错）。准确率：**S0 FP8-all SR=90.0%（27/30）**、**S1 Expert-W4 SR=86.7%（26/30）**，即两者只差 **1 个成功 episode**。
+**H3（100ep formal）已完成 —— 本实验全部闭环（2026-09-19）。** 正式准确率：**S0 FP8-all SR=89.0%（89/100）**、**S1 Expert-W4 SR=85.0%（85/100）**，gap = **4.0pp**。
 
-> **SR 的置信区间**：30ep 下 Wilson 95% CI 为 S0 `[74.4%, 96.5%]`、S1 `[70.3%, 94.7%]`，**大幅重叠**。因此 H2 结论应表述为「与 Phase G 的 88%/84% 相容，S1 在 30ep 下仍接近 FP8 anchor」，**不能说「已证明只损失 3.3pp」**；正式 accuracy claim 留给 H3 100ep。
+> **SR 的置信区间**：100ep 下 Wilson 95% CI 为 S0 `[81.4%, 93.7%]`、S1 `[76.7%, 90.7%]`，**仍然重叠**（重叠区间 81.4–90.7%，重叠宽度约 9.3pp）。因此正式表述是：**S1（Expert-W4）相对 S0（全 FP8）的精度损失在 4pp 量级，但 100ep 仍不足以把该 gap 判为统计显著**。
+
+**H2（30ep convergence）摘要（保留）**：S0 = 90.0%（27/30）、S1 = 86.7%（26/30），Wilson 95% CI `[74.4%, 96.5%]` / `[70.3%, 94.7%]` 大幅重叠 ⇒ 30ep 只能说「与 Phase G 的 88%/84% 相容」，不足以确定 gap 大小。
+
+**H3 同时把 sparsity 收敛性推到 100ep**：H2(30ep) → H3(100ep) 的 §13 gate **全部 PASS**（最大 |ΔS_bit| = 0.05pp，远低于 0.5pp），weight static 逐位相同（42.58% / 73.72%）⇒ **sparsity estimate 在 10× 采样扩展下依旧不变**（§3.2）。
 
 Sparsity 侧（native significand sparse-bit rate，4-bit 1MMM 口径，numerator/denominator 加总）：
 
@@ -46,13 +50,25 @@ Sparsity 侧（native significand sparse-bit rate，4-bit 1MMM 口径，numerato
 
 ### 2.1 准确率（episode 加权，Goal suite，n_action_steps=10）
 
-| Config | H0 smoke (1ep) | H1 (10 tasks × 1ep) | H2 (10 tasks × 3ep) | Wilson 95% CI (H2) | H3 (100ep) |
-|---|---:|---:|---:|---|---:|
-| S0 FP8-all | 100.0% | 90.0% | **90.0% (27/30)** | [74.4%, 96.5%] | pending |
-| S1 Expert-W4 | 100.0% | 80.0% | **86.7% (26/30)** | [70.3%, 94.7%] | pending |
-| gap (S0−S1) | 0.0 | 10.0 pp | 3.3 pp (1 episode) | **区间大幅重叠** | — |
+| Config | H0 smoke (1ep) | H1 (10 tasks × 1ep) | H2 (10 tasks × 3ep) | H3 (10 tasks × 10ep) | Wilson 95% CI (H3) |
+|---|---:|---:|---:|---:|---|
+| S0 FP8-all | 100.0% | 90.0% | 90.0% (27/30) | **89.0% (89/100)** | **[81.4%, 93.7%]** |
+| S1 Expert-W4 | 100.0% | 80.0% | 86.7% (26/30) | **85.0% (85/100)** | **[76.7%, 90.7%]** |
+| gap (S0−S1) | 0.0 | 10.0 pp | 3.3 pp (1 episode) | **4.0 pp (4 episodes)** | **区间仍重叠 ~9.3pp** |
 
-> ⚠️ 不要把 H2 的 3.3pp 当作已确立的精度损失：30ep 下两个 Wilson CI 重叠约 20pp，且 gap 只有 **1 个 episode**。H3 100ep 用于正式 accuracy claim。
+**H3 逐 task 成功数（每 task 10 episodes）**
+
+| Config | t00 | t01 | t02 | t03 | t04 | t05 | t06 | t07 | t08 | t09 | 合计 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| S0 FP8-all | 10 | 10 | 10 | 8 | 10 | 9 | 5 | 9 | 10 | 8 | **89** |
+| S1 Expert-W4 | 10 | 10 | 8 | 5 | 10 | 10 | 6 | 9 | 10 | 7 | **85** |
+| Δ (S0−S1) | 0 | 0 | +2 | **+3** | 0 | −1 | −1 | 0 | 0 | +1 | **+4** |
+
+> **task03 被 H3 确认为 S1 独有弱项**（H2 中已初现：S0 100% vs S1 66.7%）：100ep 下 S0 = 8/10、S1 = 5/10，**Δ = −3 episodes，是全部 10 个 task 中最大的单个 gap**，也是唯一在 H2 与 H3 两次测量中都指向 S1 的 task。
+> **task06 / task07 被 H3 排除为 config 效应**：H2 中两者在 S0/S1 同步掉分（33.3%/66.7%）；H3 下 task06 变成 S1 反而更高（6 vs 5）、task07 持平（9 vs 9）⇒ **与共享 task difficulty / 同 seed 采样效应一致，不能归因于 W4**。
+> **task05 / task06 是 S0 略低**（−1），进一步削弱「S1 处处更差」的叙事。
+
+> ⚠️ 不要把 H2 的 3.3pp 或 H3 的 4.0pp 当作已确立的精度损失：100ep 下两个 Wilson CI 仍重叠约 9.3pp。H3 的价值是把 gap 从「1 个 episode」提升到「4 个 episode」，并定位到 task03。
 
 ### 2.2 Sparsity（numerator/denominator 加总，native = 扣除 FP protected 后）
 
@@ -64,7 +80,14 @@ Sparsity 侧（native significand sparse-bit rate，4-bit 1MMM 口径，numerato
 | S1 | **own**（VLM Linear 未量化） | 30 | 42.42% | 7.99% | 1.27% |
 | S0 | **common**（drop VLM Linear） | 30 | **42.40%** | — | — |
 | S1 | **common**（同集合） | 30 | **42.42%** | — | — |
-| **Δ (common)** | | | **+0.02 pp** | — | — |
+| **Δ (common, H2)** | | | **+0.02 pp** | — | — |
+| S0 | **own**（含 VLM Linear） | **100** | 42.08% | 7.35% | 1.23% |
+| S1 | **own**（VLM Linear 未量化） | **100** | 42.41% | 7.98% | 1.27% |
+| S0 | **common**（drop VLM Linear） | **100** | **42.40%** | — | — |
+| S1 | **common**（同集合） | **100** | **42.41%** | — | — |
+| **Δ (common, H3)** | | | **+0.018 pp** | — | — |
+
+> **H2(30ep) 与 H3(100ep) 的 runtime aggregate 几乎逐位相同**（own: 42.08/42.08 与 42.42/42.41；common Δ: +0.02pp 与 +0.018pp；unit: 7.36/7.35 与 7.99/7.98；sidepath 完全相同）⇒ **采样从 30ep 扩到 100ep 不再改变任何 aggregate 数字**。
 
 > 只有 **common scope** 的 Δ 才能解释为「配置变化对 runtime code sparsity 的影响」。原文档的「Δ=0.34pp」混入了 S0 独有的 VLM Linear，不能作为该结论。
 
@@ -87,6 +110,8 @@ Sparsity 侧（native significand sparse-bit rate，4-bit 1MMM 口径，numerato
 |---|---|---:|---:|---:|---:|
 | S0 | all Linear (VLM + Expert) | 224 | 2240 | 0.00% | 41.52% |
 | S1 | expert only | 112 | 1120 | 8.68% | 73.72% |
+
+> **H3(100ep) 的 weight static 与 H2 逐位相同**（S0 0.00% / 41.52%；S1 8.68% / 73.72%；Expert common scope 42.58% → 73.72%，Δ +31.15pp）—— weight 与 episode 无关，100ep 只是重复导出同一份 CSV（已被 `_dedupe_modules()` 按 `module_id` 去重）。
 
 | **Expert common scope** | S0 FP8 | S1 W4 | Δ |
 |---|---:|---:|---:|
@@ -148,7 +173,9 @@ weight 静态稀疏度（与 episode 无关，作参考）：
 >
 > 说明：activation/A/B 的 native significand sparse_bit_rate ≈ 40-54%，不是 0%。**output/O 在原 H0/H1 中产生于 instrumentation bug 修复前（`mul_` in-place 污染了 output code），因此原始 CSV 的 output/O 字段已失效，标 INVALID**；修复后的可靠测量来自 H1-Audit（S0 Goal task0 × 1ep，output 39.90% / O 39.91%）与 **H2 post-fix 30ep aggregate（output 39.89-39.90% / O 39.87-39.95%）**，二者一致（见 §3.6）。这一指标是「4-bit significand（1MMM）」口径，尚未做 exponent-alignment（EffLoc 的 ineffective-bit 口径），因此不等于硬件对齐后真正的 bit sparsity——该口径需 Phase I 单独实现。W4 权重侧（weight_sparsity_static）S1≈73.7% 是另一条独立的稀疏来源。
 
-### 3.2 H1 vs H2 收敛（§13 gate：|ΔS_bit| < 0.5pp）
+### 3.2 收敛 gate（§13：|ΔS_bit| < 0.5pp）—— H1→H2→H3
+
+#### 3.2.1 H1(10ep) → H2(30ep)
 
 同口径（排除 pre-fix 的 output/O）下，H1(10ep) → H2(30ep) 的 aggregate 对比：
 
@@ -190,6 +217,27 @@ weight 静态稀疏度（与 episode 无关，作参考）：
 | S1 | EXPERT.QK | denoise | B | 40.29% | 40.28% | −0.01 | ✅ PASS |
 
 **结论：gate 全部 PASS**（最大 |Δ| = 0.14pp，S1 EXPERT.PV A），unit rate 同样全部 < 0.5pp。⇒ **从 1ep/task 扩到 3ep/task 后 sparsity 估计无变化**；H3 的 100ep 主要用于 stats-on SR 复验，而非 sparsity 收敛。
+
+#### 3.2.2 H2(30ep) → H3(100ep)（采样再扩 3.3×）
+
+生成命令：`build_results_tables.py --stage h3_100ep --compare h2_30ep`（全量输出见 `/tmp/h3_clean.md` 同构内容，可复现）。
+
+| Metric | H2 S0 | H3 S0 | Δ | H2 S1 | H3 S1 | Δ | Gate |
+|---|---:|---:|---:|---:|---:|---:|---|
+| native bit sparsity（own scope） | 42.08% | **42.08%** | **0.00 pp** | 42.42% | **42.41%** | **−0.01 pp** | ✅ PASS |
+| native bit sparsity（common scope） | 42.40% | **42.40%** | **0.00 pp** | 42.42% | **42.41%** | **−0.01 pp** | ✅ PASS |
+| quant-path unit rate（2×2） | 7.36% | **7.35%** | **−0.01 pp** | 7.99% | **7.98%** | **−0.01 pp** | ✅ PASS |
+| FP sidepath | 1.23% | **1.23%** | 0.00 pp | 1.27% | **1.27%** | 0.00 pp | ✅ PASS |
+| Expert weight sparse_bit_rate | 42.58% | **42.58%** | 0.00 pp | 73.72% | **73.72%** | 0.00 pp | ✅ PASS |
+| SR | 90.0% | 89.0% | −1.0 pp | 86.7% | 85.0% | −1.7 pp | — |
+
+逐 component × role 的 19 项 aggregate 大类（非 output/O）：**全部 |Δ| ≤ 0.05pp**（最大为 S0 EXPERT.PV A 的 −0.05pp）。
+
+**结论：gate 全部 PASS，且 Δ 比 H1→H2 更小**（0.05pp vs 0.14pp）⇒
+
+> **sparsity estimate 在 1ep → 3ep → 10ep（每 task）三级采样扩展下都保持不动。** H1/H2 的收敛结论被 100ep 完整确认，且这次包含 10× 更多 episode，已不存在「H2 包含 H1 那条 episode」这类质疑。
+
+**流程（H3 的实际执行配置）**：H3 全程 `--skip-calibration`（复用 Phase G 的 scale）+ 保留 module sparsity counters + flow-step tagging，关闭了 `fp_code_audit`（§5 的决定），因此 H3 既是 accuracy confirmation，也是 sparsity 的最终 sanity check。
 
 > output/O 单独看。下表的 H1 列是 **pre-fix INVALID 原始测量**，仅作对照，**不参与 gate**：
 
@@ -370,6 +418,51 @@ H2，per-task native bit sparsity 与 SR：
 
 - **只有 task03 是 S1 独有掉分**（66.7% vs S0 100%）⇒ 这是唯一可能是 W4 精度损失的信号，需 H3 100ep 复验。
 
+**H3（100ep）复验**——每 task 10 episodes，SR 取值分辨率提到 10%（{0,10,...,100}%）：
+
+| Config | Task | SR | 成功/10 | Native bit sparsity | FP sidepath |
+|---|---|---:|---:|---:|---:|
+| S0 | task00 | 100.0% | 10 | 42.04% | 1.24% |
+| S0 | task01 | 100.0% | 10 | 42.12% | 1.23% |
+| S0 | task02 | 100.0% | 10 | 42.11% | 1.23% |
+| S0 | **task03** | **80.0%** | **8** | 42.06% | 1.23% |
+| S0 | task04 | 100.0% | 10 | 42.12% | 1.23% |
+| S0 | task05 | 90.0% | 9 | 41.99% | 1.23% |
+| S0 | **task06** | **50.0%** | **5** | 42.08% | 1.23% |
+| S0 | task07 | 90.0% | 9 | 42.09% | 1.23% |
+| S0 | task08 | 100.0% | 10 | 42.14% | 1.23% |
+| S0 | task09 | 80.0% | 8 | 42.10% | 1.23% |
+| S1 | task00 | 100.0% | 10 | 42.38% | 1.27% |
+| S1 | task01 | 100.0% | 10 | 42.46% | 1.26% |
+| S1 | **task02** | **80.0%** | **8** | 42.45% | 1.26% |
+| S1 | **task03** | **50.0%** | **5** | 42.36% | 1.26% |
+| S1 | task04 | 100.0% | 10 | 42.47% | 1.26% |
+| S1 | task05 | 100.0% | 10 | 42.32% | 1.26% |
+| S1 | **task06** | **60.0%** | **6** | 42.44% | 1.27% |
+| S1 | task07 | 90.0% | 9 | 42.43% | 1.26% |
+| S1 | task08 | 100.0% | 10 | 42.47% | 1.26% |
+| S1 | task09 | **70.0%** | **7** | 42.44% | 1.27% |
+
+**相关系数（H3，100ep，实际计算）**
+
+| Scope | n | Pearson r | Spearman ρ（tie-averaged） |
+|---|---:|---:|---:|
+| S0 | 10 | +0.1698 | +0.5078 |
+| S1 | 10 | +0.1546 | +0.3039 |
+| **pooled** | 20 | **−0.0725** | **+0.1250** |
+
+**H3 要点**
+
+- **per-task bit sparsity 依旧落在窄带**（S0 41.99-42.14%，跨 task 极差 0.15pp；S1 42.32-42.47%，极差 0.15pp），而 SR 从 50% 到 100% 变化 —— 与 H2 结论一致。
+- **pooled Pearson r ≈ −0.07、Spearman ρ ≈ +0.13（n = 20）**。相关系数仍指向「无线性/单调关系」，但这里必须注意：**n 只有 20，且 SR 只能取 11 个离散值（大量并列）**，分辨率依旧很低。因此只能说：
+
+  > **H3（100ep）仍然没有观察到 per-task sparsity–SR 的明显 association，但仍不能据此证明两者统计独立。**
+
+  （注：`build_results_tables.py` 输出里的「10 tasks × 3 episodes = 30 episodes」注释是 H2 阶段写死的文案；H3 实际上是 10 tasks × 10ep = 100 episodes。此处已按 H3 实际采样量重述。）
+- **task03 被确认是 S1 独有弱项**：H2 中已初现（S0 100% vs S1 66.7%），H3 下 S0 = 8/10、S1 = 5/10（Δ = −3 episodes），是 10 个 task 中最大的单个 gap，也是唯一在两次测量中都与 S1 同向的 task。
+- **task06 / task07 被排除为 config 效应**：H2 下两者在 S0/S1 同步掉分（33.3% / 66.7%），H3 下 task06 反而 S1 更高（6 vs 5）、task07 持平（9 vs 9）⇒ **与共享 task difficulty 或同 seed 的 episode sampling effect 一致，不能归因于 W4**。
+- **task05 / task06 是 S0 略低**（−1 episode），说明「S1 处处更差」的叙事不成立。
+
 ### 3.6 H1-Audit：output/O 稀疏度统计 bug 的独立验证与修复（已闭环）
 
 早期 H1 报告 output/O 的 significand sparse_bit_rate ≈ 0.3-0.6%，与 activation/A/B 的 40-56% 显著不一致，触发独立审计（er.md H1-Audit）。
@@ -465,28 +558,26 @@ $$\boxed{\text{masked normal quant-path 2×2 unit sparsity}}$$
 
 ## 4. 结论
 
-1. **准确率（有保留）**：H2（30ep）S0 FP8-all SR=**90.0%（27/30）**、S1 Expert-W4 SR=**86.7%（26/30）**，只差 **1 个 episode**。Wilson 95% CI 为 `[74.4%, 96.5%]` / `[70.3%, 94.7%]`，**大幅重叠** ⇒ H2 与 Phase G 的 88%/84% 相容，但 **30ep 不足以精确确定 3.3pp gap**，正式 accuracy claim 留给 H3 100ep。
-2. **收敛性**：§13 gate 在**同口径**下全部 PASS（最大 |ΔS_bit| = 0.14pp，|Δunit| < 0.5pp）。H1→H2 是「每 task 1ep → 3ep」（共用 seed=1000），因此结论为「**扩展采样下 sparsity estimate 几乎不变**」，而非独立重复验证。
+1. **准确率（正式，H3 100ep）**：S0 FP8-all SR=**89.0%（89/100）**、S1 Expert-W4 SR=**85.0%（85/100）**，gap = **4.0pp（4 个 episode）**。Wilson 95% CI `[81.4%, 93.7%]` / `[76.7%, 90.7%]`，**仍重叠 ~9.3pp** ⇒ 结论为「**Expert-W4 的精度损失在 4pp 量级，但 100ep 未将 gap 推到统计显著**」。相对 H2（90.0%/86.7%，3.3pp）两个配置各降 ~1 个 episode，指向同一 baseline。$1/(1-S)$ 仍不能作为实际加速比（§3.7）。
+2. **收敛性**：§13 gate 在**同口径**下三级全部 PASS——H1(10ep)→H2(30ep) 最大 |ΔS_bit| = 0.14pp；**H2(30ep)→H3(100ep) 最大 |ΔS_bit| = 0.05pp**；|Δunit| 均 < 0.5pp。runtime aggregate 在 30ep 与 100ep 间几乎逐位相同（own 42.08%/42.08% 与 42.42%/42.41%；common Δ +0.02/+0.018pp），weight static 完全相同（42.58%/73.72%）⇒ **sparsity estimate 在 1ep → 3ep → 10ep 扩展下均不变**，已不再有「H2 包含 H1 episode」这类质疑。
 3. **稀疏来源（scope 修正后）**：
    - **weight 侧**：Expert common scope 下 W4 把 weight sparse_bit_rate 从 **42.58% 提升到 73.72%（+31.15pp）**，zero_rate 0% → 8.68%。**这是 W4 的唯一增益，也是论文中应引用的数字。**
    - **runtime 侧**：common scope 下 S0/S1 只差 **+0.02pp**（42.40% vs 42.42%）⇒ **W4 不改变运行时 FP8 code 的稀疏结构**（activation/output/MatMul 由 FP8 主导）。
    - 原文档的「+32.2pp」与「Δ=0.34pp」均因 scope 不一致而失效。
 4. **唯一结构性的高稀疏算子**：**PV 的 A = softmax 后的 attention probability `P`**（EXPERT 60.99%、VLM 54.26%），element zero rate 亦高（31.53%/18.42%）。其余 role 全部收敛到 39.9-41.0% 窄带。
 5. **Flow step 对 operand sparsity 基本无影响**（QK A/B/O、PV B/O 在 step 0-9 平坦 <0.02pp），但 **PV A（= `P`）呈倒 U 形**（S0 61.02→61.38→59.85%）⇒ **denoise 过程中 attention distribution 的集中程度在变化**。Phase I 应补测 attention entropy / top-k mass / pre-quant zero ratio 来支撑该解释。
-6. **Sparsity 与 task 的 association（弱化后）**：per-task bit sparsity 落在 42.00-42.48% 窄带，pooled Pearson r ≈ −0.06、Spearman ρ ≈ +0.05。但 SR 只能取 4 个离散值且 n=20 ⇒ **只能说「H2 pilot 未观察到明显 association」，不能证明统计独立**。task06/task07 两 config 同步掉分，与共享 task difficulty 或同 seed 采样效应一致，**不能归因于量化配置**；仅 task03 是 S1 独有掉分。
+6. **Sparsity 与 task 的 association（弱化后）**：per-task bit sparsity 落在 S0 41.99-42.14% / S1 42.32-42.47% 窄带（跨 task 极差仅 0.15pp），而 SR 从 50% 到 100% 变化。H3(100ep) pooled Pearson r ≈ −0.07、Spearman ρ ≈ +0.13（n = 20）⇒ **仍只能说「未观察到明显 association」，不能证明统计独立**（n 小且 SR 离散）。task03 是 **H2 与 H3 两次测量中唯一都指向 S1 的 task**（H2: 100% vs 66.7%；H3: 8/10 vs 5/10，是最大单项 gap）⇒ **它是 W4 精度损失的主要候选信号**；而 task06/task07 被 H3 排除（task06 反而 S1 更高、task07 持平），归为共享 task difficulty。
 7. **统计链路正确性已闭环**：output/O 的 ≈0.5% 为 instrumentation bug（§3.6），修复后 H1-Audit 单 task 值被 H2 30ep aggregate 在 0.05pp 内复现。**注意 pre-fix 的 H0/H1 原始 CSV 仍然 INVALID，只是结论已被 post-fix 数据替代。**
 
 ## 5. 问题与后续
 
-- **H3（100ep Goal formal）= accuracy confirmation，不再是 sparsity convergence**。H2 已证明 sparsity estimate 稳定，因此 H3 无需再为统计精度保留昂贵的 audit histogram：
-  - 保留：module sparsity counters（可选）、flow-step tagging、eval SR
-  - 关闭：`fp_code_audit`（已闭环）
-  - unit sparsity 可保留作最终 sanity check，但不必靠 100ep 提高估计精度
-  - 重点确认 `S0_Goal,100ep` / `S1_Goal,100ep`，尤其 **task03 / task06 / task07**
+- **H3（100ep Goal formal）= ✅ 已完成（2026-09-19）—— accuracy confirmation + sparsity 最终 sanity check 双重完成**。S0 = 89.0%（89/100，`[10,10,10,8,10,9,5,9,10,8]`）、S1 = 85.0%（85/100，`[10,10,8,5,10,10,6,9,10,7]`），gap = 4.0pp。按 §5 的决定执行：保留 module sparsity counters / flow-step tagging / eval SR，**关闭 `fp_code_audit`**（已在 §3.6 闭环）。结果见 §2.1 / §3.2.2 / §3.5。
+  - **task03 需后续关注**：它是 H2与 H3 两次测量中唯一都指向 S1 的 task（H3 下 −3 episodes）。若要做 second-order 归因，它是首选单 task 案例。
+- **G6（Expert-FP8 背景 + VLM selective precision）= ✅ 已完成**（`../2026-09-10_phaseG_w4-root-cause/tasks/vlm-selective-expert-fp8/`）：四组 SR = 90/69/41/21，三项 L 值判据全过（L_attn 21 vs 18、L_mlp 49 vs 51、L_all 69 = 69）⇒ **「VLM MLP 的 W4 敏感性 ≫ Attention」不依赖 Expert 是否为 raw FP**。因此 **Phase H 不再新增 S2 = VLM-FP8 + Expert-W4**：该配置会同时承受「VLM 侧 W4」与「Expert 侧 W4」两条损失，而 G6 已证明后者的贡献与前者不在同一量级（同一 VLM-W4 在 Expert-FP8 背景下仍然得到 69/41/21，与 G5 的 72/39/21 几乎一致），新增 S2 不会提供新信息。
 - **修复 workload exporter**（Phase I）：改为 one physical operator, one row，且用 native corrected sparsity、A/B 分别缩放。
 - **补充 attention-probability 分析**：pre-quant `probs` 的 entropy / top-k mass / FP8 threshold 以下比例，用于支撑 §3.4 的 PV A 趋势解释。
 - **口径扩展**：当前为「4-bit significand（1MMM）」，未做 exponent-alignment（EffLoc ineffective-bit）。若论文要声称硬件对齐后的 bit sparsity，需 Phase I 实现。
-- **G6**（Expert-FP8 背景 + VLM selective precision）并行推进中，其结论将决定 Phase H 是否新增 S2 = VLM-FP8 + Expert-W4。
+- **G6**（Expert-FP8 背景 + VLM selective precision）已完成，结论：**G5 的「MLP ≫ Attention」对 Expert-FP8 背景鲁棒**（90/69/41/21；L_attn 21 / L_mlp 49 / L_all 69，三项 |Δ| ≤ 6pp 判据全过）。因此 **不新增 S2 = VLM-FP8 + Expert-W4**（理由见上）。
 - **工程修复**（本次审计）：`build_results_tables.py` 新增 common-scope runtime / Expert-only weight（含去重）/ Pearson+Spearman；重命名 unit 列与 BOP 节；output/O 行在收敛表中标 N/A 而非 FAIL；修复 `summarize_sparsity.py` 的 `REPO_ROOT` 路径。
 
 ---
@@ -507,3 +598,9 @@ $$\boxed{\text{masked normal quant-path 2×2 unit sparsity}}$$
   - §3.7 BOP 节降级为 legacy/debug proxy，列出三处不可加缺陷；
   - §3.5 改为**实际计算**的 Pearson/Spearman 并弱化「无相关/固有难度」措辞；
   - §1/§2.1/§3.6 加入 Wilson CI、「扩展采样」措辞修正、pre-fix INVALID 表述澄清。
+- 2026-09-19：**状态改 done；回填 H3（100ep）全部结果**——
+  - §1/§2.1 正式准确率 S0 = **89.0%（89/100）**、S1 = **85.0%（85/100）**，gap = **4.0pp**，Wilson 95% CI `[81.4, 93.7]` / `[76.7, 90.7]`（仍重叠）；新增 H3 逐 task 成功数表。
+  - §2.2 新增 H3 runtime / weight 行，指出 **H2 与 H3 的 aggregate 几乎逐位相同**。
+  - §3.2 重命名为「收敛 gate H1→H2→H3」，新增 **§3.2.2 H2(30ep) → H3(100ep)**：19 项非 output/O 大类 **全部 |Δ| ≤ 0.05pp，gate 全 PASS**（比 H1→H2 更小）。
+  - §3.5 新增 H3 100ep per-task 表与相关系数（pooled Pearson r = −0.0725、Spearman ρ = +0.1250），**task03 确认为 S1 独有弱项，task06/task07 排除**；并指出 `build_results_tables.py` 的「30 episodes」注释为 H2 遗留文案。
+  - §4 结论 1/2/6 按 H3 正式值重写；§5 将 H3 与 G6 标为已完成，并据 G6 结论**明确不新增 S2**。

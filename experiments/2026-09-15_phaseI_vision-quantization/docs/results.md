@@ -4,8 +4,8 @@
 > 图片放 `docs/figures/`，文中用相对路径 `![](figures/xxx.png)` 引用。
 
 - **实验名称**：2026-09-15_phaseI_vision-quantization
-- **状态**：running（draft / running / done / aborted）
-- **最后更新**：2026-09-15
+- **状态**：running（V0 ✅ / V1 ✅ / V2–V5 待跑）
+- **最后更新**：2026-09-19
 
 ---
 
@@ -13,12 +13,19 @@
 
 Gate L0（legacy regression）已通过：用原封不动的 G6 canonical 配置 build，确认 `QuantizedLinear=224`、`QuantizedMatMul=64`、`vision.*=0`、`connector.*=0`，Phase I 新增代码未破坏既有 VLM/Expert wrapping。V0（Vision workload audit）已完成：真实模型为 12 层 Vision Transformer（hidden=768、intermediate=3072、heads=12），attn 实现为 `sdpa`；一次 `sample_actions()` 处理 **2 张相机图**，每张图 1024 patch tokens → connector 后 64 visual tokens（12288→960）。Vision+Connector 单次 sample_actions 理论 dense FLOPs ≈ **428.2 GFLOPs**，其中 Vision MLP 54.2%、attention projection 27.1%、QK/PV 18.1%、connector 0.71%，与手册 §0 粗估（430.6 G，72%）一致。
 
+**V1（Connector FP8）已完成（2026-09-19）—— 但代价很高。** 五道 gate 全过：routing 225 Linear + 64 MatMul = **289**（224+1 connector）、**V1-R raw 等价性 bit-exact**（max_abs_error = 0.000e+00）、calibration-only、task0×1 smoke = 100%、**Goal×100 = 81.0%（81/100）**。
+
+> **关键发现：单独量化一个仅占 0.71% FLOPs 的 connector Linear，就把 Goal×100 从 89.0% 拉到 81.0%（Δ = −8.0pp）**（baseline = Phase H H3 S0 FP8-all = 89.0%，两者同为 canonical VLM/Expert FP8 背景）。对照 Phase G 的归因：VLM 侧 W4 才造成 −51pp、attention-W4 仅 −18pp ——  **8pp 在「单个 Linear 的量化代价」尺度上属于异常高值**。这是本 Phase 最值得后续追查的信号（见 §5）。
+
 ## 2. 总结果表
 
 | 组 | config | 基准 | Success Rate | Δ vs baseline | episodes | 输出目录 | 备注 |
 |---|---|---|---|---|---|---|---|
 | Gate L0 | g6a_all_fp8_control（复用） | — | — | — | — | — | 224 Linear / 64 MatMul / 0 vision / 0 connector |
 | V0 | v0_workload_audit | — | 100.0%（task0） | — | 1 | `outputs/.../v0_workload_audit` | 无量化，仅 workload/FLOPs 审计 |
+| V1-R | v1_connector_fp8（raw mode） | 原模型 connector | **bit-exact** | 0.0 | — | — | max/mean/max_rel error 全为 `0.000e+00` |
+| V1 smoke | v1_connector_fp8 | — | 100.0%（task0） | — | 1 | `outputs/.../v1_connector_fp8` | 289 quant modules（225 Linear + 64 MatMul） |
+| **V1** | v1_connector_fp8_goal | **H3 S0 FP8-all = 89.0%** | **81.0%（81/100）** | **−8.0 pp** | 100 | `outputs/.../v1_connector_fp8_goal` | Wilson 95% CI `[72.2%, 87.5%]`，eval_s = 40735（≈11.3h） |
 
 ## 3. 分组结果与分析
 
@@ -105,17 +112,84 @@ FLOPs（`vision_flops.csv`，1 MAC = 2 FLOPs，per sample_actions）：
 python experiments/2026-09-15_phaseI_vision-quantization/scripts/plot_phaseI_flops_pies.py
 ```
 
+### 3.4 V1-R — Connector raw wrapper 等价性
+
+方法（`scripts/v1_connector_raw_equiv.py`）：用**同一份 config** build 两个模型，仅切换 `quantization.connector.enabled`；开启侧把全部 module 切到 `raw` 模式（不做 fake quant），喂入同一 vision-hidden 张量，比较 connector 输出。
+
+```
+original connector proj type: Linear
+wrapped  connector proj type: QuantizedLinear
+============================================================
+V1-R connector raw equivalence
+============================================================
+max_abs_error  : 0.000e+00
+mean_abs_error : 0.000e+00
+max_rel_error  : 0.000e+00
+V1-R: PASS (raw wrapper exact)
+```
+
+| 项 | 期望（手册 §9.2） | 实测 | 判定 |
+|---|---|---|---|
+| connector proj 被 wrap | `QuantizedLinear` | `QuantizedLinear` | ✅ |
+| max_abs_error | exact 或 dtype rounding 级 | **0.000e+00** | ✅ |
+| mean_abs_error | 同上 | **0.000e+00** | ✅ |
+| max_rel_error | 同上 | **0.000e+00** | ✅ |
+| 总 quantized modules | 225 Linear + 64 MatMul = 289 | **289** | ✅（手册 §7） |
+
+> **方法学意义**：raw wrapper 的 bit-exact 排除了「新增 component 引入数值偏差」这一混淆项 ⇒ V1 的 SR 变化可以**干净地归因于量化**。
+> **范围限制**：手册 §9.2 要求同时报告 connector output / prefix embedding / final action chunk 三项，当前脚本**只覆盖 connector output**；另两项待补（见 §5）。
+
+### 3.5 V1 — Connector FP8（Goal × 100）
+
+配置：canonical VLM/Expert FP8 背景 + `connector.overrides[connector_fp8] = pot_fp8_outlier`（A/W/O 全 `e4m3`），`linear.include = [vlm.*, expert.*, connector.*]`，`vision.enabled = false`。calibration：`episodes=8 / batch_size=8 / frame_stride=4`（recalibrate，connector scale 首次生成）。
+
+**Gate 结果**
+
+| Gate | 要求 | 实测 | 判定 |
+|---|---|---|---|
+| Gate 1 routing count | 225 Linear | 225 Linear + 64 MatMul = 289 | ✅ |
+| Gate 2 raw equivalence | exact | `0.000e+00`（§3.4） | ✅ |
+| Gate 3 calibration-only | scale 文件生成 | `scales/.../v1_connector_fp8` | ✅ |
+| Gate 4 task0 × 1 smoke | SR | **100.0%（1/1）** | ✅ |
+| Gate 5 Goal × 100 | SR | **81.0%（81/100）** | ✅（完成，但显著下降） |
+
+**逐 task 成功数（每 task 10 episodes，与 Phase H H3 S0 FP8-all 同 task 对照）**
+
+| Config | t00 | t01 | t02 | t03 | t04 | t05 | t06 | t07 | t08 | t09 | 合计 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| H3 S0 FP8-all（baseline） | 10 | 10 | 10 | 8 | 10 | 9 | 5 | 9 | 10 | 8 | **89** |
+| **V1 Connector FP8** | 10 | 10 | **8** | **7** | 10 | 9 | **3** | 9 | **9** | **6** | **81** |
+| Δ | 0 | 0 | **−2** | **−1** | 0 | 0 | **−2** | 0 | **−1** | **−2** | **−8** |
+
+统计：SR = 81.0%（81/100），Wilson 95% CI **[72.2%, 87.5%]**，eval_s = **40735**（≈11.3h）。与 baseline（89.0%，CI `[81.4%, 93.7%]`）**Δ = −8.0pp，两个 CI 重叠约 6.1pp（81.4 → 87.5）⇒ 方向明确但未达统计显著**。
+
+**要点**
+
+- **降幅不均匀**：task00 / 01 / 04 / 05 / 07 **完全不降**；损失集中在 task02（−2）、task03（−1）、**task06（−2）**、task08（−1）、**task09（−2）**。即 **connector 量化打掉的是「困难 task 上的余量」**，而非均匀削弱所有能力。task06 在 baseline 下本已最弱（5/10），V1 下进一步降到 3/10。
+- **单位 FLOPs 的代价极高**：connector 仅占 0.71% 的 Vision+Connector FLOPs（占整体推理约 0.51%），却带来 8pp 损失。对照 Phase G：VLM **全部 attention** W4 = −18pp、VLM **全部 MLP** W4 = −51pp。connector 只有 1 个 Linear，却拿到 attention 全部（16 层 × 4 投影 = 64 个 Linear）损失的 **44%**。
+- **可能原因（待验）**：① connector 输出直接构成 VLM 的 64 个 visual token，**无中间归一化缓冲**，单点量化误差直接进入 prefix；② 12288→960 的投影需要保留 pixel-shuffle 通道的精细混合结构，per-tensor/per-site 的 scale 难以同时容纳全部通道的动态范围；③ `outlier_ratio=0.01` 对 connector 的输入分布未必合适。
+- **不影响 V2 的正确性，但影响优先级**：按手册 §9.4，V1 出现明显下降时**应先审计再进 V2**（见 §5）。
+
 ## 4. 结论
 
-- Phase I 新增代码向后兼容（Gate L0 PASS，224/64/0/0）。
-- Vision+Connector 占单次 sample_actions 的 dense FLOPs 约 428 G（占全推理 ~72%），Vision MLP 是最大块。
-- attention 实现为 sdpa，V4（QK/PV 量化）前必须先做 eager-backend equivalence gate。
+1. **Phase I 新增代码向后兼容**（Gate L0 PASS，224/64/0/0；开启 connector 后为 225 Linear + 64 MatMul = 289，与手册 §7 的预期 count 表一致）。
+2. **Vision+Connector 占单次 `sample_actions()` 的 dense FLOPs 约 428 G**（占全推理 ~72%），**Vision MLP 是最大块（54.2%）**，attention projection 27.1%、QK/PV 18.1%、connector 仅 0.71% ⇒ 手册「只补 Vision MLP + attention projection 即可覆盖 ~80% Vision compute」的判断成立。
+3. **Connector 的 raw wrapper 是 bit-exact 的**（V1-R：max/mean/max_rel error 全为 `0.000e+00`）⇒ 新增 component 的 resolver / scale group / calibration / StatManager export 链路正确，**V1 的 SR 变化只能归因于量化本身，不可能是 wrapper 引入的数值偏差**。
+4. **Connector FP8 的精度代价远超其 FLOPs 占比**：connector 只占 0.71% 计算，但 Goal×100 从 89.0% 降到 **81.0%（−8.0 pp）**。作为标尺：Phase G 中 VLM attention 全部 W4 才 −18pp、VLM MLP 全部 W4 才 −51pp。**一个 Linear 能拿到 8pp，说明 connector 输出的视觉 token 对量化噪声高度敏感**（12288→960 的投影需保留通道混合的精细结构），或存在 per-site scale / outlier 选择不当。
+5. **attention 实现为 `sdpa`（非 eager）**，V4（QK/PV 量化）前必须先做 eager-backend equivalence gate（手册 §12.2）；否则 QK/PV 的量化无法与既有统计口径对齐。
+6. **逐 task 视角**：V1 与 H3-S0 同 task 对比，降幅集中在 task02（10→8）、task03（8→7）、**task06（5→3）**、task08（10→9）、**task09（8→6）**；而 **task00/01/04/05/07 完全不降** ⇒ connector 量化**不是均匀地削弱能力，而是打掉了模型在困难 task 上的余量**（task06 本就是 S0 最弱的 task）。这与 §1 的 8pp 均值一致，但解释了「为何均值降 8pp 而很多 task 看不出变化」。
 
 ## 5. 问题与后续
 
-- V0 PASS，可进入 V1（Connector quantization）。
-- 下一步：V1-R raw equivalence → V1-FP8 → calibration → task0×1 → Goal×100。
-- V4 前置：sdpa → eager 等价性确认（手册 §12.2）。
+- **V0 ✅ / V1 ✅ 已过 gate**（routing 289、raw equivalence、calibration-only、task0×1、Goal×100），可进入 **V2（Vision MLP fc1/fc2，24 个 Linear、54% Vision FLOPs）**。
+- **先追查 V1 的 8pp（优先级高于 V2）**：手册 §9.4 明确要求「如果 V1 Connector FP8 都导致明显 SR 崩溃，先审计 calibration / outlier / connector output，不要进入 V2」。建议顺序：
+  1. 查 connector 的 per-site scale 与 outlier 选择（`scales/2026-09-15_phaseI_vision-quantization/v1_connector_fp8`）是否落在合理范围；
+  2. 查 connector 输入张量的分布（12288 通道，pixel-shuffle 输出）与 `outlier_ratio=0.01` 是否匹配；
+  3. 跑 connector 的 W8A8 单独 ablation（例如只量化 W、A 保持 raw FP）以定位是权侧还是激活侧主导；
+  4. 确认 connector 输出是否经过任何归一化（若无，单点误差会直接放大到 VLM prefix 的 64 个视觉 token 上）。
+- **V2 前置建议**：先跑一段短 smoke（task0 × 1ep）看 Vision MLP FP8 是否也带来同量级损失；若 V1+V2 累积损失超过 ~10pp，应在进入 V3/V4 前先解决 V1。
+- **V4 前置**：sdpa → eager 等价性确认（手册 §12.2）。
+- **V1-R 的比较范围**：手册 §9.2 要求同时报告 connector output / prefix embedding / final action chunk 三项；当前 `v1_connector_raw_equiv.py` **只比较了 connector output**（已 bit-exact）。剩余两项（prefix embedding / final action chunk）尚未接入脚本，属待补项（不影响 connector output 的结论）。
 
 ## 6. 修订记录
 
@@ -124,3 +198,4 @@ python experiments/2026-09-15_phaseI_vision-quantization/scripts/plot_phaseI_flo
 | 2026-09-15 | 创建文档 | |
 | 2026-09-15 | 回填 Gate L0 + V0（结构/运行时/FLOPs）结果 | |
 | 2026-09-15 | 新增 §3.3 FLOPs 占比饼图（V0 实测 + 手册 §0 整体推理） | |
+| 2026-09-19 | 回填 **V1（Connector FP8）**：V1-R raw 等价性 bit-exact、smoke 100%、**Goal×100 = 81.0%（−8.0pp vs H3 S0 89.0%）**；新增 §3.4/§3.5、重写 §4 结论 6 条与 §5 后续；状态保留 `running`（V2–V5 待跑） | |

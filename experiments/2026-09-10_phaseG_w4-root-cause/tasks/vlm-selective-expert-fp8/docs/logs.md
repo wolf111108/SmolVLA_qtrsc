@@ -5,33 +5,28 @@
 > 运行日志按时间**正序**追加，最新状态反映在「当前状态」与头部字段。
 
 - **实验名称**：2026-09-10_phaseG_w4-root-cause · 子实验 vlm-selective-expert-fp8
-- **状态**：running（draft / running / done / aborted）
-- **最后更新**：2026-09-15
+- **状态**：done（draft / running / done / aborted）
+- **最后更新**：2026-09-19
 
 ---
 
 ## 1. 当前状态
 
-**Gate 0-5 全部 PASS（2026-09-14）；Gate 6（Goal ×100 四组）进行中。** G6-A 已完成（**SR = 90.0%**，与 G5-A 同口径一致）；G6-B/C/D 于 2026-09-15 11:09 重启（首次启动 G6-A 曾成功，但 B/C/D 因 9-14 共享模块被编辑成半成品而整条 sweep 静默中止，见 §4）。今日重启前已重新核验编译/导入/scale/路由四项前置条件，全部 PASS。
-
-**14:37 巡检**：G6-B 已完成 **8/10 tasks（55/80 eps = 68.8%）**，逐 task `[10, 9, 5, 6, 6, 7, 7, 5]`；对照同口径的 G5-B（Expert raw FP）前 8 task 为 `[10, 10, 5, 6, 6, 8, 5, 5]` —— **两者累计成功数完全相同（均 55/80）**，仅 task1/task5/task6 三处各差 1 个 episode，净和为 0。这是「Expert 精度背景（raw FP vs FP8）不改变 VLM attention-W4 的敏感性」的强早期证据（**仍未跑满 100 ep，不作正式结论**）。
-
-**交叉印证（G6-A ↔ H3 s0）**：H3 的 `s0_fp8_all`（stats-on）与 G6-A（stats-off）是同一量化配置（`pot_fp8_outlier`、`per_site`、`outlier_ratio=0.01`、全 Linear FP8 + MatMul FP8、goal ×10ep、seed 1000），且 H3 复用 Phase G scales。前 7 个 task 对比：H3 = `[10, 10, 10, 8, 10, 9, 5]`（62/70）vs G6-A = `[10, 10, 9, 8, 10, 9, 7]`（63/70），**7 个 task 中 5 个完全相同，净差 1 个 episode**。说明稀疏度统计插桩（instrumentation）不扰动前向数值——独立复现了 Phase H 的「forward 数值不变」结论。
-
-**耗时**：受 H3 并发挤压，G6-B 单 task 耗时单调上升 `[15.7, 21.8, 26.7, 26.9, 27.5, 28.2, 28.6, 32.1]` min，约为 G6-A 独占时（12.4 min/task）的 1.3–2.6×。
+**实验已完成（done）。** Gate 0-5 全部 PASS（2026-09-14）；Gate 6（Goal ×100 四组）于 2026-09-16 全部完成，SR = **90 / 69 / 41 / 21**（A/B/C/D）。三项预定义判据（|ΔL| ≤ 6pp）全部通过 —— L_attn 21（G5 18，+3）、L_mlp 49（G5 51，−2）、L_all 69（G5 69，0）→ **「VLM MLP > Attention 敏感性」对 Expert-FP8 背景鲁棒**。结果已回填 `results.md`。
 
 | 阶段 | 状态 | 完成时间 | 备注 |
 |---|---|---|---|
 | Gate 0 py_compile | ✅ PASS | 2026-09-14 | — |
 | Gate 1 routing resolver 单测 | ✅ PASS | 2026-09-14 | 8 个单测（含 target typo fail-fast） |
-| Gate 2 四组 routing count | ✅ PASS | 2026-09-14 / 2026-09-15 复验 | A 224/0、B 160/64、C 176/48、D 112/112，MatMul 64 |
+| Gate 2 四组 routing count | ✅ PASS | 2026-09-14 / 09-15 复验 | A 224/0、B 160/64、C 176/48、D 112/112，MatMul 64 |
 | Gate 3 raw Linear equivalence | ✅ PASS | 2026-09-14 | 224 Linear 与 `F.linear` bit-exact，max\|diff\|=0 |
 | Gate 4 calibration-only smoke | ✅ PASS | 2026-09-14 | 四组各 864 scale，无 NaN/Inf |
 | Gate 5 task0×1 smoke | ✅ PASS | 2026-09-14 | 四组各 SR=100%（1/1） |
 | Gate 6-A Goal ×100 | ✅ done | 2026-09-14 18:11 | **SR = 90.0%**（90/100，eval 2.06h） |
-| Gate 6-B Goal ×100 | 🔄 running | — | 8/10 tasks（55/80 eps = 68.8%），逐 task `[10,9,5,6,6,7,7,5]` |
-| Gate 6-C Goal ×100 | ⏳ queued | — | 由 `run_goal.sh` 串行触发 |
-| Gate 6-D Goal ×100 | ⏳ queued | — | 由 `run_goal.sh` 串行触发 |
+| Gate 6-B Goal ×100 | ✅ done | 2026-09-15 16:13 | **SR = 69.0%**（69/100，eval 5.07h） |
+| Gate 6-C Goal ×100 | ✅ done | 2026-09-16 03:25 | **SR = 41.0%**（41/100，eval 11.18h） |
+| Gate 6-D Goal ×100 | ✅ done | 2026-09-16 13:57 | **SR = 21.0%**（21/100，eval 10.53h） |
+| 结题回填 | ✅ done | 2026-09-19 | results.md 状态改 done + L 值判据 + 逐 task 明细 |
 
 ## 2. 运行日志
 
@@ -123,3 +118,5 @@
 | 2026-09-15 | 回填 4.2（`--no-capture-output` 修复）、4.3（重启前置核验）、attempt 2/3 记录与后台任务 | |
 | 2026-09-15 12:37 | 巡检回填：G6-B 3/10 tasks（80.0%，逐 task `[10,9,5]`）、单 task 耗时与 ETA；新增 §4.4（H3 脚本同类问题 + 运行期禁改脚本约束） | |
 | 2026-09-15 14:37 | 巡检回填：G6-B 8/10（68.8%）、H3 s0 7/10（88.6%）与各自 ETA；新增 G6-B↔G5-B 与 G6-A↔H3 s0 两处交叉印证；§4.4 补缓冲机制实证与 SR-耗时相关性 | |
+| 2026-09-16 | Gate 6 四组全部完成（B 16:13 / C 03:25 / D 13:57）；A/B/C/D = 90/69/41/21 | |
+| 2026-09-19 | **状态改 done**；回填四组 SR、L 值判据（三项全过）与结题说明 | |
