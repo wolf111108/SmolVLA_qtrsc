@@ -1,7 +1,7 @@
 # Q1 — INT16 (W16A16) 全算子量化 | libero_goal task0 × 1ep
 # 用途：sparsity quick scan。Linear A/W/O = INT16，QK/PV A/B/O = INT16，outlier 保护 0.01。
 # 需 fresh quick calibration（本实验自建 scale）。
-# 见 docs/experiment_setup.md §3 与 README_EXPERIMENT.md §4 Q1。
+# 见 docs/experiment_setup.md §3 与 README_EXPERIMENT.md（仓库根）§4 Q1。
 output_dir: outputs/2026-09-15_sparsity-ratio-quickscan/q1_int16
 model:
   type: smolvla

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Sparsity quick scan aggregation (README_EXPERIMENT.md §12-§13).
+"""Sparsity quick scan aggregation (README_EXPERIMENT.md（仓库根）§12-§13).
 
 Reads each config's `sparsity/module_sparsity.csv` + `sparsity/weight_sparsity_static.csv`
 and produces:
@@ -16,7 +16,9 @@ Stage definition (§1) — prefill/denoise and vlm/expert must not be merged:
 
 Native counters only for runtime metrics (§2.1): PoT/outlier protected FP
 sidepaths manufacture artificial zeros on the normal quant path, so `reported`
-would understate sparsity.
+would OVERSTATE the sparsity attributable to the native quantized workload
+(the protected element's true value is non-zero, but the normal path stores 0).
+Hence native counters are used throughout.
 
 Static weights are attributed by component (vlm -> PREFILL_VLM,
 expert -> DENOISE_EXPERT); this is a deployment/workload attribution, not a
@@ -104,7 +106,9 @@ def collect(config_dir, out_root):
 
     # ---- runtime：元素/bit 级 native，先求和再相除 ----
     rt = defaultdict(lambda: {"ze": 0.0, "te": 0.0, "zb": 0.0, "tb": 0.0})
-    # ---- secondary：按 tensor_role 细分 ----
+    # ---- secondary：按 (operator, tensor_role) 细分 ----
+    # 必须带 operator：否则 QK 与 PV 的 A/B/O 会合并进同一个 A/B/O 桶，
+    # 无法回答 results.md 承诺的 QK/PV 分项。
     rt_role = defaultdict(lambda: {"ze": 0.0, "te": 0.0, "zb": 0.0, "tb": 0.0})
     # ---- Gate 校验用 ----
     phases, flow_steps, components, roles, akinds = set(), set(), set(), set(), set()
@@ -117,6 +121,7 @@ def collect(config_dir, out_root):
         if ze < 0 or te < 0 or zb < 0 or tb < 0:
             neg += 1
         role = (r.get("tensor_role") or "?").strip()
+        operator = (r.get("operator") or "?").strip()
         phases.add((r.get("phase") or "").strip())
         flow_steps.add((r.get("flow_step") or "").strip())
         components.add((r.get("component") or "").strip())
@@ -124,7 +129,7 @@ def collect(config_dir, out_root):
         akinds.add((r.get("attention_kind") or "unknown").strip())
         if st is None:
             continue
-        for acc in (rt[st], rt_role[(st, role)]):
+        for acc in (rt[st], rt_role[(st, operator, role)]):
             acc["ze"] += ze
             acc["te"] += te
             acc["zb"] += zb
@@ -182,7 +187,8 @@ def check_gate(cfg_dir, gate):
     if want.issubset(fs):
         msgs.append(("OK", "denoise flow_step 覆盖 0..9"))
     else:
-        msgs.append(("WARN", f"flow_step 未覆盖 0..9：缺 {sorted(want - fs)}"))
+        # 本实验 contract 要求 flow_step 0..9 齐备 ⇒ 缺失按 FAIL 处理
+        msgs.append(("FAIL", f"flow_step 未覆盖 0..9：缺 {sorted(want - fs)}"))
 
     comps = set(gate["components"])
     if {"vlm", "expert"}.issubset(comps):
@@ -194,7 +200,8 @@ def check_gate(cfg_dir, gate):
     if {"activation", "output"}.issubset(roles) and {"A", "B", "O"}.issubset(roles):
         msgs.append(("OK", "tensor_role 覆盖 Linear activation/output + MatMul A/B/O"))
     else:
-        msgs.append(("WARN", f"tensor_role 不全：{sorted(roles)}"))
+        # 同上：role 不完整意味着 secondary 表会缺行 ⇒ FAIL
+        msgs.append(("FAIL", f"tensor_role 不全：{sorted(roles)}"))
     return msgs
 
 
@@ -222,10 +229,14 @@ def main():
         print("=" * 78)
         print(f"[{label}]  {cfg_dir}")
         print("=" * 78)
-        for level, msg in check_gate(cfg_dir, gate):
+        gate_msgs = check_gate(cfg_dir, gate)
+        for level, msg in gate_msgs:
             print(f"  [{level}] {msg}")
-        if not gate["has_summary"]:
+        # 任一 FAIL 即视为整体失败（原先只有 has_summary 会置位，
+        # 导致屏幕上出现 [FAIL] 但进程仍 exit 0）
+        if any(level == "FAIL" for level, _ in gate_msgs):
             all_fail = True
+        if not gate["has_summary"]:
             print()
             continue
         print(
@@ -258,14 +269,30 @@ def main():
                 f"  | w_elem={w_e * 100:6.2f}%  w_bit={w_b * 100:6.2f}%"
             )
 
-        # secondary：role 细分
+        # secondary：role 细分（带 operator，使 QK/PV 分开）
+        LINEAR_OPS = {
+            "q_proj", "k_proj", "v_proj", "o_proj",
+            "gate_proj", "up_proj", "down_proj",
+        }
+
+        def _role_label(operator, role):
+            op = operator.lower()
+            if op in LINEAR_OPS:
+                return f"Linear:{role}"
+            if "qk" in op:
+                return f"QK:{role}"
+            if "pv" in op:
+                return f"PV:{role}"
+            return f"{operator}:{role}"
+
         for st, st_label in STAGES:
             merged = defaultdict(lambda: {"ze": 0.0, "te": 0.0, "zb": 0.0, "tb": 0.0})
-            for (s, role), acc in rt_role.items():
+            for (s, operator, role), acc in rt_role.items():
                 if s != st:
                     continue
+                rlabel = _role_label(operator, role)
                 for k in ("ze", "te", "zb", "tb"):
-                    merged[role][k] += acc[k]
+                    merged[rlabel][k] += acc[k]
             for (s, role), acc in wt_role.items():
                 if s != st:
                     continue

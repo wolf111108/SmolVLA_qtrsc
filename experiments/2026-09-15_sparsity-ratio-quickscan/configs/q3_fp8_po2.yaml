@@ -1,7 +1,7 @@
 # Q3 — FP8 PoT（全 scale PoT）| libero_goal task0 × 1ep
 # 用途：sparsity quick scan。量化块逐字复用 Phase-G G1-A（复用其 scale）。
 # Linear A/W/O = E4M3，QK/PV A/B/O = E4M3，method = pot_fp8_outlier，全部 scale 为 PoT。
-# 见 docs/experiment_setup.md §3 与 README_EXPERIMENT.md §4 Q3。
+# 见 docs/experiment_setup.md §3 与 README_EXPERIMENT.md（仓库根）§4 Q3。
 # 用法：python main.py --config <this>
 output_dir: outputs/2026-09-15_sparsity-ratio-quickscan/q3_fp8_po2
 model:

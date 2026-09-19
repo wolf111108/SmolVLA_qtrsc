@@ -2,7 +2,7 @@
 # 用途：sparsity quick scan。量化块逐字复用 Phase-G G1-B（复用其 scale）。
 # 严格语义：pot_ao_outlier 只保证 A/O scale 为 PoT；W4 weight scale 保持 continuous
 # calibrated scale。因此规范命名为 FP8(A/O)-W4 + PoT(A/O)，不写 "全 PoT"。
-# 见 docs/experiment_setup.md §3 与 README_EXPERIMENT.md §4 Q2。
+# 见 docs/experiment_setup.md §3 与 README_EXPERIMENT.md（仓库根）§4 Q2。
 output_dir: outputs/2026-09-15_sparsity-ratio-quickscan/q2_fp8w4_po2
 model:
   type: smolvla

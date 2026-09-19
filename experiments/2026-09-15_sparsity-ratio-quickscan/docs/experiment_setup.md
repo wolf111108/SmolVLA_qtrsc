@@ -81,7 +81,7 @@ S_{elem} = \frac{\sum \text{zero\_elements\_native}}{\sum \text{total\_elements\
 S_{bit} = \frac{\sum \text{sparse\_bits\_native}}{\sum \text{total\_bits\_native}}
 \]
 
-**强制使用 `native` 计数**：PoT / outlier 配置的 protected FP sidepath 会在 normal quant path 制造人工 0，用 `reported` 会低估稀疏度。
+**强制使用 `native` 计数**：PoT / outlier 配置的 protected FP sidepath 会在 normal quant path 中制造人工 0（protected 位置的真值非零，但 normal path 存的是 0），因此 `reported` 会**高估**可归属于 native quantized workload 的稀疏度。本实验统一使用 `native` counters，排除 protected positions。
 
 聚合规范（README §13）：**禁止对逐行比率取平均**，必须先对分子/分母分别求和再相除。`summarize_quick_sparsity.py` 已按此实现。
 
@@ -95,6 +95,40 @@ S_{bit} = \frac{\sum \text{sparse\_bits\_native}}{\sum \text{total\_bits\_native
 | FP8 E4M3 | 4-bit significand（1MMM / 0MMM）的 zero-bit ratio，**不含 sign / exponent** |
 
 因此：element 级可以横向比较；bit 级只能解释为「各格式自身的 compute-bit skipping opportunity」，**不得**把 FP8 与 INT 的 bit 比率差值写成同一指标的 pp 差。
+
+> **位宽伪影（实测，见 `results.md` §3.2）**：即使 INT 家族内部，sign-aware 指标也带有**位宽偏置**——每个负元素固定贡献 1 个可跳过的符号位，而这 1 bit 在分母里的权重是 $1/8 = 12.5\%$（INT8）vs $1/16 = 6.25\%$（INT16）。因此 **INT8 与 INT16 的 bit sparsity 差值中约 6.25pp 纯粹来自位宽**，不反映真实数据稀疏度差异。**跨位宽比较 bit sparsity 前必须先扣除该项**，否则会系统性高估低位宽收益。
+
+### 4.3 统计范围（Scope）—— 明确不是「整个 SmolVLA」
+
+当前量化框架显式包装的 target 只有：
+
+```text
+VLM text_model 16 层：  q/k/v/o + gate/up/down
+Action Expert 16 层：   q/k/v/o + gate/up/down
+VLM / Expert：           QK + PV
+```
+
+因此本实验的 **`VLM prefill` 严格含义是「VLM text-Transformer 被量化包装部分的 sparsity」**，**不包括**：
+
+- SigLIP vision encoder
+- vision connector
+- 其它未被包装的非 Transformer 算子
+
+> **Scope：** 当前量化框架覆盖的 VLM text Transformer + Action Expert Transformer 的 Linear/QK/PV；vision encoder、connector 及未包装的非 Transformer 算子不计入本 quick scan。
+>
+> 不可外推描述为「整个 SmolVLA prefill 的所有计算 sparsity」——vision encoder 的 FLOPs 占比很大，这类措辞会严重误导。
+
+### 4.4 Primary headline 的定义
+
+Primary 表的 `runtime element/bit sparsity` 是把某 stage 下所有已 instrumentation 的 quantized tensor observations（Linear activation/output + QK A/B/O + PV A/B/O）按 element/bit denominator 加权求和后的结果。
+
+它**不等于**：
+
+- MAC/FLOP-weighted sparsity
+- unique activation-memory sparsity
+- hardware speedup
+
+原因：同一份语义数据可能先作为某个 operator 的 output、再作为下一个 operator 的 input 被重复计入不同 role。相关脚注需随结果表一并给出。
 
 ---
 
@@ -133,16 +167,27 @@ sparsity:
 conda activate smolvla_eval
 cd ~/VLA_tcs2
 
-# 一键 4 组串行（GPU 必填）
-GPU=0 bash experiments/2026-09-15_sparsity-ratio-quickscan/scripts/run_quickscan.sh
+# 一键 4 组串行（不做设备隔离；启动时打印 GPU 占用供人工确认）
+# 自动执行「阶段 1 校准（仅 Q0/Q1）→ 阶段 2 eval + 采集」
+bash experiments/2026-09-15_sparsity-ratio-quickscan/scripts/run_quickscan.sh
 
-# 单组（Q0/Q1 需校准；Q2/Q3 必须带 --skip-calibration）
-python main.py --config experiments/2026-09-15_sparsity-ratio-quickscan/configs/q0_int8.yaml
+# 单组（Q0/Q1 需先校准，再 eval；见下方两阶段说明）
+#   阶段 1（只生成 scale，不导出 sparsity）
+python main.py --config experiments/2026-09-15_sparsity-ratio-quickscan/configs/q0_int8.yaml --skip-evaluation
+#   阶段 2（只 eval；必须跳过校准）
+python main.py --config experiments/2026-09-15_sparsity-ratio-quickscan/configs/q0_int8.yaml --skip-calibration
+
+# Q2/Q3 只有阶段 2（scale 为本地只读副本）
 python main.py --config experiments/2026-09-15_sparsity-ratio-quickscan/configs/q2_fp8w4_po2.yaml --skip-calibration
 
-# 汇总
+# 汇总（Primary + Secondary CSV）
 python experiments/2026-09-15_sparsity-ratio-quickscan/scripts/summarize_quick_sparsity.py
+
+# 绘图（四配置 × runtime/weights × prefill/denoise = 4 张图）
+python experiments/2026-09-15_sparsity-ratio-quickscan/scripts/plot_bit_sparsity.py
 ```
+
+> **为何 Q0/Q1 必须拆两阶段**：`src/vla_tcs2/calibration.py:102` 的 `calibrate()` 会无条件 `QuantStatManager(scale_dir)` 新建实例并覆写到每个 quantized module，而新实例的 `sparsity_enabled` 默认 `False`（`main.py` 只对 `wrapper.stat_manager` 调过 `enable_sparsity(True)`）⇒「同一次 run 既校准又统计」时 **runtime sparsity 静默全空**（`module_sparsity.csv` 只有表头、无任何告警、`[DONE]` 照常打印）。详见 `logs.md` §4.9。本实验不改 core code（§8），故以两阶段绕开。
 
 ---
 
@@ -150,21 +195,27 @@ python experiments/2026-09-15_sparsity-ratio-quickscan/scripts/summarize_quick_s
 
 | config | 输出目录（outputs/ 下） | 状态 |
 |---|---|---|
-| `q0_int8.yaml` | `outputs/2026-09-15_sparsity-ratio-quickscan/q0_int8/` | pending |
-| `q1_int16.yaml` | `outputs/2026-09-15_sparsity-ratio-quickscan/q1_int16/` | pending |
-| `q2_fp8w4_po2.yaml` | `outputs/2026-09-15_sparsity-ratio-quickscan/q2_fp8w4_po2/` | pending |
-| `q3_fp8_po2.yaml` | `outputs/2026-09-15_sparsity-ratio-quickscan/q3_fp8_po2/` | pending |
-| 汇总（Primary） | `outputs/2026-09-15_sparsity-ratio-quickscan/quick_sparsity_summary.csv` | pending |
-| 汇总（Secondary） | `outputs/2026-09-15_sparsity-ratio-quickscan/quick_sparsity_by_role.csv` | pending |
+| `q0_int8.yaml` | `outputs/2026-09-15_sparsity-ratio-quickscan/q0_int8/` | ✅ done |
+| `q1_int16.yaml` | `outputs/2026-09-15_sparsity-ratio-quickscan/q1_int16/` | ✅ done |
+| `q2_fp8w4_po2.yaml` | `outputs/2026-09-15_sparsity-ratio-quickscan/q2_fp8w4_po2/` | ✅ done |
+| `q3_fp8_po2.yaml` | `outputs/2026-09-15_sparsity-ratio-quickscan/q3_fp8_po2/` | ✅ done |
+| 汇总（Primary） | `outputs/2026-09-15_sparsity-ratio-quickscan/quick_sparsity_summary.csv` | ✅ 8 行 |
+| 汇总（Secondary） | `outputs/2026-09-15_sparsity-ratio-quickscan/quick_sparsity_by_role.csv` | ✅ 120 行 |
+| 图（4 张） | `experiments/2026-09-15_sparsity-ratio-quickscan/docs/figures/` | ✅ done |
 
-单组产物（README §11 Gate）：`sparsity/module_sparsity.csv`、`sparsity/weight_sparsity_static.csv`、`sparsity/quantization_manifest.csv`、`sparsity/outlier_sidepath.csv`。
+单组产物（README §11 Gate）：`sparsity/module_sparsity.csv`（3520 行）、`sparsity/weight_sparsity_static.csv`（224 行）、`sparsity/quantization_manifest.csv`、`sparsity/outlier_sidepath.csv`。
+
+> `outputs/` 与 `scales/` 均被 `.gitignore` 排除，故上述 CSV/scale 不入库；入库的是生成它们的脚本与文档。
 
 ---
 
 ## 8. 风险与注意事项
 
 - **不修改 core code**。`main.py`、`src/vla_tcs2/quant/stat_manager.py`、`quant_methods.py`、`model_wrapper.py` 一律不动。原因：Phase H 的 H3 runner **逐 task 启动新 Python 进程**，若中途改 core code，后续 task 会载入不同代码版本，破坏 H3 一致性。本实验只新增 configs / scripts / docs。
-- **GPU 单卡约束**。本机仅 1 张 H100 NVL（GPU 0），且 H3 正在占用。`run_quickscan.sh` **强制要求显式传 `GPU=`**，避免误抢同一张卡；建议等 H3 结束或接受与 H3 共享（会互相稀释算力）。
+- **GPU 单卡约束，不做设备隔离**。本机仅 1 张 H100 NVL（GPU 0）。runner **不设** `CUDA_VISIBLE_DEVICES`，也不改 `MUJOCO_EGL_DEVICE_ID`，完全沿用 Phase F/G/H 的约定（依赖 conda env 的 `MUJOCO_EGL_DEVICE_ID=2`）。
+  - 原因：robosuite 断言 `MUJOCO_EGL_DEVICE_ID in CUDA_VISIBLE_DEVICES`（子串判断），而 `smolvla_eval` 的 conda env config vars 会把 `MUJOCO_EGL_DEVICE_ID=2` 写回子进程、覆盖 shell export。一旦限制 `CUDA_VISIBLE_DEVICES=0` 就会 `AssertionError`。
+  - 详见 `logs.md` §4.8。启动时会打印 GPU 占用与同时刻其它任务，供人工确认。
+  - **注意**：交互式 bash 会话的环境变量跨命令持久，调试时若曾 `export CUDA_VISIBLE_DEVICES`，务必先 `unset` 再启动，否则会污染 runner。
 - **Q2/Q3 必须 `--skip-calibration`**。指向的本地副本虽不影响 Phase H，但重校准会改变数值、使「复用 G1-A/G1-B」的语义失效。runner 已硬编码该 flag。
 - **GPU 显存**。`chunk_size=4194304` 已上调以减少统计开销；若 OOM 降回 `1048576`。
 - **`1/(1-S)` 不是硬件加速比**。本实验不输出 speedup 结论。
