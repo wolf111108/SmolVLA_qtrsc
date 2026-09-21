@@ -18,7 +18,7 @@
 #   G6-A scale files into this scale_dir. The run script does this automatically.
 #   Vision modules override the policy to recalibrate in model_wrapper.py.
 
-output_dir: outputs/2026-09-15_phaseI_vision-quantization/vlin_full_vision_linear_fp8
+output_dir: outputs/2026-09-15_phaseI_vision-quantization/vlin_full_vision_linear_fp8_goal
 
 model:
   type: smolvla
@@ -127,9 +127,7 @@ evaluation:
     type: libero
     task: libero_goal
     max_parallel_tasks: 1
-    task_ids:
-      - 0
-  n_episodes: 1
+  n_episodes: 10
   batch_size: 1
   use_async_envs: false
   seed: 1000
