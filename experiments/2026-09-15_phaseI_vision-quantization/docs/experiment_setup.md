@@ -24,7 +24,7 @@
 | 项目 | 值 |
 |---|---|
 | conda 环境 | smolvla_eval |
-| 仓库 revision / commit | main@2b2a3013；VLIN 分支 `phaseI/vision-linear-full-integration`（main +9 commits，仅存在于 mirror remote） |
+| 仓库 revision / commit | 基线 `main@2b2a3013`；当前工作分支 `phaseI/vision-linear-full-integration`（后续修订均在该分支，不再用易过期的 `+N commits / N files` 描述） |
 | LeRobot 路径与 commit | `lerobot_current/` |
 | GPU | GPU 0（H100 系，与同用户 Qwen eval server 共享，EGL 渲染 `MUJOCO_EGL_DEVICE_ID=2`） |
 | 关键依赖版本 | 见 `envs/smolvla_eval_pip_freeze.txt`；MUJOCO_GL=egl |
@@ -44,7 +44,7 @@
 | episodes × seeds | 10 tasks × 10 eps = 100 episodes，seed = 1000 |
 | 采样参数 | n_action_steps = 10 / num_steps = 10 |
 | 指标 | success rate（Wilson 95% CI）、逐 task 成功数 |
-| baseline | **G6-A = 90.0%**（VLM/Expert FP8 canonical，VLIN 的直接对照）；H3 S0 FP8-all = 89.0%（V1 对照） |
+| baseline | **VLIN 严格直接对照：G6-A = 90.0%**（同一 VLM/Expert FP8 scale，Vision/connector raw）；**V1 仅参考 H3 S0 = 89.0%**，因 V1 对 legacy VLM/Expert scale 重新 calibration，不能视为严格 connector-only 单变量对照 |
 
 ## 5. 实验变量与分组
 
@@ -53,10 +53,41 @@
 | 组 | config（configs/ 下文件名） | 变量取值 | 固定项 | 说明 |
 |---|---|---|---|---|
 | V0 | v0_workload_audit.yaml | 无量化 | — | Vision 结构 / 运行时 / FLOPs 审计（12 层、768、2 相机、428.2 G） |
-| V1 | v1_connector_fp8.yaml / _goal.yaml | connector `pot_fp8_outlier`（A/W/O 全 E4M3） | VLM/Expert FP8 canonical；vision=false | routing 289；Goal×100 = 81.0%（Δ−8.0pp vs H3） |
+| V1 | v1_connector_fp8.yaml / _goal.yaml | connector `pot_fp8_outlier`（A/W/O 全 E4M3） | vision=false；legacy VLM/Expert 也按 V1 配置重新 calibration | routing 289；Goal×100 = 81.0%；相对 H3 S0 89.0% 为 −8.0pp，但**不是严格 connector-only 单变量差值** |
 | VLIN smoke | vlin_full_vision_linear_fp8.yaml | Vision 72 Linear 全部 `pot_fp8_outlier`（A/W/O E4M3，outlier_ratio=0.01，per-site scale group） | VLM/Expert FP8 reuse G6-A（224 Linear + 64 MatMul）；Vision QK/PV 保持 SDPA；**connector 原精度** | routing **296 Linear / 64 MatMul**（connector 关闭故为 296 非 297）；action = reuse 288 / recalibrate 72；新增 72×3 = 216 个 Vision scale 文件 |
 | **VLIN 正式** | vlin_full_vision_linear_fp8_goal.yaml | 同上 | 同上 + `--skip-calibration` | Goal×100 = **80.0%（Δ−10.0pp vs G6-A）** |
-| V2–V5 | （待建） | Vision MLP / attn proj / QK·PV / patch embed 逐段 | — | V4 前置 sdpa→eager 等价性 gate |
+| V2 | （计划：`v2_vision_mlp_fp8*.yaml`，尚未创建） | Vision MLP `fc1/fc2` 24 个 Linear FP8 | G6-A 288 个 legacy quant sites 全 reuse；Vision attn projection / QK·PV / connector raw | 用于分解 VLIN 的 10pp 损失；覆盖 231.93 GFLOPs ≈ 54.2% Vision / 38.9% whole inference |
+| V3 | （计划：`v3_vision_attn_proj_fp8*.yaml`，尚未创建） | Vision `q/k/v/out_proj` 48 个 Linear FP8 | G6-A 288 个 legacy quant sites 全 reuse；Vision MLP / QK·PV / connector raw | 用于分解 VLIN 的 10pp 损失；覆盖 115.96 GFLOPs ≈ 27.1% Vision / 19.5% whole inference |
+| V4 | （待建） | Vision QK/PV | V2/V3 结论确定后再进入 | **前置：sdpa → eager 等价性 gate** |
+| V5 | （可选） | patch embed / 其他 Vision 非 Linear op | 前述实验完成后再决定 | 不作为当前优先级 |
+
+### 5.1 VLIN 精度损失归因设计（下一阶段，统一放在本实验内）
+
+VLIN 已得到严格对照结果：G6-A 90.0% → Vision 72-Linear FP8 80.0%，即 **L_all = 10pp**。下一步不新建规范外实验目录，继续在本实验 `configs/`、`scripts/`、`docs/` 内完成两组单变量消融：
+
+| 组 | Vision MLP | Vision Attn Projection | Vision QK/PV | Connector | 期望 routing | calibration action | 目的 |
+|---|---|---|---|---|---|---|---|
+| G6-A baseline | raw | raw | raw/SDPA | raw | 224 Linear + 64 MatMul | 直接复用既有 G6-A | 90.0% anchor |
+| V2 MLP-only | **FP8** | raw | raw/SDPA | raw | **248 Linear + 64 MatMul** | reuse 288 / recalibrate **24** | 测 `L_MLP = 90 - SR_V2` |
+| V3 AttnProj-only | raw | **FP8** | raw/SDPA | raw | **272 Linear + 64 MatMul** | reuse 288 / recalibrate **48** | 测 `L_Attn = 90 - SR_V3` |
+| VLIN all-Linear | **FP8** | **FP8** | raw/SDPA | raw | **296 Linear + 64 MatMul** | reuse 288 / recalibrate **72** | 已完成，`L_all = 10pp` |
+
+固定量化设置保持与 VLIN 完全一致：`pot_fp8_outlier`、A/W/O = E4M3、`outlier_ratio=0.01`、`linear_scale_granularity=per_site`；VLM/Expert 继续复用**同一份 G6-A canonical scales**，避免再次引入 calibration background 混淆。
+
+每组仍按同一 Gate 顺序执行：routing/count → calibration-only → coverage → Goal task0×1 smoke → Goal×100（seed=1000，n_action_steps=10，num_steps=10）。预期新增 Vision scale 文件数：V2 = 24×3 = **72**，V3 = 48×3 = **144**。
+
+归因判据：
+
+```text
+L_MLP  = 90 - SR(V2)
+L_Attn = 90 - SR(V3)
+L_all  = 90 - 80 = 10
+interaction = L_all - (L_MLP + L_Attn)
+```
+
+若 `interaction≈0`，则两部分损失近似可加；若明显偏离 0，则需要进一步检查两者在 visual representation 上的耦合。**V2/V3 完成前不推进 Vision QK/PV（V4）**。
+
+> 运行时间 `eval_s` 只用于记录 rollout 成本，**不得直接解释为 FP8 硬件加速比**：当前框架是 fake/simulated quantization，包含量化/反量化与 outlier side path，且 SR 不同会改变 episode 是否跑满 300 steps。真实速度收益需后续用实际低精度 kernel / 硬件路径单独测量。
 
 ## 6. 运行命令
 
@@ -139,3 +170,4 @@ CALIBRATION COVERAGE GATE: PASS
 - runner **无断点续跑**：单进程跑 10 task，`result.json` 仅在全部结束时落盘；中断需从头重跑。判断进度看 `videos/libero_goal_<n>/` mtime（`Built vec env` ×10 是启动时预建，不是进度）。
 - 长时 rollout 期间勿编辑仓库内共享 Python 模块（避免 import 失败）；不要设 `CUDA_VISIBLE_DEVICES`（robosuite EGL 断言坑，见 experiments-convention）。
 - Vision attention 实现为 `sdpa`（非 eager），本分支刻意不动 Vision QK/PV；V4 前须先做 eager-equivalence gate。
+- **性能口径**：当前 PoT-FP8 是 fake/simulated quantization；`eval_s` 同时受失败 episode 步数、GPU 争用和量化仿真开销影响，因此只记录运行成本，不作为硬件 speedup 证据。
