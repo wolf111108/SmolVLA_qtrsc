@@ -465,6 +465,32 @@ def test_t14_calibration_policy_recalibrate():
     assert proj.calibration_policy == "recalibrate"
 
 
+# ---------------------------------------------------------------------------
+# Test 15 — full Vision Linear path: all 72 sites force recalibration
+# ---------------------------------------------------------------------------
+def test_t15_full_vision_linear_all_recalibrate():
+    policy = _make_policy()
+    _wrap_smolvlm_vision_linear_layers(
+        policy,
+        _cfg(
+            vision_enabled=True,
+            vision_mlp=True,
+            vision_attn_proj=True,
+        ),
+        "scale_inspection",
+        None,
+    )
+
+    vision = [
+        m
+        for m in policy.model.modules()
+        if isinstance(m, QuantizedLinear)
+        and m.module_id.startswith("vision.")
+    ]
+    assert len(vision) == 72
+    assert all(m.calibration_policy == "recalibrate" for m in vision)
+
+
 if __name__ == "__main__":
     test_t1_default_off()
     test_t2_connector_only()
@@ -480,4 +506,5 @@ if __name__ == "__main__":
     test_t12_parse_module_id_vision_connector()
     test_t13_overrides_target_vision()
     test_t14_calibration_policy_recalibrate()
+    test_t15_full_vision_linear_all_recalibrate()
     print("all vision quant routing tests passed")
