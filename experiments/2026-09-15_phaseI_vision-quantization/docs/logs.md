@@ -5,8 +5,8 @@
 > 运行日志按时间**正序**追加，最新状态反映在「当前状态」与头部字段。
 
 - **实验名称**：2026-09-15_phaseI_vision-quantization
-- **状态**：running（V0 ✅ / V1 ✅ / VLIN ✅ / **V2 ✅（84.0%）** / V3 🔄 running / V4–V5 待跑）
-- **最后更新**：2026-09-21
+- **状态**：running（V0 ✅ / V1 ✅ / VLIN ✅ / **V2 ✅（84.0%）** / V3 🔄 Goal×100 进行中（t7） / V4–V5 待跑）
+- **最后更新**：2026-09-22
 
 ---
 
@@ -25,7 +25,7 @@ Gate L0（legacy regression）、V0（Vision workload audit）、V1 与 VLIN 已
 | VLIN Goal×100 | ✅ done | 2026-09-21 | **SR = 80.0%（80/100）**，Δ −10.0pp vs G6-A；第 1 次尝试 12:50 被 SIGTERM（task2 中途，非 OOM 非人为），重启后完整跑完 |
 | V2 Vision MLP FP8（Gate 1–6） | ✅ done | 2026-09-21 | 248/64 routing、reuse288/recal24、24/24 + 72 scale 文件、smoke 100%（runner `run_vision_linear_variant.sh`） |
 | V2 Goal×100 | ✅ done | 2026-09-21 | **SR = 84.0%（84/100，L_MLP = 6pp）**，逐 task [10,10,10,6,9,10,4,9,10,6]，eval_s = 8013 |
-| V3 AttnProj FP8（全流程） | 🔄 running | 2026-09-21 | PID 864521；Gate1–7 一次跑完（RUN_GOAL=1） |
+| V3 AttnProj FP8（全流程） | 🔄 running | 2026-09-21 | Gate1–6 全过（272/64、48/48、144 文件、smoke 100%）；Goal×100 t7 进行中（t0–t6 = 59/70，t06=4 为重灾） |
 | V2 Vision MLP-only | ⏳ pending | — | 24 个 Linear；严格复用 G6-A legacy scales；设计见 `experiment_setup.md §5.1` |
 | V3 Vision AttnProj-only | ⏳ pending | — | 48 个 Linear；严格复用 G6-A legacy scales；设计见 `experiment_setup.md §5.1` |
 | V4/V5 | ⏳ pending | — | V2/V3 完成后再决定；V4 前置：sdpa → eager 等价性 |
@@ -48,7 +48,7 @@ Gate L0（legacy regression）、V0（Vision workload audit）、V1 与 VLIN 已
 | 2026-09-21 | VLIN Goal×100（第 2 次） | 同上，旧日志归档后重启 | ✅ | `outputs/.../vlin_full_vision_linear_fp8_goal` | preflight coverage PASS、复用 calibration；**SR = 80.0%（80/100）**，逐 task [10,10,8,7,9,9,4,9,9,5]；eval_s = 10189（≈2.83h）；result.json 已落盘 |
 | 2026-09-21 | V2 全流程 | `RUN_GOAL=1 run_vision_linear_variant.sh v2_vision_mlp_fp8.yaml` | ⚠️ 部分 | `v2_run.log` | Gate1–6 全过（248/64、24/24、72 文件、smoke 100%）；Gate7 首次触发 goal config YAML 缩进错误（`n_episodes` 多缩 4 格），已修复（commit `2551e68`） |
 | 2026-09-21 | V2 Goal×100 | `main.py --config v2_vision_mlp_fp8_goal.yaml --skip-calibration` | ✅ | `outputs/.../v2_vision_mlp_fp8_goal` | 17:22–19:39（≈2.2h）；**SR = 84.0%（84/100）**，逐 task [10,10,10,6,9,10,4,9,10,6]；eval_s = 8013 |
-| 2026-09-21 | V3 全流程启动 | `RUN_GOAL=1 run_vision_linear_variant.sh v3_vision_attn_proj_fp8.yaml` | 🔄 running | `v3_run.log` | PID 864521；Gate1–7 串行 |
+| 2026-09-21 | V3 全流程启动 | `RUN_GOAL=1 run_vision_linear_variant.sh v3_vision_attn_proj_fp8.yaml` | 🔄 running | `v3_run.log` | PID 864521；Gate1–6 全过；Goal×100 20:0x 启动，截至 09-22 00:13 完成 t0–t6（59/70），t7 进行中 |
 | 2026-09-21 | 结果审计修订 | 对照 G6-A / V1 / VLIN 配置与文档口径 | ✅ | — | VLIN 严格 baseline 固定为 G6-A 90%；逐 task Δ=[0,0,-1,-1,-1,0,-3,0,-1,-3]；V1 8pp 降级为非严格参考；删除 fake-quant runtime speedup 推断；V2/V3 设计合并进 experiment_setup.md §5.1 |
 
 ## 3. 后台任务
