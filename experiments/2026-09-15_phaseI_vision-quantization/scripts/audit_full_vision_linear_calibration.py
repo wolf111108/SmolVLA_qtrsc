@@ -1,23 +1,25 @@
 #!/usr/bin/env python
-"""Gate: verify calibration coverage for the 72 Vision Encoder Linear sites.
+"""Gate: verify calibration coverage for the Vision Encoder Linear sites.
 
 Run this AFTER:
-    python main.py --config .../vlin_full_vision_linear_fp8.yaml --skip-evaluation
+    python main.py --config <cfg> --skip-evaluation
 
-The full Vision Linear experiment uses per-site scale groups. Each Vision
+The Vision Linear experiments use per-site scale groups. Each Vision
 QuantizedLinear must therefore have exactly three persisted scale files:
     <scale_group>_a_scale_<idx>.p
     <scale_group>_w_scale_<idx>.p
     <scale_group>_o_scale_<idx>.p
 
-Expected:
-    72 Vision Linear sites
-    72 / 72 sites complete
-    216 / 216 Vision scale files present
-    every scale finite and strictly positive
+Expected counts are derived from the config's ``vision.linear`` switches
+(each family covers 12 layers):
 
-Legacy VLM/Expert scales are copied from the canonical G6-A control by the
-runner and are intentionally not recalibrated here.
+  VLIN (mlp=true,  attn_proj=true)  : 72 sites, 72/72 complete, 216 files
+  V2   (mlp=true,  attn_proj=false) : 24 sites, 24/24 complete,  72 files
+  V3   (mlp=false, attn_proj=true)  : 48 sites, 48/48 complete, 144 files
+
+Every scale must be finite and strictly positive. Legacy VLM/Expert scales
+are copied from the canonical G6-A control by the runner and are
+intentionally not recalibrated here.
 """
 
 from __future__ import annotations
@@ -42,6 +44,10 @@ DEFAULT_CONFIG = (
     / "experiments/2026-09-15_phaseI_vision-quantization/configs/"
       "vlin_full_vision_linear_fp8.yaml"
 )
+
+VISION_LAYERS = 12
+ATTN_OPS = ("q_proj", "k_proj", "v_proj", "out_proj")
+MLP_OPS = ("fc1", "fc2")
 
 
 def parse_args() -> argparse.Namespace:
@@ -87,12 +93,26 @@ def main() -> None:
         and (getattr(m, "module_id", "") or "").startswith("vision.")
     ]
 
+    vision_linear_cfg = (
+        cfg.get("quantization", {}).get("vision", {}).get("linear", {})
+    )
+    wrap_attn = bool(vision_linear_cfg.get("attn_proj", False))
+    wrap_mlp = bool(vision_linear_cfg.get("mlp", False))
+    exp_sites = VISION_LAYERS * (
+        len(ATTN_OPS) * wrap_attn + len(MLP_OPS) * wrap_mlp
+    )
+    exp_files = exp_sites * 3
+    print(
+        f"variant: vision.linear(mlp={wrap_mlp}, attn_proj={wrap_attn}) "
+        f"-> expect {exp_sites} sites / {exp_files} scale files"
+    )
+
     errors: list[str] = []
     rows = []
     present_files = 0
 
-    if len(vision) != 72:
-        errors.append(f"Vision Linear count is {len(vision)}, expected 72")
+    if len(vision) != exp_sites:
+        errors.append(f"Vision Linear count is {len(vision)}, expected {exp_sites}")
 
     for m in sorted(vision, key=lambda x: getattr(x, "module_id", "")):
         mid = getattr(m, "module_id", "")
@@ -127,22 +147,22 @@ def main() -> None:
 
     print("\n=== VISION CALIBRATION COVERAGE ===")
     print(f"scale_dir              : {scale_dir}")
-    print(f"Vision Linear sites    : {len(vision)} / 72")
+    print(f"Vision Linear sites    : {len(vision)} / {exp_sites}")
     complete = sum(1 for _, _, _, missing, invalid in rows if not missing and not invalid)
-    print(f"complete sites         : {complete} / 72")
-    print(f"Vision scale files     : {present_files} / 216")
+    print(f"complete sites         : {complete} / {exp_sites}")
+    print(f"Vision scale files     : {present_files} / {exp_files}")
 
     # Operator-family summary is useful for spotting one missing family.
     families = ["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"]
     for op in families:
         op_rows = [r for r in rows if r[0].endswith("." + op)]
         op_ok = sum(1 for r in op_rows if not r[3] and not r[4])
-        print(f"{op:10s}             : {op_ok:2d} / 12")
+        print(f"{op:10s}             : {op_ok:2d} / {len(op_rows)}")
 
-    if complete != 72:
-        errors.append(f"complete Vision sites: {complete}/72")
-    if present_files != 216:
-        errors.append(f"Vision scale files: {present_files}/216")
+    if complete != exp_sites:
+        errors.append(f"complete Vision sites: {complete}/{exp_sites}")
+    if present_files != exp_files:
+        errors.append(f"Vision scale files: {present_files}/{exp_files}")
 
     if errors:
         print("\nCALIBRATION COVERAGE GATE: FAIL")
@@ -153,7 +173,9 @@ def main() -> None:
         raise SystemExit(2)
 
     print("\nCALIBRATION COVERAGE GATE: PASS")
-    print("All 72 Vision Linear sites have finite positive A/W/O scales.")
+    print(
+        f"All {exp_sites} Vision Linear sites have finite positive A/W/O scales."
+    )
 
 
 if __name__ == "__main__":

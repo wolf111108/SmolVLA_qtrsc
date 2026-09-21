@@ -1,0 +1,151 @@
+# Phase I — V2: Vision MLP-only FP8 (loss attribution for VLIN).
+#
+# Scope:
+#   - canonical VLM/Expert FP8 background (224 Linear + 64 MatMul), reused
+#   - Vision MLP ONLY: 12 x (fc1, fc2) = 24 Linear
+#   - Vision attention projections / QK-PV / connector stay raw
+#
+# Expected routing:
+#   QuantizedLinear = 224 + 24 = 248
+#   QuantizedMatMul = 64
+#   calibration action: reuse 288 / recalibrate 24  (new scale files = 72)
+#
+# Attribution: L_MLP = 90 - SR(V2)  (baseline G6-A = 90/100)
+#
+# Scope:
+#   - canonical VLM/Expert FP8 background (224 Linear + 64 MatMul), reused
+#   - ALL Vision Encoder Linear ops quantized:
+#       12 x (q_proj, k_proj, v_proj, out_proj, fc1, fc2) = 72 Linear
+#   - Vision SDPA QK/PV stays floating/fused for now
+#   - connector stays raw
+#
+# Expected routing:
+#   QuantizedLinear = 224 + 72 = 296
+#   QuantizedMatMul = 64
+#   Vision Linear  = 72 (48 attention projections + 24 MLP)
+#   Connector      = 0
+#
+# IMPORTANT:
+#   calibration_policy.default = reuse. Before calibration, copy the canonical
+#   G6-A scale files into this scale_dir. The run script does this automatically.
+#   Vision modules override the policy to recalibrate in model_wrapper.py.
+
+output_dir: outputs/2026-09-15_phaseI_vision-quantization/v2_vision_mlp_fp8
+
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+
+quantization:
+  enabled: true
+  mode: quant_forward
+  method: pot_fp8_outlier
+  scale_dir: scales/2026-09-15_phaseI_vision-quantization/v2_vision_mlp_fp8
+
+  # Existing VLM/Expert QK/PV only. Vision attention remains SDPA.
+  quantize_matmul: true
+  matmul_scale_granularity: per_site
+  linear_scale_granularity: per_site
+  outlier_ratio: 0.01
+
+  # Strict isolation:
+  #   legacy VLM/Expert Linear + MatMul must reuse canonical G6-A scales;
+  #   the Vision wrapper forces its 72 newly-added Linear sites to recalibrate.
+  calibration_policy:
+    default: reuse
+    layer_policy:
+      q_proj: reuse
+      k_proj: reuse
+      v_proj: reuse
+      o_proj: reuse
+      gate_proj: reuse
+      up_proj: reuse
+      down_proj: reuse
+      qk_matmul: reuse
+      pv_matmul: reuse
+    per_layer_policy: {}
+
+  q_proj: &linear_fp8
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  k_proj: *linear_fp8
+  v_proj: *linear_fp8
+  o_proj: *linear_fp8
+  gate_proj: *linear_fp8
+  up_proj: *linear_fp8
+  down_proj: *linear_fp8
+
+  qk_matmul: &matmul_fp8
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  pv_matmul: *matmul_fp8
+
+  vision:
+    enabled: true
+    calibration_policy: recalibrate
+    linear:
+      mlp: true
+      attn_proj: false
+
+  connector:
+    enabled: false
+
+  linear:
+    enabled: true
+    include:
+      - vlm.*
+      - expert.*
+      - vision.*
+    exclude: []
+    overrides:
+      - name: vision_linear_fp8
+        target:
+          component: vision
+        config:
+          a_bit: e4m3
+          w_bit: e4m3
+          o_bit: e4m3
+          d_bit: 4
+          p: 4
+          outlier_ratio: 0.01
+          method: pot_fp8_outlier
+
+  weight_quant_granularity: per_tensor
+  weight_group_size: null
+
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8
+  batch_size: 8
+  frame_stride: 4
+  seed: 42
+
+evaluation:
+  env:
+    type: libero
+    task: libero_goal
+    max_parallel_tasks: 1
+    task_ids:
+      - 0
+  n_episodes: 1
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2
