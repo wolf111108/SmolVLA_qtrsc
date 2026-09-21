@@ -12,19 +12,20 @@
 
 ## 1. 当前状态
 
-Gate L0（legacy regression）与 V0（Vision workload audit）已完成并通过。**V1（Connector quantization）五道 gate 已全部跑完（2026-09-19），但 Goal×100 出现明显下降（81.0% vs baseline 89.0%，Δ = −8.0pp）**，按手册 §9.4 应先审计 V1 再进 V2。
+Gate L0（legacy regression）、V0（Vision workload audit）、V1 与 VLIN 已完成。VLIN 正式 Goal×100 = **80.0%（80/100）**，严格直接对照 G6-A = 90.0%，Δ = **−10.0pp**。V1 Goal×100 = 81.0%，相对 H3 S0 89.0% 为 −8.0pp，但因 V1 对 legacy VLM/Expert scales 也重新 calibration，现将其记为**参考差值而非严格 connector-only 单变量结论**。下一阶段按 `experiment_setup.md §5.1` 拆分 Vision MLP-only 与 attention-projection-only。
 
 | 阶段 | 状态 | 完成时间 | 备注 |
 |---|---|---|---|
 | Gate L0 legacy regression | ✅ done | 2026-09-15 | 224/64/0/0，向后兼容 |
 | V0 workload audit | ✅ done | 2026-09-15 | 12 层 / 768 / 2 camera / 428 GFLOPs |
 | V1-R raw equivalence | ✅ done | 2026-09-19 | max/mean/max_rel error 全 `0.000e+00`（bit-exact） |
-| V1 Connector FP8 | ✅ done | 2026-09-19 | routing 289、calibration 生成、smoke 100%、**Goal×100 = 81.0%（−8.0pp）** |
-| V1 审计（建议） | ⏳ pending | — | 先查 calibration/outlier/connector output，再进 V2 |
+| V1 Connector FP8 | ✅ done | 2026-09-19 | routing 289、calibration 生成、smoke 100%、Goal×100 = 81.0%；−8.0pp vs H3 仅作参考，**非严格 connector-only 单变量** |
+| V1 方法学审计 | ✅ documented | 2026-09-21 | raw wrapper bit-exact 保留；确认 legacy scales 独立 recalibrate，因此 8pp 降级为参考证据 |
 | VLIN Vision 72-Linear FP8（Gate 1–6） | ✅ done | 2026-09-21 | 分支 `phaseI/vision-linear-full-integration`；296/64 routing、reuse288/recal72、72/72 + 216/216 scale、smoke 100% |
 | VLIN Goal×100 | ✅ done | 2026-09-21 | **SR = 80.0%（80/100）**，Δ −10.0pp vs G6-A；第 1 次尝试 12:50 被 SIGTERM（task2 中途，非 OOM 非人为），重启后完整跑完 |
-| V2 Vision MLP | ⏳ pending | — | 24 个 Linear，54% Vision FLOPs |
-| V3/V4/V5 | ⏳ pending | — | V4 前置：sdpa → eager 等价性 |
+| V2 Vision MLP-only | ⏳ pending | — | 24 个 Linear；严格复用 G6-A legacy scales；设计见 `experiment_setup.md §5.1` |
+| V3 Vision AttnProj-only | ⏳ pending | — | 48 个 Linear；严格复用 G6-A legacy scales；设计见 `experiment_setup.md §5.1` |
+| V4/V5 | ⏳ pending | — | V2/V3 完成后再决定；V4 前置：sdpa → eager 等价性 |
 
 ## 2. 运行日志
 
@@ -42,6 +43,7 @@ Gate L0（legacy regression）与 V0（Vision workload audit）已完成并通�
 | 2026-09-21 | VLIN 结果回填 | 编辑 `docs/results.md` + `docs/logs.md` | ✅ | — | 新增 §3.6 / 总结果表 3 行 / 结论第 7 条；Goal×100 待审计后启动 |
 | 2026-09-21 | VLIN Goal×100（第 1 次） | `run_full_vision_linear_goal.sh`（nohup） | ❌ terminated | `vlin_goal100.attempt1_terminated.log` | 12:50 在 task2 rollout 80/300 步处被外部 SIGTERM 杀掉（非 OOM：内存 20/251G、dmesg 无 kill 记录；非人为）；已完成 task0/1 未落盘（result.json 仅在全部结束时写，无断点续跑） |
 | 2026-09-21 | VLIN Goal×100（第 2 次） | 同上，旧日志归档后重启 | ✅ | `outputs/.../vlin_full_vision_linear_fp8_goal` | preflight coverage PASS、复用 calibration；**SR = 80.0%（80/100）**，逐 task [10,10,8,7,9,9,4,9,9,5]；eval_s = 10189（≈2.83h）；result.json 已落盘 |
+| 2026-09-21 | 结果审计修订 | 对照 G6-A / V1 / VLIN 配置与文档口径 | ✅ | — | VLIN 严格 baseline 固定为 G6-A 90%；逐 task Δ=[0,0,-1,-1,-1,0,-3,0,-1,-3]；V1 8pp 降级为非严格参考；删除 fake-quant runtime speedup 推断；V2/V3 设计合并进 experiment_setup.md §5.1 |
 
 ## 3. 后台任务
 
@@ -56,11 +58,12 @@ Gate L0（legacy regression）与 V0（Vision workload audit）已完成并通�
 
 - V0 FLOPs 首版把 `vision_forward_calls=38`（整个 rollout 总数）误当 camera 数，导致 FLOPs 被 ×38。修正为 hook `_get_action_chunk` 计数 sample_actions 次数，得 `cameras_per_sample_actions=2.0`（19 sample_actions × 2 camera = 38 calls）。FLOPs 按「per sample_actions」语义重算。
 - 关键发现：vision attention 实现为 `sdpa`（非 eager），V4 前须先做 eager-equivalence gate（手册 §12.2）。
-- **V1 Goal×100 从 89.0% 降到 81.0%（Δ = −8.0pp）—— connector 只占 0.71% FLOPs，代价异常高**。逐 task 看降幅不均匀：task00/01/04/05/07 完全不降，损失集中在 task02/03/06/08/09。已将「先审计 V1 再进 V2」写入 results.md §5（手册 §9.4 要求）。
+- **V1 方法学口径已修正**：connector raw wrapper bit-exact 只证明 wrapper 本身无数值偏差；V1 对 legacy VLM/Expert scales 也重新 calibration，因此 H3 S0 89% → V1 81% 的 −8pp 不再表述为严格 connector-only 净损失。逐 task 相似性继续保留为 visual-prefix 敏感性的待验证线索。
 - **VLIN 分支不在 origin**：`phaseI/vision-linear-full-integration` 只 push 到了 mirror remote（`wolf111108/SmolVLA_qtrsc`），`git fetch origin` 拉不到；需 `git fetch mirror` 后从 `mirror/phaseI/vision-linear-full-integration` 建本地分支。
 - VLIN 运行无异常：Gate 1–6 一次通过，无手动干预；HF Hub 未设 token 的 rate-limit warning 不影响结果。
 - **VLIN Goal×100 第 1 次尝试被外部 SIGTERM 杀掉**（12:50，task2 rollout 中，非 OOM 非人为非脚本失败）。runner 单进程跑 10 task、`result.json` 仅在全部结束时落盘 ⇒ 无断点续跑，重启需从头。若再发生，需排查系统级会话/清理机制。注意 `Built vec env` 10 条是启动时一次性预建，**不是进度标记**（判断进度看 `videos/libero_goal_<n>/` 目录 mtime 或 rollout 进度条）。
 - VLIN Goal×100 #2 与同用户两个 Qwen eval server 共享 GPU 0（19.5G/95G）未出问题。
+- **性能口径**：VLIN `eval_s=10189`、G6-A `eval_s=7430` 不用于推断 FP8 加速。当前为 fake/simulated quantization，且 SR 变化会改变 rollout 步数；真实性能需后续在低精度 kernel / 硬件路径单独评测。
 
 ## 5. 修订记录
 
@@ -71,3 +74,4 @@ Gate L0（legacy regression）与 V0（Vision workload audit）已完成并通�
 | 2026-09-15 | 新增 V0 FLOPs 饼图记录 | |
 | 2026-09-19 | 回填 V1 全流程（V1-R 等价性 bit-exact + smoke 100% + **Goal×100 = 81.0%**）；状态改为 `running（V0 ✅ / V1 ✅ / V2–V5 待跑）`；记录 8pp 损失与「先审计再进 V2」 | |
 | 2026-09-21 | 回填 VLIN Gate1–6（分支切换 + 一键脚本全过：296/64、72/72、216/216、smoke 100%）；状态更新为 `running（V0 ✅ / V1 ✅ / VLIN Gate1–6 ✅ / V2–V5 待跑）`；记录「VLIN 分支仅存于 mirror remote」 | |
+| 2026-09-21 | 结果审计修订：统一 VLIN baseline=G6-A 90%；V1 改为非严格参考；补 G6-A→VLIN 逐 task Δ；删除 fake-quant speedup 推断；下一阶段 V2/V3 设计统一归入 `experiment_setup.md §5.1`，未新增规范外实验文件 | |
