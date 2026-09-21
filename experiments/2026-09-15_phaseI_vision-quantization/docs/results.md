@@ -4,7 +4,7 @@
 > 图片放 `docs/figures/`，文中用相对路径 `![](figures/xxx.png)` 引用。
 
 - **实验名称**：2026-09-15_phaseI_vision-quantization
-- **状态**：running（V0 ✅ / V1 ✅ / VLIN Gate1–6 ✅（Goal×100 待跑）/ V2–V5 待跑）
+- **状态**：running（V0 ✅ / V1 ✅ / VLIN ✅（Goal×100 = 80.0%，Δ −10.0pp）/ V2–V5 待跑）
 - **最后更新**：2026-09-21
 
 ---
@@ -17,7 +17,7 @@ Gate L0（legacy regression）已通过：用原封不动的 G6 canonical 配置
 
 > **关键发现：单独量化一个仅占 0.71% FLOPs 的 connector Linear，就把 Goal×100 从 89.0% 拉到 81.0%（Δ = −8.0pp）**（baseline = Phase H H3 S0 FP8-all = 89.0%，两者同为 canonical VLM/Expert FP8 背景）。对照 Phase G 的归因：VLM 侧 W4 才造成 −51pp、attention-W4 仅 −18pp ——  **8pp 在「单个 Linear 的量化代价」尺度上属于异常高值**。这是本 Phase 最值得后续追查的信号（见 §5）。
 
-**VLIN（完整 Vision 72-Linear FP8 integration）Gate 1–6 已于 2026-09-21 全部通过**（分支 `phaseI/vision-linear-full-integration`，基于 main@2b2a3013 +9 commits）：routing **296 Linear / 64 MatMul**（VLM/Expert 224 Linear + 64 MatMul 复用 G6-A canonical scale，Vision 72 Linear 重新 calibration ⇒ action = reuse 288 / recalibrate 72；connector 保持 raw，故为 296 而非 297）、calibration coverage **72/72 sites、216/216 Vision scale 文件**（逐文件校验存在/finite/>0）、Goal task0×1 smoke = **100.0%**。Goal×100 尚未运行（待审计确认后启动，见 §5）。
+**VLIN（完整 Vision 72-Linear FP8 integration）已完成（2026-09-21）**：Gate 1–6 全部通过（routing **296 Linear / 64 MatMul**，reuse 288 / recalibrate 72；coverage **72/72 sites、216/216 scale 文件**；smoke 100%），**Goal×100 = 80.0%（80/100，Δ = −10.0pp vs G6-A 90.0%）**。覆盖 347.9 GFLOPs（≈81.2% Vision compute / 58% 整体推理），Vision QK/PV 保持 SDPA、connector 原精度。逐 task 降幅模式与 V1（connector 单点 FP8，81.0%）几乎相同——损失同样集中在 task02/03/06/09，这一巧合是后续审计的重要线索（见 §3.6/§5）。
 
 ## 2. 总结果表
 
@@ -30,7 +30,7 @@ Gate L0（legacy regression）已通过：用原封不动的 G6 canonical 配置
 | **V1** | v1_connector_fp8_goal | **H3 S0 FP8-all = 89.0%** | **81.0%（81/100）** | **−8.0 pp** | 100 | `outputs/.../v1_connector_fp8_goal` | Wilson 95% CI `[72.2%, 87.5%]`，eval_s = 40735（≈11.3h） |
 | VLIN Gate1–5 | vlin_full_vision_linear_fp8（gate 部分） | — | — | — | — | `scales/.../vlin_full_vision_linear_fp8` | routing 296 Linear / 64 MatMul；reuse 288 / recalibrate 72；72/72 sites、216/216 scale 文件 |
 | VLIN smoke | vlin_full_vision_linear_fp8 | — | 100.0%（task0） | — | 1 | `outputs/.../vlin_full_vision_linear_fp8` | 360 quant modules（296 Linear + 64 MatMul）；eval_s ≈ 94.2 |
-| VLIN Goal×100 | vlin_full_vision_linear_fp8_goal | H3 S0 FP8-all = 89.0% | ⏳ 待跑 | — | 100（计划） | `outputs/.../vlin_full_vision_linear_fp8_goal` | 待 Gate1–6 输出审计确认后启动 |
+| **VLIN Goal×100** | vlin_full_vision_linear_fp8_goal | **G6-A = 90.0%** | **80.0%（80/100）** | **−10.0 pp** | 100 | `outputs/.../vlin_full_vision_linear_fp8_goal` | Wilson 95% CI `[71.1%, 86.7%]`，eval_s = 10189（≈2.83h）；对 H3 S0（89.0%）为 −9.0pp |
 
 ## 3. 分组结果与分析
 
@@ -215,11 +215,23 @@ Gate 5 coverage 明细（`scripts/audit_full_vision_linear_calibration.py`，逐
 | Vision scale 文件 | **216 / 216**（72 × 3：A/W/O） |
 | scale 目录总文件 | 1080 = canonical 复制 864 + 新增 216 |
 
+**Goal×100 正式结果（2026-09-21，`run_full_vision_linear_goal.sh`，seed=1000，n_action_steps=10）**：**SR = 80.0%（80/100）**，Wilson 95% CI `[71.1%, 86.7%]`，eval_s = 10189（≈2.83h，101.9 s/ep）。
+
+逐 task（与 V1 对照）：
+
+| Config | t00 | t01 | t02 | t03 | t04 | t05 | t06 | t07 | t08 | t09 | 合计 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| V1 Connector FP8 | 10 | 10 | 8 | 7 | 10 | 9 | 3 | 9 | 9 | 6 | **81** |
+| **VLIN Vision 72-Linear FP8** | 10 | 10 | **8** | **7** | **9** | 9 | **4** | 9 | 9 | **5** | **80** |
+
 **要点**
 
+- **Δ vs G6-A = −10.0pp（90→80）**；对 H3 S0（89.0%）为 −9.0pp。58% 的推理计算量入 FP8 付出 10pp，明显高于「小代价」预期（协作者预期 88–90%）。
+- **逐 task 模式与 V1 几乎重合**：V1 = [10,10,8,7,10,9,3,9,9,6]，VLIN = [10,10,8,7,9,9,4,9,9,5]。两者量化对象完全不同（V1 = connector 单个 Linear；VLIN = Vision 72 Linear、connector raw），却掉同样的 task（t02/03/06/09）且幅度接近（−8 vs −10pp）⇒ 强烈暗示两条路径的误差可能经**同一传导通道**作用（Vision→connector→VLM prefix 的 64 visual token），或这些 task 对 prefix 视觉表征噪声本身敏感（t06 在 G6-A 下也最弱）。
+- **速度收益可观**：eval_s 10189 vs V1 40735（≈4×），部分因逐 task SR 分布与主机负载，需同条件复测才能归因于量化提速。
 - **框架能力验证**：现有框架无需改 `model_wrapper.py` 即可完整 wrap 72 个 Vision Linear，routing / per-site scale group / 分层 calibration policy（reuse vs recalibrate）全部按预期工作。
 - **与 V1 的对照关系**：VLIN 与 V1 共用 G6-A canonical VLM/Expert FP8 背景（baseline 89.0%），但 VLIN **不含 connector 量化**（V1 含）⇒ VLIN Goal×100 与 89.0% 的差值可解释为「Vision 72 Linear FP8」的净代价，与 V1 的 −8.0pp（connector 单点）形成两个独立的单变量数据点。
-- **风险预告**：V0 已测得这 72 个 Linear 覆盖 Vision 内部 81.2% FLOPs（MLP 54.2% + attn projection 27.1%），且 Vision 输出经 connector 直接进入 VLM prefix（无归一化缓冲）——鉴于 V1 单个 connector Linear 即 −8pp，**VLIN 的 Goal×100 是判断 Vision 侧量化可行性的关键数据点**，结果出来前不做外推。
+- **风险预告已兑现**：V0 已测得这 72 个 Linear 覆盖 Vision 内部 81.2% FLOPs（MLP 54.2% + attn projection 27.1%），且 Vision 输出经 connector 直接进入 VLM prefix（无归一化缓冲）——实际 Goal×100 = 80.0%（−10pp），确认 Vision 侧 FP8 并非「小代价」。
 
 ## 4. 结论
 
@@ -229,11 +241,12 @@ Gate 5 coverage 明细（`scripts/audit_full_vision_linear_calibration.py`，逐
 4. **Connector FP8 的精度代价远超其 FLOPs 占比**：connector 只占 0.71% 计算，但 Goal×100 从 89.0% 降到 **81.0%（−8.0 pp）**。作为标尺：Phase G 中 VLM attention 全部 W4 才 −18pp、VLM MLP 全部 W4 才 −51pp。**一个 Linear 能拿到 8pp，说明 connector 输出的视觉 token 对量化噪声高度敏感**（12288→960 的投影需保留通道混合的精细结构），或存在 per-site scale / outlier 选择不当。
 5. **attention 实现为 `sdpa`（非 eager）**，V4（QK/PV 量化）前必须先做 eager-backend equivalence gate（手册 §12.2）；否则 QK/PV 的量化无法与既有统计口径对齐。
 6. **逐 task 视角**：V1 与 H3-S0 同 task 对比，降幅集中在 task02（10→8）、task03（8→7）、**task06（5→3）**、task08（10→9）、**task09（8→6）**；而 **task00/01/04/05/07 完全不降** ⇒ connector 量化**不是均匀地削弱能力，而是打掉了模型在困难 task 上的余量**（task06 本就是 S0 最弱的 task）。这与 §1 的 8pp 均值一致，但解释了「为何均值降 8pp 而很多 task 看不出变化」。
-7. **完整 Vision 72-Linear FP8（VLIN）的工程链路已验证**（2026-09-21，分支 `phaseI/vision-linear-full-integration`）：routing **296 Linear / 64 MatMul**、calibration action **reuse 288 / recalibrate 72**、coverage **72/72 sites、216/216 scale 文件**（全 finite/positive）、smoke task0×1 = 100%。框架可正确构建与分层校准全部 Vision Linear；其 **Goal×100 精度代价待测**，是 Vision 侧量化可行性的关键数据点（见 §5）。
+7. **完整 Vision 72-Linear FP8（VLIN）已完成（2026-09-21）**：工程链路全过（routing 296/64、reuse 288 / recalibrate 72、72/72 + 216/216、smoke 100%），**Goal×100 = 80.0%（80/100，Δ = −10.0pp vs G6-A 90%）**，CI `[71.1%, 86.7%]`。58% 推理计算量入 FP8 的代价为 10pp，高于预期。
+8. **V1 与 VLIN 的逐 task 降幅模式几乎相同**（[10,10,8,7,10,9,3,9,9,6] vs [10,10,8,7,9,9,4,9,9,5]，均掉 t02/03/06/09）而量化对象完全不同（connector 单点 vs Vision 72 Linear）⇒ 误差大概率经同一通道作用（visual token / VLM prefix），或该 4 个 task 对视觉 prefix 噪声本身敏感。这把 V1 的「connector 异常敏感」重新解读为「**视觉通路末端共同敏感**」，后续审计应把 connector 与 Vision Linear 放在同一框架下看。
 
 ## 5. 问题与后续
 
-- **VLIN Goal×100 待跑**：Gate 1–6 输出已按协作者要求留在本地待审计（确认 296/64、72/72、216/216 后）；审计通过后运行 `scripts/run_full_vision_linear_goal.sh`（10 tasks × 10 ep，seed=1000，n_action_steps=10，`--skip-calibration`，预计 ≈11–12h）。其结果与 89.0% baseline 的 Δ 即为 Vision 72 Linear FP8 的净代价。
+- **VLIN 结果已出（80.0%，−10.0pp）**：已推送到 mirror 分支待协作者审计逐 task 结果，并决定 Vision MLP / attention projection 是否拆开做更低 bit。注意逐 task 模式与 V1 几乎重合（同掉 t02/03/06/09），建议审计时优先检验「共同传导通道」假设（connector 输出 / prefix embedding 的扰动谱，可复用 V1 审计工具链）。
 - **V0 ✅ / V1 ✅ 已过 gate**（routing 289、raw equivalence、calibration-only、task0×1、Goal×100），可进入 **V2（Vision MLP fc1/fc2，24 个 Linear、54% Vision FLOPs）**。
 - **先追查 V1 的 8pp（优先级高于 V2）**：手册 §9.4 明确要求「如果 V1 Connector FP8 都导致明显 SR 崩溃，先审计 calibration / outlier / connector output，不要进入 V2」。建议顺序：
   1. 查 connector 的 per-site scale 与 outlier 选择（`scales/2026-09-15_phaseI_vision-quantization/v1_connector_fp8`）是否落在合理范围；
@@ -253,3 +266,4 @@ Gate 5 coverage 明细（`scripts/audit_full_vision_linear_calibration.py`，逐
 | 2026-09-15 | 新增 §3.3 FLOPs 占比饼图（V0 实测 + 手册 §0 整体推理） | |
 | 2026-09-19 | 回填 **V1（Connector FP8）**：V1-R raw 等价性 bit-exact、smoke 100%、**Goal×100 = 81.0%（−8.0pp vs H3 S0 89.0%）**；新增 §3.4/§3.5、重写 §4 结论 6 条与 §5 后续；状态保留 `running`（V2–V5 待跑） | |
 | 2026-09-21 | 回填 **VLIN（完整 Vision 72-Linear FP8）Gate 1–6**：routing 296/64、reuse 288 / recalibrate 72、coverage 72/72 + 216/216、smoke 100%；新增 §3.6、总结果表 3 行、结论第 7 条、§5 首条（Goal×100 待跑） | |
+| 2026-09-21 | 回填 **VLIN Goal×100 = 80.0%（80/100，Δ −10.0pp vs G6-A）**；新增逐 task 对照（与 V1 模式几乎重合）、结论第 8 条（共同传导通道假设）；状态改为 `VLIN ✅` | |
