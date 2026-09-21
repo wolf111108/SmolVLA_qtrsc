@@ -4,7 +4,7 @@
 > 图片放 `docs/figures/`，文中用相对路径 `![](figures/xxx.png)` 引用。
 
 - **实验名称**：2026-09-15_phaseI_vision-quantization
-- **状态**：running（V0 ✅ / V1 ✅ / VLIN ✅（Goal×100 = 80.0%，Δ −10.0pp）/ V2–V5 待跑）
+- **状态**：running（V0 ✅ / V1 ✅ / VLIN ✅ / **V2 ✅（84.0%）** / V3 🔄 running / V4–V5 待跑）
 - **最后更新**：2026-09-21
 
 ---
@@ -29,6 +29,9 @@ Gate L0（legacy regression）已通过：用原封不动的 G6 canonical 配置
 | VLIN Gate1–5 | vlin_full_vision_linear_fp8（gate 部分） | — | — | — | — | `scales/.../vlin_full_vision_linear_fp8` | routing 296 Linear / 64 MatMul；reuse 288 / recalibrate 72；72/72 sites、216/216 scale 文件 |
 | VLIN smoke | vlin_full_vision_linear_fp8 | — | 100.0%（task0） | — | 1 | `outputs/.../vlin_full_vision_linear_fp8` | 360 quant modules（296 Linear + 64 MatMul）；eval_s ≈ 94.2 |
 | **VLIN Goal×100** | vlin_full_vision_linear_fp8_goal | **G6-A = 90.0%** | **80.0%（80/100）** | **−10.0 pp** | 100 | `outputs/.../vlin_full_vision_linear_fp8_goal` | Wilson 95% CI `[71.1%, 86.7%]`，eval_s = 10189（≈2.83h）；对 H3 S0（89.0%）为 −9.0pp |
+| V2 Gate1–5 | v2_vision_mlp_fp8（gate 部分） | — | — | — | — | `scales/.../v2_vision_mlp_fp8` | routing **248 Linear / 64 MatMul**；reuse 288 / recalibrate 24；24/24 sites、72 scale 文件 |
+| V2 smoke | v2_vision_mlp_fp8 | — | 100.0%（task0） | — | 1 | `outputs/.../v2_vision_mlp_fp8` | 312 quant modules；eval_s ≈ 103.5 |
+| **V2 Goal×100** | v2_vision_mlp_fp8_goal | **G6-A = 90.0%** | **84.0%（84/100）** | **−6.0 pp（L_MLP）** | 100 | `outputs/.../v2_vision_mlp_fp8_goal` | eval_s = 8013；逐 task [10,10,10,6,9,10,4,9,10,6] |
 
 ## 3. 分组结果与分析
 
@@ -232,6 +235,25 @@ Gate 5 coverage 明细（`scripts/audit_full_vision_linear_calibration.py`，逐
 - **运行时间不等于硬件 speedup**：VLIN `eval_s=10189`，严格基线 G6-A `eval_s=7430`；当前框架是 fake/simulated quantization，且失败 episode 更容易跑满 300 steps，外加 GPU 争用与 outlier side path 开销，因此 `eval_s` 仅记录 rollout 成本，不能用于证明 FP8 硬件加速。
 - **框架能力验证**：现有框架无需改 `model_wrapper.py` 即可完整 wrap 72 个 Vision Linear，routing / per-site scale group / 分层 calibration policy（reuse vs recalibrate）全部按预期工作。
 - V0 已测得这 72 个 Linear 覆盖 Vision 内部 **81.2% FLOPs**（MLP 54.2% + attention projection 27.1%），约占 whole inference **58% dense FLOPs**。80% 的闭环结果说明这部分值得继续做 sensitivity 拆分，而不是直接继续扩大到 QK/PV。
+
+### 3.7 V2 — Vision MLP-only FP8（Goal × 100，2026-09-21）
+
+按 §5.1 归因设计的第一组单变量消融：Vision MLP `fc1/fc2` 24 个 Linear FP8（G6-A 288 sites 全 reuse，Vision attn proj / QK·PV / connector raw）。routing 248 Linear / 64 MatMul、reuse 288 / recalibrate 24、coverage 24/24（72 scale 文件）、smoke task0×1 = 100%（Gate 1–6 全过，runner `run_vision_linear_variant.sh`）。
+
+**Goal×100 = 84.0%（84/100）**，eval_s = 8013。逐 task（严格对照 G6-A）：
+
+| Config | t00 | t01 | t02 | t03 | t04 | t05 | t06 | t07 | t08 | t09 | 合计 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **G6-A strict baseline** | 10 | 10 | 9 | 8 | 10 | 9 | 7 | 9 | 10 | 8 | **90** |
+| **V2 MLP-only** | 10 | 10 | **10** | **6** | 9 | **10** | **4** | 9 | 10 | **6** | **84** |
+| **Δ(V2−G6-A)** | 0 | 0 | **+1** | **−2** | −1 | **+1** | **−3** | 0 | 0 | **−2** | **−6** |
+| VLIN（MLP+attn） | 10 | 10 | 8 | 7 | 9 | 9 | 4 | 9 | 9 | 5 | **80** |
+
+**要点**
+
+- **L_MLP = 90 − 84 = 6pp**（占 L_all = 10pp 的 60%）。V2 只覆盖 24 个 Linear（54.2% Vision FLOPs），却已贡献全量损失的 6 成。
+- 损失集中在 **t03（−2）、t06（−3）、t09（−2）**；**t06/t09 与 VLIN 的重灾 task 完全一致**（各 −3），t02/t05 的 +1 在 1-ep 噪声范围内。
+- 待 V3 完成后计算 interaction = L_all − (L_MLP + L_Attn) = 10 − (6 + L_Attn)。若 V3 较高（L_Attn 小）则 interaction 显著为负，说明 MLP 与 attn proj 的量化误差在闭环上存在耦合（联合时互相放大）。
 
 ## 4. 结论
 
