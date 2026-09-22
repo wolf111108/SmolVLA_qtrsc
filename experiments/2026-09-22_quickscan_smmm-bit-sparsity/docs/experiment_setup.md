@@ -13,7 +13,7 @@
 ## 1. 实验目的
 
 - 在新的 **S|MMM bit 统计口径**（sign+mantissa，无隐藏前导 1，见 `stat_manager._extract_sm_from_raw` 2026-09-22 修改）下重新测定 FP8 PoT 的 runtime/weight bit sparsity。
-- 与 2026-09-15 quickscan 的旧口径（1.MMM，~42%）对照，量化口径变化的影响（预期整体下降约 12.5pp：符号位一半概率非零）。
+- 与 2026-09-15 quickscan 的旧口径（1.MMM，~42%）对照，量化口径变化的影响（预期**上升**约 +12.5pp：旧 hidden bit 对 normal 数恒为 1（0% sparse），新 sign 位在正负均衡时约 50% 为 0，首位 zero-rate 差 50pp/4bit = +12.5pp，即约 42% → ~54.5%；实际还受 ±0/subnormal/native 修正影响）。
 - 仅 workload characterization（task0×1ep），不做 accuracy claim。
 
 ## 2. 环境与版本

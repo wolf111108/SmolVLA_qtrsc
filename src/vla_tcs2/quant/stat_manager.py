@@ -12,7 +12,8 @@ Kept:
         * global + per-phase (full_forward/prefill/decode) counters
         * chunked INT bit statistics (compute_sparse_stats)
         * chunked FP sign+mantissa bit statistics (compute_sparse_stats_fp,
-          incl. hidden-leading-1 semantics, E4M3/E2M1/E5M10 raw-bit paths)
+          S|MMM semantics — sign + mantissa, exponent excluded, NO hidden
+          leading 1; E4M3/E2M1/E5M10 raw-bit paths)
         * unit/block sparsity (a-bit x b-dim groups)
         * per-layer sparsity records + CSV export + printing
 
@@ -1356,6 +1357,12 @@ class QuantStatManager:
         mant_bits: int,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
+        LEGACY helper — unused by the S|MMM sparsity paths (which use
+        ``_extract_sm_from_raw`` / ``_fp_tensor_to_mantissa_fixed_chunk``).
+        Retained only for the fp_code_audit histogram path, which still
+        reports the old 1.MMM magnitude significand. Do NOT use for new
+        S|MMM statistics.
+
         Unpack sign / exp / mantissa from a raw int bit pattern.
 
         Returns:
@@ -1421,15 +1428,18 @@ class QuantStatManager:
         fmt: str,
     ) -> torch.Tensor:
         """
-        Convert an FP chunk to "mantissa fixed-point integers"
-        (significand incl. hidden leading 1):
+        Convert an FP chunk to S|MMM codes (sign + mantissa, exponent
+        excluded, NO hidden leading 1) — the SAME encoding as
+        ``_extract_sm_from_raw``:
 
-            E4M3:  1.xxx     -> 4-bit mantissa_int
-            E5M10: 1.xxxxxxx -> 11-bit mantissa_int
-            BF16:  1.xxxxxxx -> 8-bit mantissa_int
-            E2M1:  1.x       -> 2-bit mantissa_int
+            E4M3:  S xxx     -> 4-bit code
+            E5M10: S xxxxxxxxxx -> 11-bit code
+            BF16:  S xxxxxxx -> 8-bit code
+            E2M1:  S x       -> 2-bit code
 
-        Zeros map to all-zero codes (no hidden leading 1).
+        Sign-agnostic magnitude: +x and -x share the mantissa bits and
+        differ only in the sign bit. Zeros/subnormals keep their raw
+        mantissa bits (no hidden 1 is ever added).
         """
         info = self._get_fp_format(fmt)
         exp_bits = info["exp_bits"]
@@ -1438,12 +1448,37 @@ class QuantStatManager:
         stat_total_bits = mant_bits + 1
         if stat_total_bits >= 63:
             raise ValueError(
-                f"FP mantissa statistic width n={stat_total_bits} is too "
+                f"FP S|MMM statistic width n={stat_total_bits} is too "
                 f"large for int64 bit operations."
             )
 
         x = tensor_chunk.detach().to(torch.float32)
         x = torch.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # Fast exact path: cast to the hardware format and read the raw
+        # S|MMM bits directly (identical semantics to _extract_sm_from_raw).
+        # Preserves the input chunk shape (callers reshape for grouping).
+        try:
+            if fmt in ("e4m3", "e4m3fn", "fp8_e4m3", "fp8_e4m3fn"):
+                raw = (
+                    x.to(torch.float8_e4m3fn)
+                    .view(torch.uint8)
+                    .to(torch.int64)
+                )
+                sign = (raw >> 7) & 0x1
+                mant = raw & 0x7
+                return ((sign << 3) | mant).reshape(x.shape)
+            if fmt in ("fp16", "float16", "e5m10"):
+                raw = (
+                    x.to(torch.float16)
+                    .view(torch.int16)
+                    .to(torch.int64)
+                )
+                sign = (raw >> 15) & 0x1
+                mant = raw & ((1 << 10) - 1)
+                return ((sign << 10) | mant).reshape(x.shape)
+        except (RuntimeError, TypeError):
+            pass  # fall through to the numeric reconstruction below
 
         abs_x = torch.abs(x)
         nonzero_mask = abs_x > 0
@@ -1475,28 +1510,37 @@ class QuantStatManager:
             exp_unbiased.to(torch.float32),
         )
 
-        # mantissa_int includes the hidden leading 1:
-        #   E4M3: 1.010 * 2^3 -> 1010
+        # mantissa_int is the magnitude mantissa WITHOUT hidden 1:
+        #   E4M3: 1.010 -> 010
         mant_scale = 1 << mant_bits
-        mantissa_int = torch.round(significand * mant_scale).to(torch.int64)
+        mantissa_int = torch.round((significand - 1.0) * mant_scale).to(torch.int64)
+        mantissa_int = torch.clamp(mantissa_int, min=0, max=mant_scale - 1)
 
-        # Renormalize 1.111... -> 10.000... carry after rounding.
-        overflow = mantissa_int >= (1 << (mant_bits + 1))
-        mantissa_int = torch.where(
-            overflow,
-            mantissa_int >> 1,
-            mantissa_int,
+        # Subnormals: exp clamped to min_normal_exp above mis-scales the
+        # mantissa; recover the true subnormal mantissa directly
+        # (abs_x / 2^min_normal_exp) * mant_scale, no hidden 1.
+        subnormal_mask = nonzero_mask & (
+            abs_x < torch.pow(base, torch.tensor(float(min_normal_exp)))
         )
+        if bool(subnormal_mask.any()):
+            sub_mant = torch.round(
+                abs_x
+                * mant_scale
+                / torch.pow(base, torch.tensor(float(min_normal_exp)))
+            ).to(torch.int64)
+            mantissa_int = torch.where(
+                subnormal_mask,
+                torch.clamp(sub_mant, min=1, max=mant_scale - 1),
+                mantissa_int,
+            )
 
-        # Zero has no hidden leading 1 -> force all-zero code.
-        mantissa_int = torch.where(
-            nonzero_mask,
-            mantissa_int,
-            torch.zeros_like(mantissa_int),
-        )
+        # Prepend the sign bit as the MSB (S|MMM). signbit() keeps the
+        # sign of -0.0 (unlike x < 0), matching the raw-bit path.
+        sign = torch.signbit(x).to(torch.int64)
+        smmm = (sign << mant_bits) | mantissa_int
 
         mask = (1 << stat_total_bits) - 1
-        return mantissa_int & mask
+        return smmm & mask
 
     def compute_sparse_stats_fp(
         self,
@@ -1508,10 +1552,14 @@ class QuantStatManager:
         """
         Chunked sparse/zero-bit statistics for FP inputs.
 
-        Statistics width = mantissa_int width (hidden leading 1
-        included): E4M3 -> 4 bits, E5M10 -> 11 bits, BF16 -> 8 bits,
-        E2M1 -> 2 bits. Raw-bit-pattern paths are used for
-        e4m3/e2m1/e5m10 so the codes match the actual stored encoding.
+        FP bit sparsity encoding (S|MMM — sign + mantissa):
+            E4M3 -> S|MMM   (4 bits)
+            E5M10 -> S|M*10 (11 bits)
+            BF16  -> S|M*7  (8 bits)
+            E2M1  -> S|M    (2 bits)
+        Exponent excluded. Hidden leading 1 excluded.
+        Raw-bit-pattern paths are used for e4m3/e2m1/e5m10 so the
+        codes match the actual stored encoding.
         """
         info = self._get_fp_format(fmt)
         mant_bits = info["mant_bits"]
@@ -1611,7 +1659,7 @@ class QuantStatManager:
     # -------------------------------------------------------------------------
 
     def _fp_stat_width(self, fmt: str) -> int:
-        """Statistic width for FP formats (mantissa_int incl. hidden 1)."""
+        """Statistic width for FP formats (S|MMM: sign + mantissa bits)."""
         info = self._get_fp_format(fmt)
         return info["mant_bits"] + 1
 

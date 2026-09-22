@@ -376,6 +376,10 @@ def test_t10_e4m3_significand_encoding():
         0xB8,  # -1.0
         0x01,  # +smallest subnormal
         0x81,  # -smallest subnormal
+        0x3C,  # +1.5
+        0xBC,  # -1.5
+        0x3F,  # +1.875 (mant=111)
+        0xBF,  # -1.875
     ], dtype=torch.int64)
 
     sig, width = m._extract_sm_from_raw(raw, "e4m3")
@@ -388,6 +392,10 @@ def test_t10_e4m3_significand_encoding():
         0b1000,  # -1.0 -> S=1, MMM=000
         0b0001,  # +subnormal -> S=0, MMM=001
         0b1001,  # -subnormal -> S=1, MMM=001
+        0b0100,  # +1.5 -> S=0, MMM=100
+        0b1100,  # -1.5 -> S=1, MMM=100
+        0b0111,  # +1.875 -> S=0, MMM=111
+        0b1111,  # -1.875 -> S=1, MMM=111
     ]
 
 

@@ -88,6 +88,14 @@ quantization:
   weight_quant_granularity: per_tensor
   weight_group_size: null
 
+sparsity:
+  enabled: true
+  chunk_size: 4194304
+  unit:
+    enabled: false
+  export:
+    dir: null
+
 calibration:
   dataset_repo_id: HuggingFaceVLA/libero
   dataset_revision: v3.0
