@@ -39,7 +39,7 @@ from collections import defaultdict
 from pathlib import Path
 
 HERE = Path(__file__).resolve()
-REPO_ROOT = HERE.parents[4]
+REPO_ROOT = HERE.parents[5]
 EXP = "2026-09-15_phaseI_vision-quantization"
 TASK = "vision-sparsity-compute"
 DEFAULT_OUT = (
