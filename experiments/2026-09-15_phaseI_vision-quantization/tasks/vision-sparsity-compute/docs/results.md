@@ -3,20 +3,25 @@
 > 本文档在实验**过程中与结束后**持续更新。章节为固定结构，不可删除；无内容写「无」。
 
 - **实验名称**：2026-09-15_phaseI_vision-quantization / task: vision-sparsity-compute
-- **状态**：done
+- **状态**：running（VSC-0 sparsity ✅ / compute ❌ invalid；VSC-1 workload-fix rerun pending）
 - **最后更新**：2026-09-22
 
 ---
 
 ## 1. 摘要
 
-VSC-0 已完成（2026-09-22，Gate 全 PASS）。在完整 VLIN 配置（360 quant modules，严格复用 VLIN=80% 的全部 scales，`calibration_policy: reuse` + `--skip-calibration`）下，Goal task0×1ep 的 workload characterization 得到：①**加入 Vision 72 Linear 后，quantized major-op FLOP 覆盖达 88.3%**（audited major ops 合计 688.50 GFLOPs/sample_actions，其中 608.17 G 已量化）；②Vision 的 runtime element sparsity（4.08%）约为 VLM（1.92%）的 2.1 倍，三 component 的 E4M3 significand bit sparsity 高度一致（~42%）；③Vision 72 Linear 实测 347.89 GFLOPs/sample_actions，与 V0 架构拆分完全一致（sanity PASS）。本实验仅做 workload 表征，不做新的 accuracy claim。
+VSC-0 于 2026-09-22 一次跑通，**稀疏度链路有效**：360 个 quant modules 路由正确，Vision/VLM/Expert runtime native sparsity 均有完整数据，static weight 296 rows，Expert flow_step 0–9 全覆盖。有效的 headline 为：Vision runtime element sparsity **4.08%**、VLM **1.92%**、Expert **3.02%**；三 component 的 E4M3 significand bit sparsity约 **42%**；static weight element sparsity接近 0。
+
+但复核 compute 链路时发现一个 **P0 workload exporter bug**：旧版 `export_workload_csv()` 用 role-agnostic `module_last_dims[module_id]` 推导 MatMul 的 K/N，而 A/B/O 会依次覆盖同一个 entry，最终通常留下 O 的 shape。结果是 VLM/Expert QK/PV 的 MatMul MACs 被错误推导。因此 VSC-0 文档最初回填的 **688.50 GFLOPs / 88.3% quantized coverage 均判为 INVALID，不得引用**。
+
+不受该 bug 影响的 compute 数据仍可保留：Vision 72 Linear = **347.89 GFLOPs/sample_actions**（Linear path）、Vision raw SDPA QK/PV = **77.31 G**（V0 已验证架构公式）、connector = **3.02 G**（结构公式）。仓库已修复 MatMul physical-MAC accounting，并新增 VSC-1 同条件 1ep rerun；VSC-1 完成后再给出 VLM/Expert compute 与最终 coverage。
 
 ## 2. 总结果表
 
 | 组 | config | runtime element sparsity | runtime bit sparsity | weight element sparsity | weight bit sparsity | audited GFLOPs | 状态 |
 |---|---|---:|---:|---:|---:|---:|---|
-| VSC-0 | vsc_vlin_fp8_task0_1ep | 3.44%（pooled） | 42.01%（pooled） | ~0%（4.9e-6） | 41.63%（pooled） | 688.50（FP8 覆盖 88.3%） | ✅ done |
+| VSC-0 | vsc_vlin_fp8_task0_1ep | **3.44%（pooled，有效）** | **42.01%（pooled，有效）** | **~0%（有效）** | **41.63%（pooled，有效）** | **INVALID：旧 MatMul MAC accounting** | ⚠ sparsity valid / compute invalid |
+| VSC-1 | vsc1_vlin_fp8_task0_1ep_workloadfix | pending | pending | pending | pending | pending | ⏳ rerun |
 
 ## 3. 分组结果与分析
 
@@ -35,41 +40,58 @@ VSC-0 已完成（2026-09-22，Gate 全 PASS）。在完整 VLIN 配置（360 qu
 - 三 component 的 E4M3 significand bit sparsity 高度一致（40.9–42.6%），与 Phase H 结论同源（INT8 runtime ~72.9%、INT16 ~62.8%不可直接对比：口径不同，此处为 E4M3 significand zero-bit metric）。
 - static weight element sparsity ≈ 0（4.9e-6）：量化后权重无显著零元素（native 口径，未计入 outlier protection 的 artificial zero）。
 
-### 3.2 Compute coverage
+### 3.2 Compute coverage — VSC-0 结果作废，VSC-1 待重跑
 
-| component | block | quantized | GMAC/sample_actions | GFLOPs/sample_actions | 占 audited major ops |
-|---|---|---|---:|---:|---:|
-| vision | Vision 72 Linear | ✅ | 173.95 | **347.89** | 50.53% |
-| vision | Vision SDPA QK | ❌ raw | 19.33 | 38.65 | 5.61% |
-| vision | Vision SDPA PV | ❌ raw | 19.33 | 38.65 | 5.61% |
-| connector | Connector projection | ❌ raw | 1.51 | 3.02 | 0.44% |
-| vlm | VLM quantized（Linear+QK/PV） | ✅ | 55.02 | 110.04 | 15.98% |
-| expert | Expert quantized（10 denoise） | ✅ | 75.12 | 150.24 | 21.82% |
-| **TOTAL** | **audited major ops** | **88.3% 覆盖** | 344.25 | **688.50** | 100% |
+VSC-0 初始汇总曾得到：
 
-**要点**
+```text
+VLM quantized major ops    110.04 GFLOPs
+Expert quantized major ops 150.24 GFLOPs
+audited total              688.50 GFLOPs
+quantized coverage          88.3%
+```
 
-- **量化覆盖从 ~37%（VLM+Expert only）提升到 88.3%**：加入 Vision 72 Linear 后，audited major ops 中仅剩 Vision QK/PV（77.31 G，11.2%）+ connector（3.02 G，0.4%）为 raw。
-- Vision 72 Linear 实测 347.89 GFLOPs，与 V0 架构公式（347.89 G）**完全一致**（sanity PASS）；Vision 全部主要算子 428.22 G 亦与 V0 拆分一致。
-- 未量化部分（QK/PV 11.2%）正是 §5.1 后续 V4 的目标，且需先过 sdpa→eager 等价性 gate。
-- 口径提醒：audited major ops 明确排除 patch embed / LayerNorm / softmax / GELU / pixel shuffle，不能冒充全部算术 FLOPs。
+**以上四项均不得继续引用。**
 
-## 4. 结论
+根因位于旧版 `src/vla_tcs2/quant/stat_manager.py::export_workload_csv()`：`collect_quant_tensor()` 对 MatMul 的 A/B/O 三个 role 都写入同一个 `module_last_dims[module_id]`，而 O 最后到达，因此 exporter 最终把 **O tensor shape 当成 MatMul operand K/N**。虽然 task summarizer 已经做到“一物理算子只取 A role”，但 A row 的 `MACs` 本身已经由错误的 K/N 生成，仍然会污染 VLM/Expert QK/PV compute。
 
-1. **VLIN 配置下 88.3% 的 audited major-op FLOPs 已入 FP8**（608.17/688.50 GFLOPs per sample_actions），代价为已测的 −10pp（VLIN=80% vs G6-A 90%）。
-2. **Vision 是最大算力块（50.5%）且激活稀疏度最高**（elem 4.08%、bit 42%）：若后续引入 zero-skipping / 稀疏 kernel，Vision 是收益最大的部分。
-3. 量化后权重几乎无零元素（elem sparsity ≈ 0）：**权重侧稀疏加速不可行**，稀疏收益只能在激活侧寻找。
-4. 全部 Gate PASS（manifest 360、Vision 72、VLM/Expert 112+32、weight rows 296、Expert flow_step 0–9、Vision compute ≈ 347.89 G）。
+本次审计已把 core accounting 改成：
+
+[
+oxed{	ext{MACs}_{m matmul}=	ext{numel}(O)	imes K,quad K=A.shape[-1]}
+]
+
+并按 `(module_id, phase, flow_step, attention_kind)` 累计物理 MatMul call。新 exporter 给 MatMul 行写入：
+
+```text
+MAC_semantics = matmul_physical_exact_v2
+```
+
+summarizer 会拒绝旧 workload CSV，避免旧数据再次被误用。
+
+**VSC-0 中仍然有效的 compute 子项：**
+
+| block | GFLOPs/sample_actions | 状态 | 原因 |
+|---|---:|---|---|
+| Vision 72 Linear | **347.89** | ✅ valid | Linear MAC path不依赖 `module_last_dims`；且与 V0 公式完全一致 |
+| ## 4. 结论
+
+1. **稀疏度结果有效**：Vision/VLM/Expert runtime native element sparsity分别为 **4.08% / 1.92% / 3.02%**，E4M3 significand bit sparsity均约 **42%**。Vision 的 element sparsity相对最高，但绝对值仍只有约 4%，因此只说明“相对更稀疏”，**不能直接推导出显著 zero-skipping speedup**。
+2. **static weight element sparsity接近 0**：这排除了传统“整元素为零”的 weight zero-skipping收益；但 weight bit sparsity仍约 41–43%，因此**不能写成‘权重侧稀疏加速不可行’**——bit-serial / bit-skip 类硬件仍可能利用 bit-level sparsity。
+3. **VSC-0 compute headline 无效**：688.50 GFLOPs 与 88.3% coverage 因 MatMul shape accounting bug 作废。当前仅 Vision 72 Linear = 347.89 G、Vision QK/PV = 77.31 G、connector = 3.02 G 可安全引用。
+4. routing / sparsity coverage Gate 本身仍 PASS：manifest 360、Vision Linear 72、VLM/Expert 112+32、weight rows 296、Expert flow_step 0–9 都是有效结构证据。
 
 ## 5. 问题与后续
 
-- V4（Vision QK/PV 量化，覆盖剩余 11.2%）前置：sdpa → eager 等价性 gate。
-- 可选：基于本实验的 per-operator sparsity（`sparsity_by_operator.csv`）定位 Vision 内高稀疏度子集，评估选择性量化/跳零的收益。
-- 本实验不构成新的 accuracy claim；VLIN 的精度代价以已有 Goal×100 为准。
+- **第一优先级：跑 VSC-1 workload-fix rerun**，得到修正后的 VLM/Expert QK/PV MACs、audited total 与 quantized FLOP coverage。
+- VSC-1 使用新 config `vsc1_vlin_fp8_task0_1ep_workloadfix.yaml`，runner 默认已切到该 variant；仍严格复用 VLIN scales + `--skip-calibration`。
+- V4（Vision QK/PV）在 VSC-1 compute 闭环后再决定；仍需 sdpa→eager equivalence gate。
+- 可继续用 VSC-0/VSC-1 的 sparsity CSV 做 per-operator 稀疏度分析，因为本次 bug 只影响 workload MAC shape accounting，不影响 native sparsity counters。
 
 ## 6. 修订记录
 
 | 日期 | 修改内容 | 修改人 |
 |---|---|---|
 | 2026-09-22 | 创建规范 task；实验设计统一放入 experiment_setup.md | |
-| 2026-09-22 | 回填 VSC-0 结果：Gate 全 PASS；quantized FLOP 覆盖 88.3%（688.50 G audited）；Vision elem sparsity 4.08% ≈ 2.1× VLM；bit sparsity ~42% 三 component 一致；状态改 done | |
+| 2026-09-22 | 回填 VSC-0 首轮结果：sparsity + workload summary | |
+| 2026-09-22 | **P0 审计修正：VSC-0 sparsity 有效，但 compute headline 作废**。发现旧 workload exporter 的 MatMul A/B/O 共用 `module_last_dims`，O role 覆盖导致错误 K/N；688.50 G / 88.3% 标记 INVALID。core 已改为 `O.numel() × A.shape[-1]` 物理 MAC accounting，并创建 VSC-1 rerun | |
