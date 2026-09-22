@@ -7,8 +7,9 @@ Reports, per component (vlm/expert) and stage:
   - static weight element / bit sparsity (native)
 
 Gate: the module CSV must contain both components with the expected
-module-row count (3520 = 416 VLM + 3104 Expert, matching the 09-15
-quickscan protocol); otherwise exit non-zero.
+module-row count (3520 = 320 VLM + 3200 Expert, matching the 09-15
+quickscan protocol: VLM = 112 Linear x2 + 32 MatMul x3, Expert = x10
+denoise steps); otherwise exit non-zero.
 """
 from __future__ import annotations
 
@@ -68,10 +69,10 @@ def main() -> None:
             a[3] += int(r.get("sparse_bits", 0))
 
     errors = []
-    if n_rows.get("vlm", 0) != 416:
-        errors.append(f"vlm module rows = {n_rows.get('vlm', 0)}, expected 416")
-    if n_rows.get("expert", 0) != 3104:
-        errors.append(f"expert module rows = {n_rows.get('expert', 0)}, expected 3104")
+    if n_rows.get("vlm", 0) != 320:
+        errors.append(f"vlm module rows = {n_rows.get('vlm', 0)}, expected 320")
+    if n_rows.get("expert", 0) != 3200:
+        errors.append(f"expert module rows = {n_rows.get('expert', 0)}, expected 3200")
 
     out_csv = args.sparsity_dir.parent / "smmm_sparsity_summary.csv"
     with out_csv.open("w", newline="") as f:
