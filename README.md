@@ -67,7 +67,7 @@ doc/
 | `calibration.py` | 校准流程：判定 reuse/recalibrate → 绑定 `QuantStatManager` → `scale_inspection` 前向 → 保存 pickle scale |
 | `eval.py` | 进程内 LIBERO 评测（复用 lerobot `eval_policy_all`，支持量化模型直接评测） |
 | `quant/` | 量化基础设施子包：`quant_spec`（精度规格）、`utils`（STE/scale 工具）、`stat_manager`（scale 统计与落盘） |
-| `hardware/` | 硬件建模代理（预留） |
+| `hardware/` | 可插拔算子事件采集、稠密 GEMM core 解析估算、JSONL 离线重放（默认关闭；非端到端模型） |
 | `stats/` | 运行时统计（预留） |
 
 ### 2.4 量化流水线
@@ -217,3 +217,11 @@ python main.py --config configs/experiments/smolvla_int8.yaml --skip-evaluation
 | 结果汇总与对比分析 | [`outputs/reports/`](outputs/reports/) |
 | 图表 | [`outputs/figures/`](outputs/figures/) |
 | Table-2 严格复现审计记录 | [`outputs/table2_repro_audit/`](outputs/table2_repro_audit/) |
+
+
+### 硬件建模首版（Phase J）
+
+通过配置 `hardware.enabled: true` 在评测阶段采集注册的 Linear/QuantizedMatMul；
+输出 `hardware/trace.jsonl`、`operators.csv` 和 `summary.json`。
+量化 outlier 等未建模路径明确标为 unsupported。完整接口、公式、覆盖边界与运行命令见
+[硬件框架实验设置](experiments/2026-09-22_phaseJ_hardware-framework/docs/experiment_setup.md)。

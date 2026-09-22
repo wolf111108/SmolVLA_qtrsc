@@ -390,11 +390,45 @@ def main() -> None:
 
     print_header("STEP 3: EVALUATION")
 
-    results = evaluate(
-        model=model,
-        config=config,
-        output_dir=output_dir,
-    )
+    # Hardware capture starts AFTER calibration and mode selection. It is
+    # independent of stat_manager rebinding and leaves model outputs unchanged.
+    from contextlib import nullcontext
+    from vla_tcs2.hardware import HardwareManager
+    import hashlib
+    import subprocess
+
+    hw_config = config.get("hardware", {})
+    hw = None
+    if type(hw_config.get("enabled", False)) is not bool:
+        raise ValueError("hardware.enabled must be bool")
+    if hw_config.get("enabled", False):
+        try:
+            source_commit = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            source_commit = "unknown"
+        hw = HardwareManager.from_config(
+            config.get("hardware", {}), output_dir / "hardware",
+            provenance={
+                "source_commit": source_commit,
+                "config_sha256": hashlib.sha256(
+                    json.dumps(config, sort_keys=True, default=str).encode()
+                ).hexdigest(),
+            },
+        )
+    with hw.capture_model(model) if hw is not None else nullcontext():
+        results = evaluate(
+            model=model,
+            config=config,
+            output_dir=output_dir,
+        )
+
+    if hw is not None:
+        print(f"[hardware] report: {output_dir / 'hardware' / 'summary.json'}")
+        print(f"[hardware] captured={hw.totals['calls']}, "
+              f"unsupported={hw.totals['unsupported_calls']}, skipped_limit={hw.skipped_limit}; "
+              "GEMM cores only, not end-to-end latency")
 
     # -------------------------------------------------------------------------
     # 4.5 Sparsity export (research manual §39/§45)

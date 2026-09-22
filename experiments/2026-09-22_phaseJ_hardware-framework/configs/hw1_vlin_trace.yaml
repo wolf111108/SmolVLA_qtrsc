@@ -1,0 +1,149 @@
+output_dir: outputs/2026-09-22_phaseJ_hardware-framework/hw1_vlin_trace
+
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+
+quantization:
+  enabled: true
+  mode: quant_forward
+  method: pot_fp8_outlier
+  scale_dir: scales/2026-09-15_phaseI_vision-quantization/vlin_full_vision_linear_fp8
+
+  # Existing VLM/Expert QK/PV only. Vision attention remains SDPA.
+  quantize_matmul: true
+  matmul_scale_granularity: per_site
+  linear_scale_granularity: per_site
+  outlier_ratio: 0.01
+
+  # Characterization run: every quantized site reuses the already-calibrated
+  # VLIN scales. The runner also hard-requires --skip-calibration.
+  calibration_policy:
+    default: reuse
+    layer_policy:
+      q_proj: reuse
+      k_proj: reuse
+      v_proj: reuse
+      o_proj: reuse
+      gate_proj: reuse
+      up_proj: reuse
+      down_proj: reuse
+      qk_matmul: reuse
+      pv_matmul: reuse
+    per_layer_policy: {}
+
+  q_proj: &linear_fp8
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  k_proj: *linear_fp8
+  v_proj: *linear_fp8
+  o_proj: *linear_fp8
+  gate_proj: *linear_fp8
+  up_proj: *linear_fp8
+  down_proj: *linear_fp8
+
+  qk_matmul: &matmul_fp8
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  pv_matmul: *matmul_fp8
+
+  vision:
+    enabled: true
+    calibration_policy: reuse
+    linear:
+      mlp: true
+      attn_proj: true
+
+  connector:
+    enabled: false
+
+  linear:
+    enabled: true
+    include:
+      - vlm.*
+      - expert.*
+      - vision.*
+    exclude: []
+    overrides:
+      - name: vision_linear_fp8
+        target:
+          component: vision
+        config:
+          a_bit: e4m3
+          w_bit: e4m3
+          o_bit: e4m3
+          d_bit: 4
+          p: 4
+          outlier_ratio: 0.01
+          method: pot_fp8_outlier
+
+  weight_quant_granularity: per_tensor
+  weight_group_size: null
+
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8
+  batch_size: 8
+  frame_stride: 4
+  seed: 42
+
+evaluation:
+  env:
+    type: libero
+    task: libero_goal
+    max_parallel_tasks: 1
+    task_ids:
+      - 0
+  n_episodes: 1
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2
+
+sparsity:
+  enabled: false
+  # H100-friendly; unit sparsity is intentionally disabled for the primary
+  # element/bit sparsity scan, so the run should remain lightweight.
+  chunk_size: 4194304
+  unit:
+    enabled: false
+  export:
+    dir: null
+
+# Metadata capture only: outlier events are traced but not assigned latency.
+hardware:
+  enabled: true
+  backend: dense_analytic
+  max_events: 20000
+  hardware:
+    pe_rows: 16
+    pe_cols: 16
+    frequency_hz: 1000000000
+    dram_bytes_per_second: 32000000000
+    sram_bytes: 262144
+    accumulator_bits: 32
+    pipeline_cycles: 0
+    overlap_compute_memory: false
+  mapping:
+    tile_m: 16
+    tile_n: 16
+    tile_k: 64
+    dataflow: output_stationary
+

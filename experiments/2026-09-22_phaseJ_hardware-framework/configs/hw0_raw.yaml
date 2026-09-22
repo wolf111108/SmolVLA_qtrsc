@@ -1,0 +1,47 @@
+# Raw registered Linear capture; functional attention/SDPA are outside coverage.
+output_dir: outputs/2026-09-22_phaseJ_hardware-framework/hw0_raw
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+quantization:
+  enabled: false
+evaluation:
+  env:
+    type: libero
+    task: libero_goal
+    max_parallel_tasks: 1
+    task_ids: [0]
+  n_episodes: 1
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2
+sparsity:
+  enabled: false
+hardware:
+  enabled: true
+  backend: dense_analytic
+  max_events: 20000
+  hardware:
+    pe_rows: 16
+    pe_cols: 16
+    frequency_hz: 1000000000
+    dram_bytes_per_second: 32000000000
+    sram_bytes: 262144
+    accumulator_bits: 32
+    pipeline_cycles: 0
+    overlap_compute_memory: false
+  mapping:
+    tile_m: 16
+    tile_n: 16
+    tile_k: 64
+    dataflow: output_stationary
+
