@@ -221,8 +221,17 @@ class QuantStatManager:
         # Per-layer tensor-role call counts (audit: Linear in/out, MatMul A/B/O).
         self.tensor_role_calls: Dict[str, Dict[str, int]] = {}
 
-        # Last-observed operand dims per module_id (workload export shapes).
+        # Legacy last-observed tensor dims (kept for backward compatibility).
+        # NOTE: this is role-agnostic and therefore MUST NOT be used to infer
+        # MatMul physical MACs: A/B/O have different shapes and O arrives last.
         self.module_last_dims: Dict[str, tuple] = {}
+
+        # Exact MatMul workload accounting keyed by
+        # (module_id, phase, flow_step, attention_kind). A is observed before
+        # O in every quantized MatMul forward; on O collection we accumulate
+        # physical MACs = O.numel() * K where K = A.shape[-1].
+        self.matmul_workload: Dict[tuple, Dict[str, Any]] = {}
+        self._pending_matmul_k: Dict[tuple, int] = {}
 
         # Outlier side-path accounting (manual §26-§27): per module_id,
         # counts of calls with dynamic outlier protection active and the
@@ -345,6 +354,8 @@ class QuantStatManager:
         self.flow_step_sparsity = {}
         self.tensor_role_calls = {}
         self.module_last_dims = {}
+        self.matmul_workload = {}
+        self._pending_matmul_k = {}
         self.outlier_sidepath = {}
         self.outlier_partition = {}
         self.per_role_unit_sparsity = {}
@@ -543,6 +554,38 @@ class QuantStatManager:
         resolved_attention_kind = attention_kind or ctx.get(
             "attention_kind", "unknown"
         )
+
+        # Exact physical MatMul workload accounting. The structured MatMul
+        # collector emits A, then B, then O for each operator call.
+        workload_key = (
+            module_id,
+            phase,
+            flow_step,
+            resolved_attention_kind or "unknown",
+        )
+        if tensor_role == "A" and tensor_code.dim() >= 1:
+            self._pending_matmul_k[workload_key] = int(tensor_code.shape[-1])
+        elif tensor_role == "O" and tensor_code.dim() >= 1:
+            k_inner = self._pending_matmul_k.get(workload_key)
+            if k_inner is not None:
+                n_out = int(tensor_code.shape[-1])
+                out_elems = int(tensor_code.numel())
+                m_flat = out_elems // max(n_out, 1)
+                workload = self.matmul_workload.setdefault(
+                    workload_key,
+                    {
+                        "calls": 0,
+                        "macs_total": 0,
+                        "last_M": None,
+                        "last_K": None,
+                        "last_N": None,
+                    },
+                )
+                workload["calls"] += 1
+                workload["macs_total"] += out_elems * k_inner
+                workload["last_M"] = m_flat
+                workload["last_K"] = k_inner
+                workload["last_N"] = n_out
 
         self._collect_one_tensor_sparsity(
             module_id,
@@ -2440,10 +2483,9 @@ class QuantStatManager:
                 b_bits = module.w_bit if module.w_spec.kind == "int" else 8
             else:
                 op_type = "matmul"
-                # Shapes recorded from the last call (see collect paths).
-                dims = self.module_last_dims.get(module_id)
-                K = dims[0] if dims else None
-                N = dims[1] if dims else None
+                # Physical MatMul dims/MACs are resolved below from the
+                # exact A/O runtime-shape accumulator.
+                K = N = None
                 a_bits = module.A_bit if module.A_spec.kind == "int" else 8
                 b_bits = module.B_bit if module.B_spec.kind == "int" else 8
 
@@ -2457,17 +2499,33 @@ class QuantStatManager:
                 bits = entry.get("total_bits", 0)
                 bit_sparsity = entry.get("sparse_bit_rate", 0.0)
 
-                # Per-call M from element counts (M = elems/calls/K).
-                if calls > 0 and K:
-                    M = elems // (calls * K)
-                    macs = M * K * (N or 0)
+                if is_linear:
+                    if calls > 0 and K:
+                        M = elems // (calls * K)
+                        macs = M * K * (N or 0)
+                    else:
+                        M = None
+                        macs = None
+                else:
+                    wk = self.matmul_workload.get(
+                        (module_id, phase, flow_step, attn)
+                    )
+                    if wk and wk.get("calls", 0) > 0:
+                        M = wk.get("last_M")
+                        K = wk.get("last_K")
+                        N = wk.get("last_N")
+                        macs = wk["macs_total"] / wk["calls"]
+                    else:
+                        M = K = N = None
+                        macs = None
+
+                if macs is not None:
                     b_a = a_bits * (1 - bit_sparsity)
                     b_b = b_bits * (1 - bit_sparsity)
                     bop_dense = macs * a_bits * b_bits
                     bop_active = macs * b_a * b_b
                 else:
-                    M = None
-                    macs = bop_dense = bop_active = None
+                    bop_dense = bop_active = None
 
                 rows.append([
                     config_name, model_path,
