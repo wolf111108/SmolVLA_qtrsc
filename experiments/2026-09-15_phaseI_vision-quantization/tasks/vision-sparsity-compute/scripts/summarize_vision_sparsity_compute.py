@@ -16,6 +16,11 @@ Primary sparsity uses *native* runtime counters only.  For PoT-FP8 + outlier
 protection, reported counters include zeros manufactured by the normal path at
 protected FP-sidepath positions and would overstate sparsity.
 
+Compute accounting intentionally separates and REQUIRES the fixed workload
+exporter semantics `matmul_physical_exact_v2` for QK/PV MACs. Legacy VSC-0
+workload.csv files are rejected because the old role-agnostic last-shape logic
+could corrupt MatMul M/K/N and MACs.
+
 Compute accounting intentionally separates:
   1) dynamic quantized major-ops from workload.csv (Vision Linear + VLM/Expert
      Linear/MatMul), normalized to one sample_actions() generation;
@@ -304,6 +309,14 @@ def aggregate_compute(workload_rows):
             op_type == "matmul" and role != "A"
         ):
             continue
+        if op_type == "matmul":
+            semantics = (r.get("MAC_semantics") or "").strip()
+            if semantics != "matmul_physical_exact_v2":
+                raise RuntimeError(
+                    "workload.csv uses legacy/unsafe MatMul MAC accounting "
+                    f"for {r.get('module_id')}: MAC_semantics={semantics!r}. "
+                    "Re-run VSC after the Phase-I workload exporter fix."
+                )
         mid = (r.get("module_id") or "").strip()
         phase = (r.get("phase") or "").strip()
         flow = (r.get("flow_step") or "").strip()
