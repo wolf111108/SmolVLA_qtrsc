@@ -32,6 +32,9 @@ Gate L0（legacy regression）已通过：用原封不动的 G6 canonical 配置
 | V2 Gate1–5 | v2_vision_mlp_fp8（gate 部分） | — | — | — | — | `scales/.../v2_vision_mlp_fp8` | routing **248 Linear / 64 MatMul**；reuse 288 / recalibrate 24；24/24 sites、72 scale 文件 |
 | V2 smoke | v2_vision_mlp_fp8 | — | 100.0%（task0） | — | 1 | `outputs/.../v2_vision_mlp_fp8` | 312 quant modules；eval_s ≈ 103.5 |
 | **V2 Goal×100** | v2_vision_mlp_fp8_goal | **G6-A = 90.0%** | **84.0%（84/100）** | **−6.0 pp（L_MLP）** | 100 | `outputs/.../v2_vision_mlp_fp8_goal` | eval_s = 8013；逐 task [10,10,10,6,9,10,4,9,10,6] |
+| V3 Gate1–5 | v3_vision_attn_proj_fp8（gate 部分） | — | — | — | — | `scales/.../v3_vision_attn_proj_fp8` | routing **272 Linear / 64 MatMul**；reuse 288 / recalibrate 48；48/48 sites、144 scale 文件 |
+| V3 smoke | v3_vision_attn_proj_fp8 | — | 100.0%（task0） | — | 1 | `outputs/.../v3_vision_attn_proj_fp8` | 336 quant modules；Gate1–6 全过 |
+| **V3 Goal×100** | v3_vision_attn_proj_fp8_goal | **G6-A = 90.0%** | **85.0%（85/100）** | **−5.0 pp（L_Attn）** | 100 | `outputs/.../v3_vision_attn_proj_fp8_goal` | 逐 task [10,9,10,8,9,9,4,9,10,7] |
 
 ## 3. 分组结果与分析
 
@@ -298,11 +301,11 @@ $$
 
 ## 5. 问题与后续
 
-- **下一优先级是拆分 VLIN 的 10pp 损失来源**，实验设计已统一写入 `experiment_setup.md §5.1`，不再创建规范外设计文档：V2 = Vision MLP-only（24 Linear），V3 = Vision attention-projection-only（48 Linear），两组都严格复用 G6-A 的 288 个 legacy quant sites/scales。
-- **V2/V3 完成前不推进 V4 QK/PV**。V4 仍受 SDPA backend 约束，进入前必须先通过 sdpa→eager 等价性 gate。
+- **V2/V3 归因已完成**：V2=84%（L_MLP=6pp）、V3=85%（L_Attn=5pp）、VLIN=80%（L_all=10pp），`interaction=-1pp≈0`，说明 Vision MLP 与 attention projection 的 FP8 损失在当前 100-ep 分辨率下近似可加。当前没有证据支持只保护某一类 Vision Linear 就能完全消除精度代价。
+- **下一优先级改为加入 Vision 后的 workload characterization**：已按规范新增 `tasks/vision-sparsity-compute/`，完整设计只写在该 task 的 `docs/experiment_setup.md`。Primary 统计 Vision/VLM/Expert 的 native element/bit sparsity、static weight sparsity，以及 per-`sample_actions()` MAC/FLOP 与 quantized major-op coverage。
+- **V4 QK/PV 暂缓**：先完成 sparsity / compute 画像，再决定是否值得为 SDPA→eager equivalence 与 Vision QK/PV 量化投入额外工程工作。
 - **V1 结果保留但降级为参考证据**：其 raw wrapper bit-exact 结论有效；89→81 的 8pp 因 legacy scales 也重新 calibration，不再写成严格 connector-only 净损失。
-- **性能评估与精度评估分离**：本阶段的 `eval_s` 不作为 FP8 speedup 证据；真实加速需后续在实际低精度 kernel / 硬件执行路径下单独测量。
-- 当前未发现 VLIN routing、calibration coverage 或正式 Goal×100 配置错误；第 1 次 Goal×100 被 SIGTERM 的异常属于运行过程问题，第 2 次完整结果 80/100 已正常落盘。
+- **性能评估与精度评估分离**：`eval_s` 不作为 FP8 speedup 证据；真实加速需后续在实际低精度 kernel / 硬件执行路径下单独测量。
 
 ## 6. 修订记录
 
@@ -318,3 +321,4 @@ $$
 | 2026-09-21 | 实现 §5.1 归因设计：V2/V3 config（4 个）+ 审计脚本参数化 + 泛化 runner；修复 goal config 缩进；**回填 V2 Goal×100 = 84.0%（L_MLP = 6pp）**，新增 §3.7 | |
 | 2026-09-22 | 回填 **V3 部分结果**（§3.8）：Gate1–6 全过（272/64、48/48、144 文件、smoke 100%）；Goal×100 t0–t6 完成，59/70（t06 = 4/10 为共同重灾）；最终版待 result.json | |
 | 2026-09-22 | 回填 **V3 最终结果（§3.8 定稿 + §3.9 归因汇总）**：**V3 = 85.0%（85/100）**；L_MLP=6pp / L_Attn=5pp / L_all=10pp，**interaction = −1pp ≈ 0（近似可加）**；t06 为三变体共同最大损失点（各 −3） | |
+| 2026-09-22 | 审计 V2/V3 回填并补齐总表；创建标准子实验 `tasks/vision-sparsity-compute/`，下一阶段转向 Vision/VLM/Expert sparsity + compute workload characterization | |
