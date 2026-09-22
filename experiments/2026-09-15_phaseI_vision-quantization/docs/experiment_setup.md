@@ -141,6 +141,10 @@ RUN_GOAL=1 bash experiments/2026-09-15_phaseI_vision-quantization/scripts/run_fu
 | v1_connector_fp8_goal.yaml | outputs/2026-09-15_phaseI_vision-quantization/v1_connector_fp8_goal/ | done |
 | vlin_full_vision_linear_fp8.yaml | outputs/2026-09-15_phaseI_vision-quantization/vlin_full_vision_linear_fp8/ | done |
 | vlin_full_vision_linear_fp8_goal.yaml | outputs/2026-09-15_phaseI_vision-quantization/vlin_full_vision_linear_fp8_goal/ | done（SR 80.0%） |
+| v2_vision_mlp_fp8.yaml | outputs/2026-09-15_phaseI_vision-quantization/v2_vision_mlp_fp8/ | done（smoke） |
+| v2_vision_mlp_fp8_goal.yaml | outputs/2026-09-15_phaseI_vision-quantization/v2_vision_mlp_fp8_goal/ | done（SR 84.0%） |
+| v3_vision_attn_proj_fp8.yaml | outputs/2026-09-15_phaseI_vision-quantization/v3_vision_attn_proj_fp8/ | done（smoke） |
+| v3_vision_attn_proj_fp8_goal.yaml | outputs/2026-09-15_phaseI_vision-quantization/v3_vision_attn_proj_fp8_goal/ | done（SR 85.0%） |
 | task: vision-sparsity-compute / vsc_vlin_fp8_task0_1ep.yaml | outputs/2026-09-15_phaseI_vision-quantization/tasks/vision-sparsity-compute/vsc_vlin_fp8_task0_1ep/ | pending |
 
 VLIN scale 目录：`scales/2026-09-15_phaseI_vision-quantization/vlin_full_vision_linear_fp8`（1080 文件 = 864 canonical 复制 + 216 新增）。运行日志：`vlin_full_run.log` / `vlin_goal100.log`（第 1 次尝试被 SIGTERM，已归档 `vlin_goal100.attempt1_terminated.log`）。
