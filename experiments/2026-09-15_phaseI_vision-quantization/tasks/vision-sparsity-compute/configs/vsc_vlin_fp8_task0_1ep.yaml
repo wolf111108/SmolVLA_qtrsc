@@ -36,9 +36,8 @@ quantization:
   linear_scale_granularity: per_site
   outlier_ratio: 0.01
 
-  # Strict isolation:
-  #   legacy VLM/Expert Linear + MatMul must reuse canonical G6-A scales;
-  #   the Vision wrapper forces its 72 newly-added Linear sites to recalibrate.
+  # Characterization run: every quantized site reuses the already-calibrated
+  # VLIN scales. The runner also hard-requires --skip-calibration.
   calibration_policy:
     default: reuse
     layer_policy:
@@ -78,7 +77,7 @@ quantization:
 
   vision:
     enabled: true
-    calibration_policy: recalibrate
+    calibration_policy: reuse
     linear:
       mlp: true
       attn_proj: true
