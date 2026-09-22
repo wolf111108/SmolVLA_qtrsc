@@ -26,9 +26,10 @@ Gate L0（legacy regression）、V0（Vision workload audit）、V1 与 VLIN 已
 | V2 Vision MLP FP8（Gate 1–6） | ✅ done | 2026-09-21 | 248/64 routing、reuse288/recal24、24/24 + 72 scale 文件、smoke 100%（runner `run_vision_linear_variant.sh`） |
 | V2 Goal×100 | ✅ done | 2026-09-21 | **SR = 84.0%（84/100，L_MLP = 6pp）**，逐 task [10,10,10,6,9,10,4,9,10,6]，eval_s = 8013 |
 | V3 AttnProj FP8（全流程） | ✅ done | 2026-09-22 | Gate1–6 全过（272/64、48/48、144 文件、smoke 100%）；**Goal×100 = 85.0%（85/100，L_Attn = 5pp）**，逐 task [10,9,10,8,9,9,4,9,10,7]，eval_s = 18241 |
-| V2 Vision MLP-only | ⏳ pending | — | 24 个 Linear；严格复用 G6-A legacy scales；设计见 `experiment_setup.md §5.1` |
-| V3 Vision AttnProj-only | ⏳ pending | — | 48 个 Linear；严格复用 G6-A legacy scales；设计见 `experiment_setup.md §5.1` |
-| V4/V5 | ⏳ pending | — | V2/V3 完成后再决定；V4 前置：sdpa → eager 等价性 |
+| V2 Vision MLP-only | ✅ done | 2026-09-21 | Goal×100 = **84.0%**，L_MLP=6pp |
+| V3 Vision AttnProj-only | ✅ done | 2026-09-22 | Goal×100 = **85.0%**，L_Attn=5pp；interaction with V2 = −1pp ≈ 0 |
+| Vision sparsity-compute | 🟦 ready | — | 标准 task 已配置；1ep native sparsity + MAC/FLOP characterization |
+| V4/V5 | ⏳ pending | — | sparsity/compute 完成后再决定；V4 前置：sdpa → eager 等价性 |
 
 ## 2. 运行日志
 
@@ -50,6 +51,8 @@ Gate L0（legacy regression）、V0（Vision workload audit）、V1 与 VLIN 已
 | 2026-09-21 | V2 Goal×100 | `main.py --config v2_vision_mlp_fp8_goal.yaml --skip-calibration` | ✅ | `outputs/.../v2_vision_mlp_fp8_goal` | 17:22–19:39（≈2.2h）；**SR = 84.0%（84/100）**，逐 task [10,10,10,6,9,10,4,9,10,6]；eval_s = 8013 |
 | 2026-09-21 | V3 全流程启动 | `RUN_GOAL=1 run_vision_linear_variant.sh v3_vision_attn_proj_fp8.yaml` | ✅ | `v3_run.log` | PID 864521；Gate1–6 全过；Goal×100 20:0x–00:5x（≈5.1h）；**SR = 85.0%（85/100）**，逐 task [10,9,10,8,9,9,4,9,10，7]；eval_s = 18241；result.json 已落盘 |
 | 2026-09-21 | 结果审计修订 | 对照 G6-A / V1 / VLIN 配置与文档口径 | ✅ | — | VLIN 严格 baseline 固定为 G6-A 90%；逐 task Δ=[0,0,-1,-1,-1,0,-3,0,-1,-3]；V1 8pp 降级为非严格参考；删除 fake-quant runtime speedup 推断；V2/V3 设计合并进 experiment_setup.md §5.1 |
+
+| 2026-09-22 | vision-sparsity-compute task setup | 创建标准 task config / runner / summarizer / 3 个固定 docs | ✅ | `outputs/.../tasks/vision-sparsity-compute/` | 复用 VLIN scales；强制 `--skip-calibration`；统计 Vision/VLM/Expert native sparsity + compute |
 
 ## 3. 后台任务
 
@@ -82,3 +85,4 @@ Gate L0（legacy regression）、V0（Vision workload audit）、V1 与 VLIN 已
 | 2026-09-19 | 回填 V1 全流程（V1-R 等价性 bit-exact + smoke 100% + **Goal×100 = 81.0%**）；状态改为 `running（V0 ✅ / V1 ✅ / V2–V5 待跑）`；记录 8pp 损失与「先审计再进 V2」 | |
 | 2026-09-21 | 回填 VLIN Gate1–6（分支切换 + 一键脚本全过：296/64、72/72、216/216、smoke 100%）；状态更新为 `running（V0 ✅ / V1 ✅ / VLIN Gate1–6 ✅ / V2–V5 待跑）`；记录「VLIN 分支仅存于 mirror remote」 | |
 | 2026-09-21 | 结果审计修订：统一 VLIN baseline=G6-A 90%；V1 改为非严格参考；补 G6-A→VLIN 逐 task Δ；删除 fake-quant speedup 推断；下一阶段 V2/V3 设计统一归入 `experiment_setup.md §5.1`，未新增规范外实验文件 | |
+| 2026-09-22 | V2/V3 已完成并归因闭合；新增 Vision sparsity-compute 标准 task（仅 configs/scripts/固定 docs），用于加入 Vision 后的 native element/bit sparsity 与 MAC/FLOP 统计 | |
