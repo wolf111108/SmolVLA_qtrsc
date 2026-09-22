@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Phase I task: Vision/VLM/Expert sparsity + compute characterization.
+# Default variant is VSC-1, which reruns the 1-episode workload trace after
+# the exact MatMul physical-MAC accounting fix.
 #
 # Uses the already-calibrated full VLIN scales and MUST NOT recalibrate.
 # Primary scope:
@@ -19,8 +21,9 @@ REPO_ROOT="$(cd "$EXP_ROOT/../.." && pwd)"
 cd "$REPO_ROOT"
 
 CONDA_ENV="${CONDA_ENV:-smolvla_eval}"
-CFG="$TASK_ROOT/configs/vsc_vlin_fp8_task0_1ep.yaml"
-OUT="outputs/2026-09-15_phaseI_vision-quantization/tasks/vision-sparsity-compute/vsc_vlin_fp8_task0_1ep"
+VARIANT="${VSC_VARIANT:-vsc1_vlin_fp8_task0_1ep_workloadfix}"
+CFG="$TASK_ROOT/configs/${VARIANT}.yaml"
+OUT="outputs/2026-09-15_phaseI_vision-quantization/tasks/vision-sparsity-compute/${VARIANT}"
 SCALE_DIR="scales/2026-09-15_phaseI_vision-quantization/vlin_full_vision_linear_fp8"
 PARENT_AUDIT="experiments/2026-09-15_phaseI_vision-quantization/scripts/audit_full_vision_linear_calibration.py"
 SUMMARIZER="$TASK_ROOT/scripts/summarize_vision_sparsity_compute.py"
@@ -40,6 +43,7 @@ echo "======================================================================"
 echo " Vision sparsity + compute characterization"
 echo "======================================================================"
 echo "repo       : $REPO_ROOT"
+echo "variant    : $VARIANT"
 echo "config     : $CFG"
 echo "output     : $OUT"
 echo "scale_dir  : $SCALE_DIR"
