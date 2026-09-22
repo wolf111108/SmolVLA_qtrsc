@@ -54,6 +54,8 @@ Gate L0（legacy regression）、V0（Vision workload audit）、V1 与 VLIN 已
 
 | 2026-09-22 | vision-sparsity-compute task setup | 创建标准 task config / runner / summarizer / 3 个固定 docs | ✅ | `outputs/.../tasks/vision-sparsity-compute/` | 复用 VLIN scales；强制 `--skip-calibration`；统计 Vision/VLM/Expert native sparsity + compute |
 
+| 2026-09-22 | VSC-0 compute audit | 复核 `export_workload_csv` MatMul shape accounting | ⚠ fix merged | task `vision-sparsity-compute` | VSC-0 native sparsity 保留有效；688.50 G / 88.3% coverage 作废；已新增 exact physical-MAC accounting + T12 + VSC-1 rerun |
+
 ## 3. 后台任务
 
 | PID | 阶段 | 启动时间 | 状态 | 备注 |
