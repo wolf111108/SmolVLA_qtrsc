@@ -4,7 +4,7 @@
 > 图片放 `docs/figures/`，文中用相对路径 `![](figures/xxx.png)` 引用。
 
 - **实验名称**：2026-09-15_phaseI_vision-quantization
-- **状态**：running（V0 ✅ / V1 ✅ / VLIN ✅ / **V2 ✅（84.0%）** / V3 🔄 Goal×100 进行中（t0–t6 完成，59/70） / V4–V5 待跑）
+- **状态**：running（V0 ✅ / V1 ✅ / VLIN ✅ / **V2 ✅（84.0%）** / **V3 ✅（85.0%）** / V4–V5 待跑）
 - **最后更新**：2026-09-22
 
 ---
@@ -255,23 +255,35 @@ Gate 5 coverage 明细（`scripts/audit_full_vision_linear_calibration.py`，逐
 - 损失集中在 **t03（−2）、t06（−3）、t09（−2）**；**t06/t09 与 VLIN 的重灾 task 完全一致**（各 −3），t02/t05 的 +1 在 1-ep 噪声范围内。
 - 待 V3 完成后计算 interaction = L_all − (L_MLP + L_Attn) = 10 − (6 + L_Attn)。若 V3 较高（L_Attn 小）则 interaction 显著为负，说明 MLP 与 attn proj 的量化误差在闭环上存在耦合（联合时互相放大）。
 
-### 3.8 V3 — Vision AttnProj-only FP8（Goal × 100，🔄 进行中）
+### 3.8 V3 — Vision AttnProj-only FP8（Goal × 100，✅ 完成 2026-09-22）
 
-按 §5.1 归因设计的第二组单变量消融：Vision `q/k/v/out_proj` 48 个 Linear FP8（G6-A 288 sites 全 reuse，Vision MLP / QK·PV / connector raw）。Gate 1–6 已全过：routing **272 Linear / 64 MatMul**、reuse 288 / recalibrate 48、coverage 48/48（144 scale 文件）、smoke task0×1 = 100%（runner `run_vision_linear_variant.sh`，PID 864521，2026-09-21 20:0x 启动）。
+按 §5.1 归因设计的第二组单变量消融：Vision `q/k/v/out_proj` 48 个 Linear FP8（G6-A 288 sites 全 reuse，Vision MLP / QK·PV / connector raw）。Gate 1–6 全过：routing **272 Linear / 64 MatMul**、reuse 288 / recalibrate 48、coverage 48/48（144 scale 文件）、smoke task0×1 = 100%（runner `run_vision_linear_variant.sh`）。
 
-**Goal×100 进行中（截至 2026-09-22 00:13，t7 rollout 中）**，已完成 7/10 task，逐 task（来自 tqdm 日志解析，**非最终，以 result.json 为准**）：
+**Goal×100 = 85.0%（85/100）**，eval_s = 18241（20:0x–00:5x，≈5.1h；失败 episode 跑满 300 步拉长耗时）。逐 task（严格对照 G6-A）：
 
-| Config | t00 | t01 | t02 | t03 | t04 | t05 | t06 | 小计 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| **G6-A strict baseline** | 10 | 10 | 9 | 8 | 10 | 9 | 7 | **63**/70 |
-| **V3 AttnProj-only（已完成部分）** | 10 | 9 | 10 | 8 | 9 | 9 | **4** | **59**/70 |
-| Δ(V3−G6-A) | 0 | −1 | +1 | 0 | −1 | 0 | **−3** | **−4** |
+| Config | t00 | t01 | t02 | t03 | t04 | t05 | t06 | t07 | t08 | t09 | 合计 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **G6-A strict baseline** | 10 | 10 | 9 | 8 | 10 | 9 | 7 | 9 | 10 | 8 | **90** |
+| **V3 AttnProj-only** | 10 | 9 | 10 | 8 | 9 | 9 | **4** | 9 | 10 | **7** | **85** |
+| **Δ(V3−G6-A)** | 0 | −1 | +1 | 0 | −1 | 0 | **−3** | 0 | 0 | −1 | **−5** |
+| V2 MLP-only | 10 | 10 | 10 | 6 | 9 | 10 | 4 | 9 | 10 | 6 | **84** |
+| VLIN（MLP+attn） | 10 | 10 | 8 | 7 | 9 | 9 | 4 | 9 | 9 | 5 | **80** |
 
-**中期要点**
+### 3.9 §5.1 归因汇总（V2/V3 完成，2026-09-22）
 
-- t0–t5 与 baseline 基本打平（±1 以内）；**损失几乎全部集中在 t06（7→4，−3）**——与 V2（t06 −3）与 VLIN（t06 −3）的重灾 task 完全一致，t06 是三种 Vision 量化变体共同的最大损失点。
-- 若 t7–t9 保持 baseline 水平（9+10+8=27），V3 最终 ≈ **86/100** ⇒ L_Attn = 4pp，interaction = 10 − (6+4) = **0**（恰好可加）；若后三个 task 掉分则 interaction 转负（耦合/超可加）。
-- 完整结果落盘后本节将更新为最终版。
+$$
+L_{\rm MLP} = 90-84 = 6\text{pp},\quad L_{\rm Attn} = 90-85 = 5\text{pp},\quad L_{\rm all} = 90-80 = 10\text{pp}
+$$
+
+$$
+\text{interaction} = L_{\rm all} - (L_{\rm MLP}+L_{\rm Attn}) = 10 - 11 = \boxed{-1\text{pp}}
+$$
+
+**结论**：interaction = −1pp ≈ 0（100-ep 分辨率下每个 task 1 成功 = 1pp 噪声量级）⇒ **MLP 与 attn projection 的量化损失近似可加**，无显著超/次可加耦合。VLIN 的 10pp 可分解为 MLP 主导（6pp）+ attn proj（5pp），重叠仅 1pp。
+
+**逐 task 交叉验证**：三种变体在 **t06 上同为最大损失点（各 −3，7→4）**；t09 在 V2（−2）与 VLIN（−3）上受损但在 V3 上仅 −1，说明 t09 更偏 MLP 敏感；t03 仅 V2 受损（−2）而 V3 打平，同样偏 MLP 敏感。t06 是 Vision 量化全局最敏感 task，值得单独审计（该 task 在 G6-A baseline 下本就最弱 7/10）。
+
+**归因后启示**：Vision MLP（24 Linear，54.2% Vision FLOPs）与 attn proj（48 Linear，27.1%）单位 FLOPs 代价相当（6pp vs 5pp），不存在「某一家族可安全量化、另一家不可」的格局；若要降低 10pp 总代价，需从量化方法（如 per-channel scale / 更低 outlier ratio / W8A8 折中）而非 site 选择入手，或接受 Vision 侧保留更高精度。
 
 ## 4. 结论
 
@@ -304,4 +316,5 @@ Gate 5 coverage 明细（`scripts/audit_full_vision_linear_calibration.py`，逐
 | 2026-09-21 | 回填 **VLIN Goal×100 = 80.0%（80/100，Δ −10.0pp vs G6-A）**；新增逐 task 对照；状态改为 `VLIN ✅` | |
 | 2026-09-21 | 审计修订：VLIN 改为严格对照 G6-A 逐 task Δ；V1 标记为非严格单变量参考；删除 fake-quant `eval_s` 的 speedup 推断；“共同传导通道”降级为待验证假设；后续实验设计统一指向 `experiment_setup.md §5.1` | |
 | 2026-09-21 | 实现 §5.1 归因设计：V2/V3 config（4 个）+ 审计脚本参数化 + 泛化 runner；修复 goal config 缩进；**回填 V2 Goal×100 = 84.0%（L_MLP = 6pp）**，新增 §3.7 | |
-| 2026-09-22 | 回填 **V3 部分结果**（§3.8）：Gate1–6 全过（272/64、48/48、144 文件、smoke 100%）；Goal×100 t0–t6 完成 59/70（t06 = 4/10 为三种变体共同重灾）；最终版待 result.json 落盘 | |
+| 2026-09-22 | 回填 **V3 部分结果**（§3.8）：Gate1–6 全过（272/64、48/48、144 文件、smoke 100%）；Goal×100 t0–t6 完成，59/70（t06 = 4/10 为共同重灾）；最终版待 result.json | |
+| 2026-09-22 | 回填 **V3 最终结果（§3.8 定稿 + §3.9 归因汇总）**：**V3 = 85.0%（85/100）**；L_MLP=6pp / L_Attn=5pp / L_all=10pp，**interaction = −1pp ≈ 0（近似可加）**；t06 为三变体共同最大损失点（各 −3） | |
