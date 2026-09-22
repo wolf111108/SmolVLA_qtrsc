@@ -1,0 +1,148 @@
+# Phase I — full VLIN S|MMM sparsity characterization, task0 x 1 episode.
+#
+# Purpose:
+#   Re-run the full Vision+VLM+Expert quantized workload under the current
+#   S|MMM FP bit-sparsity metric:
+#       E4M3 raw = S EEEE MMM  -> statistic code = S MMM
+#   exponent excluded, hidden leading 1 excluded.
+#
+# Quantized scope:
+#   - Vision: 72 QuantizedLinear (q/k/v/out_proj + fc1/fc2)
+#   - VLM:    112 QuantizedLinear + 32 QuantizedMatMul
+#   - Expert: 112 QuantizedLinear + 32 QuantizedMatMul
+#   - Vision QK/PV remains raw SDPA; connector remains raw
+#
+# This is a workload-characterization run only. It MUST use --skip-calibration.
+# Scales are copied bit-identically from the completed VLIN scale directory by
+# the runner before execution.
+#
+# Expected routing: 296 Linear + 64 MatMul = 360 quantized modules.
+# Expected runtime rows:
+#   Vision  = 72*2 = 144
+#   VLM     = 112*2 + 32*3 = 320
+#   Expert  = 320*10 denoise steps = 3200
+# Expected static-weight rows: 296.
+
+output_dir: outputs/2026-09-22_phaseI_vision-smmm-sparsity/vs1_full_vlin_smmm_1ep
+
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+
+quantization:
+  enabled: true
+  mode: quant_forward
+  method: pot_fp8_outlier
+  scale_dir: scales/2026-09-22_phaseI_vision-smmm-sparsity/vs1_full_vlin_smmm_1ep
+
+  quantize_matmul: true
+  matmul_scale_granularity: per_site
+  linear_scale_granularity: per_site
+  outlier_ratio: 0.01
+
+  calibration_policy:
+    default: reuse
+    layer_policy:
+      q_proj: reuse
+      k_proj: reuse
+      v_proj: reuse
+      o_proj: reuse
+      gate_proj: reuse
+      up_proj: reuse
+      down_proj: reuse
+      qk_matmul: reuse
+      pv_matmul: reuse
+    per_layer_policy: {}
+
+  q_proj: &linear_fp8
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  k_proj: *linear_fp8
+  v_proj: *linear_fp8
+  o_proj: *linear_fp8
+  gate_proj: *linear_fp8
+  up_proj: *linear_fp8
+  down_proj: *linear_fp8
+
+  qk_matmul: &matmul_fp8
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  pv_matmul: *matmul_fp8
+
+  vision:
+    enabled: true
+    calibration_policy: reuse
+    linear:
+      mlp: true
+      attn_proj: true
+
+  connector:
+    enabled: false
+
+  linear:
+    enabled: true
+    include:
+      - vlm.*
+      - expert.*
+      - vision.*
+    exclude: []
+    overrides:
+      - name: vision_linear_fp8
+        target:
+          component: vision
+        config:
+          a_bit: e4m3
+          w_bit: e4m3
+          o_bit: e4m3
+          d_bit: 4
+          p: 4
+          outlier_ratio: 0.01
+          method: pot_fp8_outlier
+
+  weight_quant_granularity: per_tensor
+  weight_group_size: null
+
+sparsity:
+  enabled: true
+  chunk_size: 4194304
+  unit:
+    enabled: false
+  export:
+    dir: null
+
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8
+  batch_size: 8
+  frame_stride: 4
+  seed: 42
+
+evaluation:
+  env:
+    type: libero
+    task: libero_goal
+    max_parallel_tasks: 1
+    task_ids:
+      - 0
+  n_episodes: 1
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2
