@@ -2438,7 +2438,8 @@ class QuantStatManager:
         These are hardware PROXIES (manual §55), not measured latency.
 
         Linear shapes: x[B,T,K] @ W[N,K]^T  -> M=B*T, K, N.
-        MatMul (QK/PV) shapes come from the last observed call dims.
+        MatMul (QK/PV) physical MACs are accumulated from the actual A/O
+        runtime shapes: MACs = O.numel() * A.shape[-1].
         """
         import csv
 
@@ -2527,13 +2528,21 @@ class QuantStatManager:
                 else:
                     bop_dense = bop_active = None
 
+                mac_semantics = (
+                    "linear_role_derived_v1"
+                    if is_linear
+                    else (
+                        "matmul_physical_exact_v2"
+                        if macs is not None else "matmul_missing"
+                    )
+                )
                 rows.append([
                     config_name, model_path,
                     module_id, phase, flow_step, role, attn, op_type, calls,
                     M, K, N, elems, bits,
                     a_bits, b_bits,
                     entry.get("sparse_bit_rate", 0.0),
-                    macs, bop_dense, bop_active,
+                    macs, mac_semantics, bop_dense, bop_active,
                 ])
 
         with open(csv_path, "w", newline="") as f:
@@ -2545,7 +2554,8 @@ class QuantStatManager:
                 "M", "K", "N", "elements", "bits",
                 "A_bitwidth", "B_bitwidth",
                 "bit_sparsity",
-                "MACs", "BOP_dense_proxy", "BOP_active_proxy",
+                "MACs", "MAC_semantics",
+                "BOP_dense_proxy", "BOP_active_proxy",
             ])
             writer.writerows(rows)
 
