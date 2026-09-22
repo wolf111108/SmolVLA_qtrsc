@@ -28,7 +28,7 @@ Gate L0（legacy regression）、V0（Vision workload audit）、V1 与 VLIN 已
 | V3 AttnProj FP8（全流程） | ✅ done | 2026-09-22 | Gate1–6 全过（272/64、48/48、144 文件、smoke 100%）；**Goal×100 = 85.0%（85/100，L_Attn = 5pp）**，逐 task [10,9,10,8,9,9,4,9,10,7]，eval_s = 18241 |
 | V2 Vision MLP-only | ✅ done | 2026-09-21 | Goal×100 = **84.0%**，L_MLP=6pp |
 | V3 Vision AttnProj-only | ✅ done | 2026-09-22 | Goal×100 = **85.0%**，L_Attn=5pp；interaction with V2 = −1pp ≈ 0 |
-| Vision sparsity-compute | 🟦 ready | — | 标准 task 已配置；1ep native sparsity + MAC/FLOP characterization |
+| Vision sparsity-compute | ✅ done | 2026-09-22 | VSC-0 sparsity valid / compute invalid；VSC-1 修复后 **594.41 G / 86.5% coverage**；Vision/VLM/Expert elem sparsity 4.08/1.92/3.02% |
 | V4/V5 | ⏳ pending | — | sparsity/compute 完成后再决定；V4 前置：sdpa → eager 等价性 |
 
 ## 2. 运行日志
@@ -55,6 +55,8 @@ Gate L0（legacy regression）、V0（Vision workload audit）、V1 与 VLIN 已
 | 2026-09-22 | vision-sparsity-compute task setup | 创建标准 task config / runner / summarizer / 3 个固定 docs | ✅ | `outputs/.../tasks/vision-sparsity-compute/` | 复用 VLIN scales；强制 `--skip-calibration`；统计 Vision/VLM/Expert native sparsity + compute |
 
 | 2026-09-22 | VSC-0 compute audit | 复核 `export_workload_csv` MatMul shape accounting | ⚠ fix merged | task `vision-sparsity-compute` | VSC-0 native sparsity 保留有效；688.50 G / 88.3% coverage 作废；已新增 exact physical-MAC accounting + T12 + VSC-1 rerun |
+
+| 2026-09-22 | VSC-1 workload-fix | `vsc1_vlin_fp8_task0_1ep_workloadfix.yaml` | ✅ | `outputs/.../tasks/vision-sparsity-compute/vsc1_vlin_fp8_task0_1ep_workloadfix` | pytest 12 passed；summarizer GATE PASS；**594.41 G / 86.5%**；VLM 57.60 G / Expert 108.59 G |
 
 ## 3. 后台任务
 
