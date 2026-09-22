@@ -4,7 +4,7 @@
 > 本 task 仅做 workload characterization；不新增规范外设计文档，实验设计统一保留在本文件。
 
 - **实验名称**：2026-09-15_phaseI_vision-quantization / task: vision-sparsity-compute
-- **状态**：running（VSC-0 sparsity valid / compute invalid；VSC-1 pending）
+- **状态**：done（VSC-0 sparsity valid / compute invalid；VSC-1 workload-fix ✅）
 - **负责人**：
 - **创建日期**：2026-09-22
 - **相关前序实验**：父实验 VLIN（Vision 72-Linear FP8）、Phase H sparsity、2026-09-15 sparsity-ratio-quickscan
@@ -130,7 +130,7 @@ Connector proj   ≈ 3.02 GFLOPs / sample_actions
 | 组 | config | 变量取值 | 固定项 | 说明 |
 |---|---|---|---|---|
 | VSC-0 | `vsc_vlin_fp8_task0_1ep.yaml` | 开启 sparsity collector；VLIN 量化不变 | VLIN scales、task0、seed1000 | **已跑：sparsity 有效；compute 因 legacy MatMul MAC accounting 作废** |
-| VSC-1 | `vsc1_vlin_fp8_task0_1ep_workloadfix.yaml` | 与 VSC-0 数值配置完全相同 | 同一 VLIN scales、task0、seed1000 | **只验证修复后的 workload MAC/FLOP；pending** |
+| VSC-1 | `vsc1_vlin_fp8_task0_1ep_workloadfix.yaml` | 与 VSC-0 数值配置完全相同 | 同一 VLIN scales、task0、seed1000 | **done：workload MAC/FLOP 修复验证通过；594.41 G / 86.5%** |
 
 ### 5.1 预期 Gate
 
@@ -200,7 +200,7 @@ Gate 4: component sparsity + compute summarization
 | config | 输出目录 | 状态 |
 |---|---|---|
 | `vsc_vlin_fp8_task0_1ep.yaml` | `outputs/2026-09-15_phaseI_vision-quantization/tasks/vision-sparsity-compute/vsc_vlin_fp8_task0_1ep/` | done：sparsity valid / compute invalid |
-| `vsc1_vlin_fp8_task0_1ep_workloadfix.yaml` | `outputs/2026-09-15_phaseI_vision-quantization/tasks/vision-sparsity-compute/vsc1_vlin_fp8_task0_1ep_workloadfix/` | pending |
+| `vsc1_vlin_fp8_task0_1ep_workloadfix.yaml` | `outputs/2026-09-15_phaseI_vision-quantization/tasks/vision-sparsity-compute/vsc1_vlin_fp8_task0_1ep_workloadfix/` | done（594.41 G / 86.5%） |
 
 核心原始产物：
 
