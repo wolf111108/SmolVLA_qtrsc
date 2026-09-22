@@ -474,6 +474,71 @@ def test_t11_output_code_not_mutated_by_dequant():
     )
 
 
+
+# ---------------------------------------------------------------------------
+# T12: MatMul workload MACs must use physical A/O shapes, not role-overwritten
+#      module_last_dims.  Regression for Phase-I VSC audit.
+# ---------------------------------------------------------------------------
+def test_t12_matmul_workload_uses_physical_shapes():
+    import torch.nn as nn
+
+    class FakeMatMul(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.module_id = "vlm.layer.0.qk"
+            self.layer_name = "qk"
+            self.layer_idx = 0
+            self.A_spec = QuantSpec(kind="fp", fmt="e4m3")
+            self.B_spec = QuantSpec(kind="fp", fmt="e4m3")
+            self.O_spec = QuantSpec(kind="fp", fmt="e4m3")
+            self.A_bit = "e4m3"
+            self.B_bit = "e4m3"
+            self.O_bit = "e4m3"
+
+    class FakeModel(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.mm = FakeMatMul()
+
+    m = QuantStatManager(tempfile.mkdtemp())
+    m.enable_sparsity()
+    spec = QuantSpec(kind="fp", fmt="e4m3")
+    ctx = _ctx(phase="prefill", flow_step=-1, attention_kind="self")
+
+    # Batched matmul:
+    #   A [1,2,3,4] @ B [1,2,4,5] -> O [1,2,3,5]
+    # Physical MACs/call = output_elements * K = 30 * 4 = 120.
+    A = torch.ones(1, 2, 3, 4)
+    B = torch.ones(1, 2, 4, 5)
+    O = torch.ones(1, 2, 3, 5)
+
+    for _ in range(2):
+        m.collect_quant_tensor(
+            module_id="vlm.layer.0.qk", tensor_role="A",
+            tensor_code=A, spec=spec, runtime_context=ctx,
+        )
+        m.collect_quant_tensor(
+            module_id="vlm.layer.0.qk", tensor_role="B",
+            tensor_code=B, spec=spec, runtime_context=ctx,
+        )
+        m.collect_quant_tensor(
+            module_id="vlm.layer.0.qk", tensor_role="O",
+            tensor_code=O, spec=spec, runtime_context=ctx,
+        )
+
+    out = os.path.join(tempfile.mkdtemp(), "workload.csv")
+    m.export_workload_csv(FakeModel(), out)
+    rows = _read_csv(out)
+    a_rows = [r for r in rows if r["tensor_role"] == "A"]
+    assert len(a_rows) == 1, a_rows
+    row = a_rows[0]
+    assert int(row["calls"]) == 2
+    assert int(float(row["M"])) == 6
+    assert int(float(row["K"])) == 4
+    assert int(float(row["N"])) == 5
+    assert abs(float(row["MACs"]) - 120.0) < 1e-9, row["MACs"]
+
+
 def _main():
     test_t1_no_outlier_reported_equals_native()
     test_t2_outlier_mask_native_correction()
@@ -486,6 +551,7 @@ def _main():
     test_t9_runtime_hook_flow_step_sequencing()
     test_t10_e4m3_significand_encoding()
     test_t11_output_code_not_mutated_by_dequant()
+    test_t12_matmul_workload_uses_physical_shapes()
     print("all sparsity accounting tests passed")
 
 
