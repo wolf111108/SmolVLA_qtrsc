@@ -4,7 +4,7 @@
 > 本文档由原中文模板与协作者英文设计文档 `full_vision_linear_integration.md`（VLIN 部分）合并翻译而成（2026-09-21）。
 
 - **实验名称**：2026-09-15_phaseI_vision-quantization
-- **状态**：running（V0 ✅ / V1 ✅ / VLIN ✅ / V2–V5 待跑）
+- **状态**：running（V0 ✅ / V1 ✅ / VLIN ✅ / V2 ✅ / V3 ✅ / V4–V5 待跑 / Vision sparsity-compute task ready）
 - **负责人**：
 - **创建日期**：2026-09-15
 - **相关前序实验**：`experiments/2026-09-10_phaseG_w4-root-cause/`（G6-A canonical FP8 scale 来源）、`experiments/2026-09-13_phaseH_accuracy-preserving-sparsity/`（H3 S0 baseline）
@@ -56,8 +56,8 @@
 | V1 | v1_connector_fp8.yaml / _goal.yaml | connector `pot_fp8_outlier`（A/W/O 全 E4M3） | vision=false；legacy VLM/Expert 也按 V1 配置重新 calibration | routing 289；Goal×100 = 81.0%；相对 H3 S0 89.0% 为 −8.0pp，但**不是严格 connector-only 单变量差值** |
 | VLIN smoke | vlin_full_vision_linear_fp8.yaml | Vision 72 Linear 全部 `pot_fp8_outlier`（A/W/O E4M3，outlier_ratio=0.01，per-site scale group） | VLM/Expert FP8 reuse G6-A（224 Linear + 64 MatMul）；Vision QK/PV 保持 SDPA；**connector 原精度** | routing **296 Linear / 64 MatMul**（connector 关闭故为 296 非 297）；action = reuse 288 / recalibrate 72；新增 72×3 = 216 个 Vision scale 文件 |
 | **VLIN 正式** | vlin_full_vision_linear_fp8_goal.yaml | 同上 | 同上 + `--skip-calibration` | Goal×100 = **80.0%（Δ−10.0pp vs G6-A）** |
-| V2 | （计划：`v2_vision_mlp_fp8*.yaml`，尚未创建） | Vision MLP `fc1/fc2` 24 个 Linear FP8 | G6-A 288 个 legacy quant sites 全 reuse；Vision attn projection / QK·PV / connector raw | 用于分解 VLIN 的 10pp 损失；覆盖 231.93 GFLOPs ≈ 54.2% Vision / 38.9% whole inference |
-| V3 | （计划：`v3_vision_attn_proj_fp8*.yaml`，尚未创建） | Vision `q/k/v/out_proj` 48 个 Linear FP8 | G6-A 288 个 legacy quant sites 全 reuse；Vision MLP / QK·PV / connector raw | 用于分解 VLIN 的 10pp 损失；覆盖 115.96 GFLOPs ≈ 27.1% Vision / 19.5% whole inference |
+| V2 | `v2_vision_mlp_fp8.yaml` / `_goal.yaml` | Vision MLP `fc1/fc2` 24 个 Linear FP8 | G6-A 288 个 legacy quant sites 全 reuse；Vision attn projection / QK·PV / connector raw | **done：84.0%，L_MLP=6pp**；覆盖 231.93 GFLOPs ≈ 54.2% Vision / 38.9% whole inference |
+| V3 | `v3_vision_attn_proj_fp8.yaml` / `_goal.yaml` | Vision `q/k/v/out_proj` 48 个 Linear FP8 | G6-A 288 个 legacy quant sites 全 reuse；Vision MLP / QK·PV / connector raw | **done：85.0%，L_Attn=5pp**；覆盖 115.96 GFLOPs ≈ 27.1% Vision / 19.5% whole inference |
 | V4 | （待建） | Vision QK/PV | V2/V3 结论确定后再进入 | **前置：sdpa → eager 等价性 gate** |
 | V5 | （可选） | patch embed / 其他 Vision 非 Linear op | 前述实验完成后再决定 | 不作为当前优先级 |
 
@@ -85,9 +85,29 @@ L_all  = 90 - 80 = 10
 interaction = L_all - (L_MLP + L_Attn)
 ```
 
-若 `interaction≈0`，则两部分损失近似可加；若明显偏离 0，则需要进一步检查两者在 visual representation 上的耦合。**V2/V3 完成前不推进 Vision QK/PV（V4）**。
+V2/V3 已完成：`L_MLP=6pp`、`L_Attn=5pp`、`L_all=10pp`，因此 `interaction=-1pp≈0`，两部分损失在当前 100-ep 分辨率下近似可加。该结果说明 Vision Linear 的 FP8 适配性总体可接受，后续在进入 V4 QK/PV 前先补齐加入 Vision 后的 sparsity / compute workload characterization。
 
 > 运行时间 `eval_s` 只用于记录 rollout 成本，**不得直接解释为 FP8 硬件加速比**：当前框架是 fake/simulated quantization，包含量化/反量化与 outlier side path，且 SR 不同会改变 episode 是否跑满 300 steps。真实速度收益需后续用实际低精度 kernel / 硬件路径单独测量。
+
+### 5.2 Vision sparsity + compute task（2026-09-22）
+
+已按 `experiments/README.md §7` 创建标准子实验：
+
+`tasks/vision-sparsity-compute/`
+
+该 task 不创建额外设计文档，完整设计统一放在：
+
+`tasks/vision-sparsity-compute/docs/experiment_setup.md`
+
+目标是在 **VLIN 完整 72-Linear FP8** 上统计：
+
+- Vision / VLM / Expert 的 runtime **native element sparsity**
+- Vision / VLM / Expert 的 runtime **native bit sparsity**
+- QuantizedLinear static weight element / bit sparsity
+- per-`sample_actions()` MAC/FLOP 组成
+- 当前量化 major-op FLOP coverage
+
+统计明确区分量化范围与 raw 范围：Vision 72 Linear 纳入 sparsity；Vision SDPA QK/PV 与 connector 保持 raw，仅纳入 compute accounting，不进入 quantized sparsity denominator。Primary 只跑 Goal task0 × 1ep，并强制 `--skip-calibration` 复用 VLIN 已有 scales。
 
 ## 6. 运行命令
 
@@ -121,6 +141,7 @@ RUN_GOAL=1 bash experiments/2026-09-15_phaseI_vision-quantization/scripts/run_fu
 | v1_connector_fp8_goal.yaml | outputs/2026-09-15_phaseI_vision-quantization/v1_connector_fp8_goal/ | done |
 | vlin_full_vision_linear_fp8.yaml | outputs/2026-09-15_phaseI_vision-quantization/vlin_full_vision_linear_fp8/ | done |
 | vlin_full_vision_linear_fp8_goal.yaml | outputs/2026-09-15_phaseI_vision-quantization/vlin_full_vision_linear_fp8_goal/ | done（SR 80.0%） |
+| task: vision-sparsity-compute / vsc_vlin_fp8_task0_1ep.yaml | outputs/2026-09-15_phaseI_vision-quantization/tasks/vision-sparsity-compute/vsc_vlin_fp8_task0_1ep/ | pending |
 
 VLIN scale 目录：`scales/2026-09-15_phaseI_vision-quantization/vlin_full_vision_linear_fp8`（1080 文件 = 864 canonical 复制 + 216 新增）。运行日志：`vlin_full_run.log` / `vlin_goal100.log`（第 1 次尝试被 SIGTERM，已归档 `vlin_goal100.attempt1_terminated.log`）。
 
