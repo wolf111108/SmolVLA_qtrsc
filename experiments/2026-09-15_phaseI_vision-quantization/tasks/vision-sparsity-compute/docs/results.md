@@ -31,14 +31,14 @@ VSC-0 于 2026-09-22 一次跑通，**稀疏度链路有效**：360 个 quant mo
 
 | component | runtime rows | runtime elem sparsity | runtime bit sparsity | weight rows | weight elem sparsity | weight bit sparsity |
 |---|---:|---:|---:|---:|---:|---:|
-| **Vision prefill** | 144 | **4.08%** | **41.97%** | 72 | 5.6e-6 | 41.95% |
-| VLM prefill | 320 | 1.92% | 41.69% | 112 | 5.5e-6 | 40.86% |
-| Expert denoise（10 step） | 3200 | 3.02% | 42.15% | 112 | 3.3e-6 | 42.58% |
-| all_quantized pooled | 3664 | 3.44% | 42.01% | 296 | 4.9e-6 | 41.63% |
+| **Vision prefill** | 144 | **4.08%** | **41.97%** | 72 | 5.6e-6 ratio（≈0.00056%） | 41.95% |
+| VLM prefill | 320 | 1.92% | 41.69% | 112 | 5.5e-6 ratio（≈0.00055%） | 40.86% |
+| Expert denoise（10 step） | 3200 | 3.02% | 42.15% | 112 | 3.3e-6 ratio（≈0.00033%） | 42.58% |
+| all_quantized pooled | 3664 | 3.44% | 42.01% | 296 | 4.9e-6 ratio（≈0.00049%） | 41.63% |
 
 **要点**
 
-- **Vision runtime element sparsity（4.08%）≈ VLM（1.92%）的 2.1 倍、Expert（3.02%）的 1.35 倍**：Vision FP8 激活中天然零元素最多，对 zero-skipping 类加速最友好。
+- **Vision runtime element sparsity（4.08%）≈ VLM（1.92%）的 2.1 倍、Expert（3.02%）的 1.35 倍**：Vision 在三者中相对最适合 element zero-skipping；但绝对稀疏度仍只有约 4%，不能据此推导显著实际 speedup。
 - 三 component 的 E4M3 significand bit sparsity 高度一致（40.9–42.6%），与 Phase H 结论同源（INT8 runtime ~72.9%、INT16 ~62.8%不可直接对比：口径不同，此处为 E4M3 significand zero-bit metric）。
 - static weight element sparsity ≈ 0（4.9e-6）：量化后权重无显著零元素（native 口径，未计入 outlier protection 的 artificial zero）。
 
@@ -46,7 +46,7 @@ VSC-0 于 2026-09-22 一次跑通，**稀疏度链路有效**：360 个 quant mo
 
 | component | block | quantized | GMAC/sample_actions | GFLOPs/sample_actions | 占 audited major ops |
 |---|---|---|---:|---:|---:|
-| vision | Vision 72 Linear | ✅ | 173.95 | **347.89** | 58.53% |
+| vision | Vision 72 Linear | ✅ | 173.95 | **347.89** | **58.53%** |
 | vision | Vision SDPA QK | ❌ raw | 19.33 | 38.65 | 6.50% |
 | vision | Vision SDPA PV | ❌ raw | 19.33 | 38.65 | 6.50% |
 | connector | Connector projection | ❌ raw | 1.51 | 3.02 | 0.51% |
@@ -54,62 +54,50 @@ VSC-0 于 2026-09-22 一次跑通，**稀疏度链路有效**：360 个 quant mo
 | expert | Expert quantized（10 denoise） | ✅ | 54.29 | **108.59** | 18.27% |
 | **TOTAL** | **audited major ops** | **86.5% 覆盖** | 297.21 | **594.41** | 100% |
 
-**要点（VSC-1 vs VSC-0 invalid 值 vs 手册粗估）**
-
-| 项 | VSC-0（INVALID） | **VSC-1（修正）** | 手册 §0 粗估 | 偏差 |
-|---|---:|---:|---:|---|
-| VLM | 110.04 G | **57.60 G** | 57.6 G | **0.0%** |
-| Expert | 150.24 G | **108.59 G** | 107.5 G | **+1.0%** |
-| TOTAL | 688.50 G | **594.41 G** | 595.7 G | **−0.2%** |
-| coverage | 88.3% | **86.5%** | — | — |
-
-- 修正后的 VLM/Expert/total 与手册 §0 粗估几乎完全一致（≤1%），三条独立路径（V0 架构公式 / 手册粗估 / VSC-1 runtime 实测）互验闭合。
-- Vision 72 Linear = 347.89 G 与 VSC-0 相同（Linear path 不受 bug 影响），且与 V0 公式一致。
-- 稀疏度数字与 VSC-0 逐位一致（4.08/1.92/3.02% elem、~42% bit），证实修复只影响 MatMul MAC shape accounting。
-
-VSC-0 初始汇总曾得到：
-
-```text
-VLM quantized major ops    110.04 GFLOPs
-Expert quantized major ops 150.24 GFLOPs
-audited total              688.50 GFLOPs
-quantized coverage          88.3%
-```
-
-**以上四项均不得继续引用。**
-
-根因位于旧版 `src/vla_tcs2/quant/stat_manager.py::export_workload_csv()`：`collect_quant_tensor()` 对 MatMul 的 A/B/O 三个 role 都写入同一个 `module_last_dims[module_id]`，而 O 最后到达，因此 exporter 最终把 **O tensor shape 当成 MatMul operand K/N**。虽然 task summarizer 已经做到“一物理算子只取 A role”，但 A row 的 `MACs` 本身已经由错误的 K/N 生成，仍然会污染 VLM/Expert QK/PV compute。
-
-本次审计已把 core accounting 改成：
+量化 major-op：
 
 [
-oxed{	ext{MACs}_{
-m matmul}=	ext{numel}(O)	imes K,quad K=A.shape[-1]}
+347.89 + 57.60 + 108.59 = 514.08 {m GFLOPs}
 ]
 
-并按 `(module_id, phase, flow_step, attention_kind)` 累计物理 MatMul call。新 exporter 给 MatMul 行写入：
+因此：
 
-```text
-MAC_semantics = matmul_physical_exact_v2
-```
+[
+rac{514.08}{594.41}=oxed{86.5%}
+]
 
-summarizer 会拒绝旧 workload CSV，避免旧数据再次被误用。
+raw audited major-op 约为 **13.5%**，其中 Vision QK/PV = **77.31 G ≈ 13.0%**，connector = **3.02 G ≈ 0.5%**。
 
-**VSC-0 中仍然有效的 compute 子项：**
+**VSC-1 与 VSC-0 / 手册 sanity check**
 
-| block | GFLOPs/sample_actions | 状态 | 原因 |
-|---|---:|---|---|
-| Vision 72 Linear | **347.89** | ✅ valid | Linear MAC path不依赖 `module_last_dims`；且与 V0 公式完全一致 |
-| ## 4. 结论
+| 项 | VSC-0（INVALID） | **VSC-1（修正）** | 手册 §0 粗估 | 说明 |
+|---|---:|---:|---:|---|
+| VLM | 110.04 G | **57.60 G** | 57.6 G | 一致 |
+| Expert | 150.24 G | **108.59 G** | 107.5 G | +1.0% |
+| TOTAL | 688.50 G | **594.41 G** | 595.7 G | −0.2% |
+| coverage | 88.3% | **86.5%** | — | VSC-1 为有效值 |
 
-1. **稀疏度结果有效**：Vision/VLM/Expert runtime native element sparsity分别为 **4.08% / 1.92% / 3.02%**，E4M3 significand bit sparsity均约 **42%**。Vision 的 element sparsity相对最高，但绝对值仍只有约 4%，因此只说明“相对更稀疏”，**不能直接推导出显著 zero-skipping speedup**。
-2. **static weight element sparsity接近 0**：这排除了传统“整元素为零”的 weight zero-skipping收益；但 weight bit sparsity仍约 41–43%，因此**不能写成‘权重侧稀疏加速不可行’**——bit-serial / bit-skip 类硬件仍可能利用 bit-level sparsity。
-3. **VSC-0 compute headline 无效**：688.50 GFLOPs 与 88.3% coverage 因 MatMul shape accounting bug 作废。当前仅 Vision 72 Linear = 347.89 G、Vision QK/PV = 77.31 G、connector = 3.02 G 可安全引用。
-4. routing / sparsity coverage Gate 本身仍 PASS：manifest 360、Vision Linear 72、VLM/Expert 112+32、weight rows 296、Expert flow_step 0–9 都是有效结构证据。
+VSC-1 与旧手册粗估在数值上高度一致，可作为强 sanity check；但两者统计 scope 并非完全相同——VSC-1 是 **audited major ops**，明确排除 patch embed / LayerNorm / softmax / GELU / pixel-shuffle bookkeeping，因此不应描述为严格相同口径的“独立三路证明”。
+
+VSC-0 的 688.50 G / 88.3% 已永久标记为 invalid。根因是旧版 `export_workload_csv()` 对 MatMul A/B/O 共用 role-agnostic `module_last_dims`，O role 最终覆盖前两者。当前实现改为：
+
+[
+oxed{mathrm{MACs}_{mathrm{MatMul}}=operatorname{numel}(O)	imes A.shape[-1]}
+]
+
+并按 `(module_id, phase, flow_step, attention_kind)` 累计 physical MatMul call；新 workload 行必须带 `MAC_semantics=matmul_physical_exact_v2`，summarizer 会拒绝 legacy 数据。
+
+## 4. 结论
+
+1. **稀疏度画像已闭环**：Vision/VLM/Expert runtime native element sparsity分别为 **4.08% / 1.92% / 3.02%**，E4M3 significand bit sparsity均约 **42%**。Vision element sparsity相对最高，但绝对值仍低，因此 element zero-skipping 的空间有限。
+2. **static weight element sparsity几乎为零**（pooled ratio 4.9e-6，约 0.00049%），传统 weight element-zero skipping 基本没有收益；但 weight bit sparsity仍约 **41–43%**，bit-serial / bit-skip 路径仍值得研究。
+3. **compute accounting 已经由 VSC-1 修正闭环**：audited major-op total = **594.41 GFLOPs/sample_actions**，其中 **514.08 G（86.5%）** 已进入当前 FP8 quantized scope。Vision 72 Linear 单独占 **347.89 G / 58.53%**，是最主要的已量化算力块。
+4. 当前 raw audited major ops 为约 **13.5%**：Vision QK/PV 约 **13.0%**，connector 约 **0.5%**。若进入 V4，理论上主要针对的是 QK/PV 这 13.0%，而不是全部剩余 13.5%。
+5. routing / sparsity coverage Gate 与 compute Gate 均闭合：manifest 360、Vision Linear 72、VLM/Expert 112+32、weight rows 296、Expert flow_step 0–9、T12 regression 通过，VSC-1 summarizer GATE PASS。
 
 ## 5. 问题与后续
 
-- ~~第一优先级：跑 VSC-1 workload-fix rerun~~ ✅ 已完成（2026-09-22）：VLM = 57.60 G、Expert = 108.59 G、total = 594.41 G、coverage = 86.5%，与手册 §0 粗估互验闭合（≤1%）。
+- **VSC-1 workload-fix rerun 已完成**：VLM = 57.60 G、Expert = 108.59 G、audited total = 594.41 G、coverage = 86.5%；compute instrumentation 问题已闭环。
 - V4（Vision QK/PV，覆盖剩余 13.0% audited FLOPs）现在具备决策依据；仍需 sdpa→eager equivalence gate。
 - 可继续用 VSC-0/VSC-1 的 sparsity CSV 做 per-operator 稀疏度分析，因为本次 bug 只影响 workload MAC shape accounting，不影响 native sparsity counters。
 - 硬件方向启示（结合准确 FLOPs 与稀疏度）：Vision 是最大算力块（58.5%）且 elem sparsity 最高（4.08%，但绝对值仍低）——element zero-skipping 空间有限；三 component ~42% 的 bit-level sparsity 更值得 bit-serial/bit-skip 类硬件探索。
