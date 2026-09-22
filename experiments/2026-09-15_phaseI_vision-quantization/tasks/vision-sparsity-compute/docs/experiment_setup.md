@@ -4,7 +4,7 @@
 > 本 task 仅做 workload characterization；不新增规范外设计文档，实验设计统一保留在本文件。
 
 - **实验名称**：2026-09-15_phaseI_vision-quantization / task: vision-sparsity-compute
-- **状态**：draft
+- **状态**：running（VSC-0 sparsity valid / compute invalid；VSC-1 pending）
 - **负责人**：
 - **创建日期**：2026-09-22
 - **相关前序实验**：父实验 VLIN（Vision 72-Linear FP8）、Phase H sparsity、2026-09-15 sparsity-ratio-quickscan
@@ -129,7 +129,8 @@ Connector proj   ≈ 3.02 GFLOPs / sample_actions
 
 | 组 | config | 变量取值 | 固定项 | 说明 |
 |---|---|---|---|---|
-| VSC-0 | `vsc_vlin_fp8_task0_1ep.yaml` | 开启 sparsity collector；VLIN 量化不变 | VLIN scales、task0、seed1000 | Primary：1ep 统计 Vision/VLM/Expert sparsity + compute |
+| VSC-0 | `vsc_vlin_fp8_task0_1ep.yaml` | 开启 sparsity collector；VLIN 量化不变 | VLIN scales、task0、seed1000 | **已跑：sparsity 有效；compute 因 legacy MatMul MAC accounting 作废** |
+| VSC-1 | `vsc1_vlin_fp8_task0_1ep_workloadfix.yaml` | 与 VSC-0 数值配置完全相同 | 同一 VLIN scales、task0、seed1000 | **只验证修复后的 workload MAC/FLOP；pending** |
 
 ### 5.1 预期 Gate
 
@@ -198,7 +199,8 @@ Gate 4: component sparsity + compute summarization
 
 | config | 输出目录 | 状态 |
 |---|---|---|
-| `vsc_vlin_fp8_task0_1ep.yaml` | `outputs/2026-09-15_phaseI_vision-quantization/tasks/vision-sparsity-compute/vsc_vlin_fp8_task0_1ep/` | pending |
+| `vsc_vlin_fp8_task0_1ep.yaml` | `outputs/2026-09-15_phaseI_vision-quantization/tasks/vision-sparsity-compute/vsc_vlin_fp8_task0_1ep/` | done：sparsity valid / compute invalid |
+| `vsc1_vlin_fp8_task0_1ep_workloadfix.yaml` | `outputs/2026-09-15_phaseI_vision-quantization/tasks/vision-sparsity-compute/vsc1_vlin_fp8_task0_1ep_workloadfix/` | pending |
 
 核心原始产物：
 
@@ -224,4 +226,5 @@ compute_summary.csv
 - `CUDA_VISIBLE_DEVICES` 在 runner 中主动 unset，避免 robosuite EGL assertion 与 conda 内 `MUJOCO_EGL_DEVICE_ID` 冲突。
 - runtime sparsity 只描述执行到的**量化 tensor code**；raw Vision SDPA/connector 不得被悄悄纳入 denominator。
 - `compute_summary.csv` 是理论/工作量核算，不是 measured latency；不得从 FLOPs 或 bit sparsity 直接声明实际 speedup。
+- **VSC-0 compute 已判 invalid**：旧 exporter 对 MatMul 使用 role-agnostic `module_last_dims`，A/B/O 覆盖导致 K/N 错误。VSC-1 必须看到 `MAC_semantics=matmul_physical_exact_v2` 才允许生成 compute headline。
 - 如 1ep 结果需要稳定性验证，可在**同一 task 内新增 config 变体**扩到 3ep/10ep，不另建顶层实验。
