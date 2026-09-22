@@ -4,7 +4,7 @@
 > 本文档由原中文模板与协作者英文设计文档 `full_vision_linear_integration.md`（VLIN 部分）合并翻译而成（2026-09-21）。
 
 - **实验名称**：2026-09-15_phaseI_vision-quantization
-- **状态**：running（V0 ✅ / V1 ✅ / VLIN ✅ / V2 ✅ / V3 ✅ / V4–V5 待跑 / Vision sparsity-compute task ready）
+- **状态**：running（V0 ✅ / V1 ✅ / VLIN ✅ / V2 ✅ / V3 ✅ / V4–V5 待跑 / Vision sparsity-compute：VSC-0 sparsity valid / compute invalid；VSC-1 pending）
 - **负责人**：
 - **创建日期**：2026-09-15
 - **相关前序实验**：`experiments/2026-09-10_phaseG_w4-root-cause/`（G6-A canonical FP8 scale 来源）、`experiments/2026-09-13_phaseH_accuracy-preserving-sparsity/`（H3 S0 baseline）
@@ -107,7 +107,7 @@ V2/V3 已完成：`L_MLP=6pp`、`L_Attn=5pp`、`L_all=10pp`，因此 `interactio
 - per-`sample_actions()` MAC/FLOP 组成
 - 当前量化 major-op FLOP coverage
 
-统计明确区分量化范围与 raw 范围：Vision 72 Linear 纳入 sparsity；Vision SDPA QK/PV 与 connector 保持 raw，仅纳入 compute accounting，不进入 quantized sparsity denominator。Primary 只跑 Goal task0 × 1ep，并强制 `--skip-calibration` 复用 VLIN 已有 scales。
+统计明确区分量化范围与 raw 范围：Vision 72 Linear 纳入 sparsity；Vision SDPA QK/PV 与 connector 保持 raw，仅纳入 compute accounting，不进入 quantized sparsity denominator。Primary 只跑 Goal task0 × 1ep，并强制 `--skip-calibration` 复用 VLIN 已有 scales。首轮 VSC-0 的 sparsity 数据有效，但复核发现旧 `workload.csv` MatMul MAC shape accounting 错误；当前已修复 exporter，并以同一 task 内 VSC-1 变体重跑，不覆盖 VSC-0 记录。
 
 ## 6. 运行命令
 
