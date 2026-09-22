@@ -1,0 +1,113 @@
+# Phase QS4 — SMMM bit-sparsity quickscan (new S|MMM metric)
+#
+# Purpose: re-measure runtime/weight bit sparsity under the NEW
+# sign+mantissa (S MMM, no hidden leading 1) metric, replacing the old
+# 1.MMM (hidden-bit) metric used by the 2026-09-15 quickscan.
+#
+# Scope:
+#   - FP8 PoT (pot_fp8_outlier) full-model quantization, identical to
+#     q3_fp8_po2 of the 2026-09-15 quickscan (VLM+Expert Linear/QK/PV)
+#   - libero_goal task0 x 1 episode, sparsity characterization only
+#     (no accuracy claim)
+#   - reuses the same canonical scales as q3 (copied + verified), with
+#     --skip-calibration enforced by the runner
+#
+# Expected routing: 288 quantized modules (224 Linear + 64 MatMul).
+
+output_dir: outputs/2026-09-22_quickscan_smmm-bit-sparsity/s4_fp8_smmm
+
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+
+quantization:
+  enabled: true
+  mode: quant_forward
+  method: pot_fp8_outlier
+  scale_dir: scales/2026-09-22_quickscan_smmm-bit-sparsity/s4_fp8_smmm
+
+  quantize_matmul: true
+  matmul_scale_granularity: per_site
+  linear_scale_granularity: per_site
+  outlier_ratio: 0.01
+
+  calibration_policy:
+    default: reuse
+    layer_policy:
+      q_proj: reuse
+      k_proj: reuse
+      v_proj: reuse
+      o_proj: reuse
+      gate_proj: reuse
+      up_proj: reuse
+      down_proj: reuse
+      qk_matmul: reuse
+      pv_matmul: reuse
+    per_layer_policy: {}
+
+  q_proj: &linear_fp8
+    a_bit: e4m3
+    w_bit: e4m3
+    o_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  k_proj: *linear_fp8
+  v_proj: *linear_fp8
+  o_proj: *linear_fp8
+  gate_proj: *linear_fp8
+  up_proj: *linear_fp8
+  down_proj: *linear_fp8
+
+  qk_matmul: &matmul_fp8
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  pv_matmul: *matmul_fp8
+
+  vision:
+    enabled: false
+  connector:
+    enabled: false
+
+  linear:
+    enabled: true
+    include:
+      - vlm.*
+      - expert.*
+    exclude: []
+
+  weight_quant_granularity: per_tensor
+  weight_group_size: null
+
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8
+  batch_size: 8
+  frame_stride: 4
+  seed: 42
+
+evaluation:
+  env:
+    type: libero
+    task: libero_goal
+    max_parallel_tasks: 1
+    task_ids:
+      - 0
+  n_episodes: 1
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2

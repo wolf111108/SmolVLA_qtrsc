@@ -364,7 +364,7 @@ def test_t9_runtime_hook_flow_step_sequencing():
 
 
 # ---------------------------------------------------------------------------
-# T10: E4M3 significand encoding (+0/-0/subnormal hidden-bit semantics)
+# T10: E4M3 sign+mantissa encoding (S MMM semantics, no hidden bit)
 # ---------------------------------------------------------------------------
 def test_t10_e4m3_significand_encoding():
     m = QuantStatManager(tempfile.mkdtemp())
@@ -382,12 +382,12 @@ def test_t10_e4m3_significand_encoding():
 
     assert width == 4
     assert sig.tolist() == [
-        0b0000,  # +0
-        0b0000,  # -0 (sign must NOT leak)
-        0b1000,  # +1.0 (hidden 1)
-        0b1000,  # -1.0 (sign-agnostic)
-        0b0001,  # +subnormal (NO hidden 1)
-        0b0001,  # -subnormal (NO hidden 1, sign-agnostic)
+        0b0000,  # +0 -> S=0, MMM=000
+        0b1000,  # -0 -> S=1, MMM=000
+        0b0000,  # +1.0 -> S=0, MMM=000 (1.0x2^0, mant=0)
+        0b1000,  # -1.0 -> S=1, MMM=000
+        0b0001,  # +subnormal -> S=0, MMM=001
+        0b1001,  # -subnormal -> S=1, MMM=001
     ]
 
 

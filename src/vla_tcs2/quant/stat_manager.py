@@ -1385,42 +1385,35 @@ class QuantStatManager:
         fmt: str,
     ) -> Tuple[torch.Tensor, int]:
         """
-        Extract sign+mantissa (with hidden leading 1) from a raw bit
-        pattern viewed as int, per format e5m10 / e4m3 / e2m1.
+        Extract sign+mantissa (S MMM, sign bit prepended, NO hidden
+        leading 1) from a raw bit pattern viewed as int, per format
+        e5m10 / e4m3 / e2m1.
 
         Returns:
-            sm_codes: same shape, low `width` bits valid
+            sm_codes: same shape, low `width` bits valid (S | MMM)
             width:    number of valid sm bits
         """
         fmt = (fmt or "").lower().strip()
 
         if fmt == "e5m10":
-            sm, _exp, normal = self._unpack_sm_exp(
-                raw_int, sign_shift=15, exp_bits=5, mant_bits=10,
-            )
+            sign = (raw_int >> 15) & 0x1
+            mant = raw_int & ((1 << 10) - 1)
+            sm = (sign << 10) | mant
             width = 11
-            mant_bits = 10
         elif fmt == "e4m3":
-            sm, _exp, normal = self._unpack_sm_exp(
-                raw_int, sign_shift=7, exp_bits=4, mant_bits=3,
-            )
+            sign = (raw_int >> 7) & 0x1
+            mant = raw_int & 0x7
+            sm = (sign << 3) | mant
             width = 4
-            mant_bits = 3
         elif fmt == "e2m1":
-            sm, _exp, normal = self._unpack_sm_exp(
-                raw_int, sign_shift=3, exp_bits=2, mant_bits=1,
-            )
+            sign = (raw_int >> 3) & 0x1
+            mant = raw_int & 0x1
+            sm = (sign << 1) | mant
             width = 2
-            mant_bits = 1
         else:
             raise ValueError(f"Unsupported fmt in _extract_sm_from_raw: {fmt}")
 
-        # Add hidden leading 1 ONLY for normal numbers (exp != 0).
-        # Subnormals (exp==0, mant!=0) and zeros stay without hidden bit.
-        hidden = normal.to(torch.int64) << mant_bits
-        sm_full = sm | hidden
-
-        return sm_full, width
+        return sm, width
 
     def _fp_tensor_to_mantissa_fixed_chunk(
         self,
