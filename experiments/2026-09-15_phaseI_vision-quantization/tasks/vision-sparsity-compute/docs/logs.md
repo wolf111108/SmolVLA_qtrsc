@@ -3,21 +3,21 @@
 > 本文档记录实验**运行进度与状态**。运行日志按时间正序追加。
 
 - **实验名称**：2026-09-15_phaseI_vision-quantization / task: vision-sparsity-compute
-- **状态**：running（VSC-0 sparsity ✅ / compute ❌；VSC-1 pending）
+- **状态**：done（VSC-0 sparsity ✅ / compute ❌；**VSC-1 workload-fix ✅ Gate 全 PASS**）
 - **最后更新**：2026-09-22
 
 ---
 
 ## 1. 当前状态
 
-VSC-0 rollout 已完成；**sparsity Gate 有效，但 compute Gate 经复核判定存在 instrumentation bug**。VSC-1 workload-fix rerun 待运行。
+VSC-1 workload-fix rerun 已完成（2026-09-22）：Gate 全 PASS，修正后的 compute summary 已落盘。
 
 | 阶段 | 状态 | 完成时间 | 备注 |
 |---|---|---|---|
 | config / runner / summarizer | ✅ ready | 2026-09-22 | 复用 VLIN scales；1ep workload characterization |
 | VSC-0 run | ⚠ partial-valid | 2026-09-22 | sparsity CSV 有效；compute summary 因 MatMul MAC shape bug 作废 |
 | workload exporter fix | ✅ merged | 2026-09-22 | MatMul MAC 改为 `O.numel() × A.shape[-1]`；新增 `MAC_semantics=matmul_physical_exact_v2` + T12 regression |
-| VSC-1 rerun | ⏳ pending | — | 同一 VLIN scales / task0 / seed1000，只重跑 workload characterization |
+| VSC-1 rerun | ✅ done | 2026-09-22 | Gate 全 PASS（T12 回归 12 passed）；total 594.41 G / coverage 86.5%；稀疏度与 VSC-0 一致 |
 
 ## 2. 运行日志
 
@@ -63,3 +63,4 @@ export_workload_csv()   -> reads the final O-derived dims as K/N
 | 2026-09-22 | 创建 task；继承 Phase H / quickscan 的 native sparsity 与 skip-calibration 约束 | |
 | 2026-09-22 | 回填 VSC-0 首轮运行记录 | |
 | 2026-09-22 | **P0 compute audit**：sparsity 结果保留有效；688.50 G / 88.3% 作废。修复 MatMul physical-MAC accounting，新增 T12 + VSC-1 rerun | |
+| 2026-09-22 | VSC-1 rerun（PID 2361921，nohup `vsc1_run.log`）：pytest 12 passed（含 T12）→ coverage PASS → rollout task0×1ep → summarize **GATE: PASS**；输出 `vsc1_vlin_fp8_task0_1ep_workloadfix/{compute_summary,sparsity_compute_summary,sparsity_by_operator}.csv`；状态改 done | |
