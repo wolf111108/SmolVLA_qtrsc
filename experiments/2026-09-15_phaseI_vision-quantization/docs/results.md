@@ -301,10 +301,10 @@ $$
 
 ## 5. 问题与后续
 
-- **Vision sparsity-compute 审计**：VSC-0 的 native sparsity 结果有效，但旧 `workload.csv` 对 MatMul 使用被 A/B/O 覆盖的 role-agnostic shape，故首轮 688.50 GFLOPs / 88.3% coverage 作废。core 已修复为 `MACs = O.numel() × A.shape[-1]`，VSC-1 同条件 rerun pending。
+- **Vision sparsity-compute 已闭环**：VSC-0 native sparsity 结果有效，首轮 688.50 G / 88.3% 因 MatMul shape bug 作废；core 已修复为 `MACs = O.numel() × A.shape[-1]`，VSC-1 同条件重跑得到 **594.41 GFLOPs/sample_actions、86.5% quantized major-op coverage**。Vision/VLM/Expert runtime element sparsity为 **4.08% / 1.92% / 3.02%**，bit sparsity均约 42%。
 - **V2/V3 归因已完成**：V2=84%（L_MLP=6pp）、V3=85%（L_Attn=5pp）、VLIN=80%（L_all=10pp），`interaction=-1pp≈0`，说明 Vision MLP 与 attention projection 的 FP8 损失在当前 100-ep 分辨率下近似可加。当前没有证据支持只保护某一类 Vision Linear 就能完全消除精度代价。
-- **下一优先级改为加入 Vision 后的 workload characterization**：已按规范新增 `tasks/vision-sparsity-compute/`，完整设计只写在该 task 的 `docs/experiment_setup.md`。Primary 统计 Vision/VLM/Expert 的 native element/bit sparsity、static weight sparsity，以及 per-`sample_actions()` MAC/FLOP 与 quantized major-op coverage。
-- **V4 QK/PV 暂缓**：先完成 sparsity / compute 画像，再决定是否值得为 SDPA→eager equivalence 与 Vision QK/PV 量化投入额外工程工作。
+- **Vision workload characterization 已完成**：详见 `tasks/vision-sparsity-compute/`。当前 audited major-op 中，Vision 72 Linear 占 **58.53%**，VLM 9.69%，Expert 18.27%，raw Vision QK/PV 13.0%，connector 0.5%。
+- **V4 QK/PV 现在已有算力依据**：其目标约占 audited major ops **13.0%**；是否推进仍取决于 sdpa→eager equivalence gate 与预计精度收益。
 - **V1 结果保留但降级为参考证据**：其 raw wrapper bit-exact 结论有效；89→81 的 8pp 因 legacy scales 也重新 calibration，不再写成严格 connector-only 净损失。
 - **性能评估与精度评估分离**：`eval_s` 不作为 FP8 speedup 证据；真实加速需后续在实际低精度 kernel / 硬件执行路径下单独测量。
 
