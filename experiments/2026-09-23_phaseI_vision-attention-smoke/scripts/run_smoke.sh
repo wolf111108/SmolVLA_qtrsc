@@ -5,7 +5,7 @@ EXP=experiments/2026-09-23_phaseI_vision-attention-smoke
 OUT=outputs/2026-09-23_phaseI_vision-attention-smoke
 CFG="$EXP/configs/vision_qkpv_fp8.yaml"
 # Preserve previous evidence; rerun only after archiving these experiment outputs/scales.
-if [[ -e "$OUT/run.log" || -d scales/2026-09-23_phaseI_vision-attention-smoke/vision_qkpv_fp8 ]]; then
+if [[ -e "$OUT/run.log" || -e "$OUT/preflight.json" || -d scales/2026-09-23_phaseI_vision-attention-smoke/vision_qkpv_fp8 ]]; then
   echo 'Existing run/scales found; archive them before rerunning.' >&2
   exit 1
 fi

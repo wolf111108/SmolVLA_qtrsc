@@ -1,7 +1,7 @@
 """Three-way checkpoint attention diagnostic; write evidence before failing.
 
-No tolerance relaxation: adapter/eager correctness and SDPA/backend drift are
-separate gates. A failed backend gate still blocks calibration and rollout.
+No tolerance relaxation: adapter/eager correctness is a hard gate.
+Finite backend drift is diagnostic only when explicitly enabled by the smoke config.
 """
 import copy
 import importlib.metadata
@@ -62,13 +62,18 @@ def original_forward(attn, backend, x, mask):
 
 def main():
     cfg = yaml.safe_load(Path(sys.argv[1]).read_text())
+    require_backend = cfg.get('preflight', {}).get('require_backend_equivalence', True)
+    if not isinstance(require_backend, bool):
+        raise ValueError('preflight.require_backend_equivalence must be a YAML boolean')
     out = Path(cfg['output_dir']).parent / 'preflight.json'
     out.parent.mkdir(parents=True, exist_ok=True)
     if out.exists():
         raise FileExistsError(f'Archive previous evidence before rerunning: {out}')
     report = {'status': 'RUNNING', 'seed': 1000, 'calls': {}, 'comparisons': [],
               'errors': [], 'gates': {}, 'torch': torch.__version__,
-              'cuda': torch.version.cuda}
+              'cuda': torch.version.cuda, 'schema_version': 2,
+              'require_backend_equivalence': require_backend,
+              'eligible_for_smoke': False, 'warnings': []}
     handles = []
 
     def save():
@@ -141,16 +146,34 @@ def main():
             **{name: complete and all(r[name]['passed'] for r in report['comparisons'])
                for name in ('adapter_vs_eager', 'eager_vs_sdpa', 'adapter_vs_sdpa')},
         }
-        report['status'] = 'PASS' if all(report['gates'].values()) else 'FAIL'
+        pairs = ('adapter_vs_eager', 'eager_vs_sdpa', 'adapter_vs_sdpa')
+        report['gates']['finite'] = complete and all(
+            r[name]['nonfinite'] == 0 for r in report['comparisons'] for name in pairs)
+        hard_names = ('complete', 'coverage', 'finite', 'adapter_vs_eager')
+        report['hard_gates'] = {name: report['gates'][name] for name in hard_names}
+        backend_ok = all(report['gates'][name] for name in pairs[1:])
+        report['backend_status'] = 'PASS' if backend_ok else 'DIFFERENT'
+        eligible = all(report['hard_gates'].values()) and (backend_ok or not require_backend)
+        report['eligible_for_smoke'] = eligible
+        if not eligible:
+            report['status'] = 'FAIL'
+        elif backend_ok:
+            report['status'] = 'PASS'
+        else:
+            report['status'] = 'PASS_WITH_BACKEND_DRIFT'
+            report['warnings'].append(
+                'Finite SDPA/eager drift retained at unchanged tolerances. '
+                'Eligible for engineering smoke only; no closed-loop equivalence claim.')
     except Exception:
         report['errors'].append({'error': traceback.format_exc()})
         report['status'] = 'ERROR'
+        report['eligible_for_smoke'] = False
     finally:
         for handle in handles:
             handle.remove()
         save()
     print(f"{report['status']}: {out}; gates={report['gates']}")
-    return 0 if report['status'] == 'PASS' else 1
+    return 0 if report['status'] in ('PASS', 'PASS_WITH_BACKEND_DRIFT') else 1
 
 
 if __name__ == '__main__':

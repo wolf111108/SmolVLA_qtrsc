@@ -70,3 +70,7 @@ evaluation:
   rename_map:
     observation.images.image: observation.images.camera1
     observation.images.image2: observation.images.camera2
+
+# Engineering smoke: keep finite SDPA drift diagnostic, require adapter/eager equivalence.
+preflight:
+  require_backend_equivalence: false

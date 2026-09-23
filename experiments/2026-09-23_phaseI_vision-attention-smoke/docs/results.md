@@ -1,12 +1,12 @@
 # 结果记录（Results）
 
 - **实验名称**：2026-09-23_phaseI_vision-attention-smoke
-- **状态**：running（run #1 preflight Gate 失败，待修复后重跑）
+- **状态**：running（run #2 适配器验证通过；run #3 校准/rollout 待运行）
 - **最后更新**：2026-09-23
 
 ## 1. 摘要
 
-run #1（2026-09-23，commit `ece908a`）在 preflight raw 等价性 Gate 失败。回填报告为 BF16 下 2/786432 个元素超差，max abs 0.00677、max rel 2.64。初步怀疑 SDPA/eager 的数值路径差异；尚未完成同一 checkpoint 的原生 eager 对照，不能认定适配器逻辑已完全验证。校准与 rollout 未执行。原始 run.log 未上传，本记录中的运行数值来自回填。
+run #2 原始三方报告已上传并审阅：24 个用例的 adapter_vs_eager 最大/平均绝对误差均为0，24个site各调用2次；原生 eager 与 SDPA 有有限数值差异，超出容差的元素仅在 layer0（无mask 2个、有mask 1个）。按当时严格规则状态为 FAIL，校准与 rollout 尚未执行。现在仅为工程 smoke 调整验收规则，run #3 待本地执行。
 
 ## 2. 总结果表
 
@@ -36,17 +36,18 @@ run #1（2026-09-23，commit `ece908a`）在 preflight raw 等价性 Gate 失败
 | eager_vs_sdpa | ❌ | 仅 layer0：unmasked 2/786432（max abs 0.015625 @ [0,149,725]）、masked 1/786432（max abs 0.007812 @ [0,7,725]）；layer1–11 全部零超差 |
 | adapter_vs_sdpa | ❌ | mismatched 计数与 max_error_index 与 eager_vs_sdpa 逐项相同 |
 
-结论：两个 backend 的原生实现本身就存在 bf16 kernel 差异（SDPA fp32 累加 vs eager bf16 matmul），集中在 layer0 少数元素；适配器未引入任何额外误差。按新版 preflight 设计，backend Gate 失败仍阻断校准/rollout，待审阅决定后续（如 backend 差异豁免或以 eager 为基准）。
+结论：已测输入下，适配器与原生 eager 输出数值完全一致；SDPA/eager 差异在多层存在，仅 layer0 有元素超出容差。具体 kernel 内部原因未定位，不能断言两者累加精度不同。run #2 按当时规则阻断校准/rollout。
 
 ## 4. 结论
 
-适配器正确性已闭环：adapter_vs_eager 在全部 12 层、masked/unmasked 全部 24 用例下零超差（bf16，atol 1e-6 / rtol 1e-5），适配器与原生 eager bit 级一致；run #1 的失败完全归因于原生 eager/SDPA backend 差异（仅 layer0 的 2+1 个元素 bf16 kernel 噪声），与适配器无关。校准与 rollout 因 backend Gate 阻断尚未执行。
+本次12层独立随机输入、masked/unmasked共24用例支持适配器 raw 实现正确，不等价于真实图像完整前向或闭环等价。允许推进工程 smoke；FP8校准、量化rollout和稀疏统计尚待验证。
 
 ## 5. 问题与后续
 
-- backend Gate（eager_vs_sdpa / adapter_vs_sdpa）失败的处理待审阅定夺：豁免 backend 差异（以 adapter_vs_eager 为准）或维持阻断；
-- 若放行：归档 `outputs/2026-09-23_phaseI_vision-attention-smoke/preflight.json` 后重跑 `run_smoke.sh` 进入校准 + rollout（脚本仍会拒绝覆盖，需先归档旧 outputs/scales）；
-- 另：HF_TOKEN 未设置导致 Hub 限流告警，建议设置后重跑。
+- 已将完整覆盖、无异常、数值有限性、adapter/eager 严格等价设为硬门槛；本 smoke 配置将有限 backend 差异设为诊断，保留容差与误差记录。
+- 归档旧 outputs/scales 后重跑 run_smoke.sh；新版报告为 schema_version=2，旧 run #2 证据不修改。
+- 完成后回填校准、episode 与稀疏统计产物。正式量化掉点实验需 eager raw 基线。
+- 当前修改未运行测试或实验。
 
 ## 6. 修订记录
 
@@ -57,3 +58,5 @@ run #1（2026-09-23，commit `ece908a`）在 preflight raw 等价性 Gate 失败
 | 2026-09-24 | 回填 run #2 三方对照：adapter_vs_eager 全过（bit 级一致），差异全部来自原生 eager/sdpa backend（layer0，2+1 元素）；证据 `preflight_run2.json` | |
 
 | 2026-09-23 | 审阅修正：归因降为假设；增加三方对照与失败报告，未重跑 | |
+
+| 2026-09-23 | 审阅修正归因与范围；新增 smoke 门槛策略，run #3 待运行 | |

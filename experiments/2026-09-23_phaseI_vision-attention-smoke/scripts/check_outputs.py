@@ -10,6 +10,12 @@ import yaml
 cfg = yaml.safe_load(Path(sys.argv[1]).read_text())
 out = Path(cfg['output_dir'])
 scales = Path(cfg['quantization']['scale_dir'])
+preflight = json.loads((out.parent / 'preflight.json').read_text())
+assert preflight.get('schema_version') == 2, 'Rerun the current preflight; old reports are not eligible'
+assert preflight.get('eligible_for_smoke') is True
+assert preflight['status'] in ('PASS', 'PASS_WITH_BACKEND_DRIFT')
+assert all(preflight['hard_gates'].get(k) is True
+           for k in ('complete', 'coverage', 'finite', 'adapter_vs_eager'))
 expected = {f'vision.layer.{i}.{op}' for i in range(12) for op in ('qk', 'pv')}
 paths = {scales / f'vision_{op}_matmul_{role}_scale_{i}.p'
          for i in range(12) for op in ('qk', 'pv') for role in ('A', 'B', 'O')}
@@ -33,7 +39,10 @@ for r in rows:
                      ('sparse_bits_native','total_bits_native')]:
         assert 0 <= int(r[num]) <= int(r[den]) and int(r[den]) > 0
 summary = {'status': 'PASS', 'sites': 24, 'scale_files': 72, 'runtime_rows': 72,
-           'fp_bit_metric': 'S|MMM', 'fp_bit_metric_version': 1}
+           'fp_bit_metric': 'S|MMM', 'fp_bit_metric_version': 1,
+           'preflight_status': preflight['status'],
+           'backend_status': preflight['backend_status'],
+           'scope': 'engineering_smoke_only'}
 for label, num, den in [('element_sparsity','zero_elements_native','total_elements_native'),
                         ('bit_sparsity','sparse_bits_native','total_bits_native')]:
     summary[label] = sum(int(r[num]) for r in rows) / sum(int(r[den]) for r in rows)
