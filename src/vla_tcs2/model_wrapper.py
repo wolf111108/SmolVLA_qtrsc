@@ -891,6 +891,37 @@ def _wrap_smolvlm_vision_linear_layers(
     return replaced
 
 
+def _inject_smolvlm_vision_quantized_matmul(model, quant_config, mode, stat_manager):
+    """Vision's independent opt-in switch; legacy quantize_matmul covers VLM/Expert."""
+    vision_cfg = quant_config.get("vision", {}) or {}
+    cfg = vision_cfg.get("matmul", {}) or {}
+    if not vision_cfg.get("enabled", False) or not cfg.get("enabled", False):
+        return 0
+    from vla_tcs2.vision_attention import attach_vision_attention
+
+    policy = str(cfg.get("calibration_policy", "recalibrate")).lower()
+    if policy not in ("recalibrate", "reuse"):
+        raise ValueError("vision.matmul.calibration_policy must be recalibrate or reuse")
+    granularity = str(quant_config.get("matmul_scale_granularity", "per_site")).lower()
+    if granularity not in ("per_site", "per_component"):
+        raise ValueError("Vision MatMul requires component-isolated per_site/per_component scales")
+    layers = model.model.vlm_with_expert.get_vlm_model().vision_model.encoder.layers
+    for idx, layer in enumerate(layers):
+        modules = []
+        for op in ("qk", "pv"):
+            mm = create_quantized_matmul(f"{op}_matmul", idx, quant_config, mode)
+            mm.set_layer_info(f"{op}_matmul", idx, module_id=f"vision.layer.{idx}.{op}")
+            name, scale_idx = resolve_matmul_scale_group("vision", idx, op, granularity)
+            mm.set_scale_group(name, scale_idx)
+            mm.calibration_policy = policy
+            mm._stat_manager = stat_manager
+            modules.append(mm)
+            if stat_manager is not None:
+                stat_manager.register_layer(name, scale_idx)
+        attach_vision_attention(layer.self_attn, *modules)
+    return 2 * len(layers)
+
+
 def _resolve_attn_component(inputs_embeds: list) -> str:
     """Infer the attention component from the inputs_embeds list.
 
@@ -1331,6 +1362,12 @@ class ModelWrapper:
         )
         if n_vision > 0:
             print(f"Replaced {n_vision} vision/connector Linear modules.")
+
+        n_vision_mm = _inject_smolvlm_vision_quantized_matmul(
+            self.model, self.quant_cfg, mode, self.stat_manager
+        )
+        if n_vision_mm:
+            print(f"Injected Vision QuantizedMatMul ({n_vision_mm} physical qk/pv objects)")
 
         if self.quant_cfg.get("quantize_matmul", False):
             # get_attention_interface is a MODEL-level method on

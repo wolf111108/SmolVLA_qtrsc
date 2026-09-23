@@ -1,0 +1,72 @@
+# Vision QK/PV only; all Linear and VLM/Expert MatMul remain raw.
+output_dir: outputs/2026-09-23_phaseI_vision-attention-smoke/vision_qkpv_fp8
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: null
+  overrides:
+    n_action_steps: 10
+    num_steps: 10
+quantization:
+  enabled: true
+  mode: quant_forward
+  method: pot_fp8_outlier
+  scale_dir: scales/2026-09-23_phaseI_vision-attention-smoke/vision_qkpv_fp8
+  quantize_matmul: false
+  matmul_scale_granularity: per_site
+  linear_scale_granularity: per_site
+  outlier_ratio: 0.01
+  calibration_policy:
+    default: recalibrate
+  qk_matmul: &id001
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  pv_matmul: *id001
+  vision:
+    enabled: true
+    linear:
+      mlp: false
+      attn_proj: false
+    matmul:
+      enabled: true
+      calibration_policy: recalibrate
+  connector:
+    enabled: false
+  linear:
+    enabled: false
+  weight_quant_granularity: per_tensor
+  weight_group_size: null
+sparsity:
+  enabled: true
+  chunk_size: 4194304
+  unit:
+    enabled: false
+  export:
+    dir: null
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 1
+  batch_size: 1
+  frame_stride: 16
+  seed: 42
+evaluation:
+  env:
+    type: libero
+    task: libero_goal
+    max_parallel_tasks: 1
+    task_ids:
+    - 0
+  n_episodes: 1
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2
