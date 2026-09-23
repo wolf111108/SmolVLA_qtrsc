@@ -14,6 +14,7 @@ run #1 在 raw gate 失败；三方对照与失败报告已修改，新版等待
 |---|---|---|---|---|
 | 2026-09-23 | 小型 CPU 单元测试 | python -m pytest tests/test_vision_attention.py -q | 6 passed | 用户要求停止运行验证前完成 |
 | 2026-09-23 | checkpoint / rollout | scripts/run_smoke.sh | **failed（preflight Gate）** | run #1：pytest 6 passed → 模型加载 OK（Replaced 0 Linear 符合预期，QK/PV 走 MatMul 注入）→ preflight 注入 24 MatMul 站点断言通过 → **raw 等价性断言失败**：Mismatched 2/786432，max abs diff 0.00677 > atol 0.005（bf16 容差），max rel diff 2.64 > rtol 0.05 @ (0,709,551)；另有 HF_TOKEN 未设置告警。日志：`outputs/2026-09-23_phaseI_vision-attention-smoke/run.log` |
+| 2026-09-24 | 三方对照诊断 | `python experiments/2026-09-23_phaseI_vision-attention-smoke/scripts/preflight.py configs/vision_qkpv_fp8.yaml`（commit `e3d5b1e` 新版） | **FAIL（backend Gate）** | run #2：adapter_vs_eager ✅ 24/24 用例零超差（bf16，atol 1e-6）；eager_vs_sdpa / adapter_vs_sdpa ❌ 仅 layer0（unmasked 2/786432 max abs 0.015625、masked 1/786432 max abs 0.007812），计数与索引完全一致；适配器与原生 eager bit 级一致。证据：`outputs/.../preflight.json`（副本 `docs/preflight_run2.json`） |
 
 ## 3. 后台任务
 
