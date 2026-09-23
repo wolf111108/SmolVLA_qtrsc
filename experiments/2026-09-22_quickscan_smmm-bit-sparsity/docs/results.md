@@ -46,6 +46,38 @@
 
 分析：element sparsity 只取决于量化后是否为精确 0，与 bit 编码口径无关。两者逐位一致证明本次运行除 bit metric 外无其他变化（scale sha256 bit-identical + `--skip-calibration` 生效）。
 
+### 3.3 逐层分布图（S|MMM，activation only）
+
+下图均只统计 **activation** role（各 Linear 的输入张量，排除 output 与 MatMul 的 A/B/O），按 bits 加权聚合；VLM 折线图与对应 Expert 热力图**共用同一色标**，便于直接对照。
+
+**聚合（7 个 Linear 的 activation 全部合并）**
+
+VLM prefill — 逐层 S\|MMM bit sparsity（52.7–53.1%，几乎平线）：
+
+![VLM aggregate](figures/fp8_smmm_aggregate_vlm_bit_line.png)
+
+Expert denoise — 层 × denoise step 热力图（列均值 52.8–53.1%，无行/列结构）：
+
+![Expert aggregate](figures/fp8_smmm_aggregate_expert_bit_heatmap.png)
+
+**Attention 分支（q/k/v/o_proj + qk + pv 的 activation）**
+
+![VLM attention](figures/attention/fp8_smmm_attention_vlm_bit_line.png)
+
+![Expert attention](figures/attention/fp8_smmm_attention_expert_bit_heatmap.png)
+
+**MLP 分支（gate/up/down_proj 的 activation）**
+
+![VLM mlp](figures/mlp/fp8_smmm_mlp_vlm_bit_line.png)
+
+![Expert mlp](figures/mlp/fp8_smmm_mlp_expert_bit_heatmap.png)
+
+**图内要点**
+
+- **mlp 略高于 attention**：VLM 53.1% vs 52.6%，Expert 53.1% vs 52.7%（约 +0.5pp），这是 S\|MMM 口径下唯一稳定的分支差异。
+- **层间/步间结构基本消失**：三组图的层极差 ≤ 0.8pp、step 极差 ≤ 0.3pp——FP8 宽动态范围使各层表现趋同，与 INT8/INT16 的「L00 峰」形成对比。
+- 绘图口径与 09-15 quickscan 的 `*_actonly.png` 系列一致，仅 bit metric 不同，可直接并排对比观察 +12pp 的整体抬升。
+
 ## 4. 结论
 
 1. **S|MMM 口径下 FP8 PoT 的 bit sparsity ≈ 54%**（VLM 53.97% / Expert 54.15% / pooled 54.11%），比旧 1.MMM 口径高 +12.1pp。
@@ -56,12 +88,13 @@
 
 ## 5. 问题与后续
 
-<!-- 实验中发现的异常、失败 run、待验证问题、下一步实验（链接到新实验子目录） -->
-
--
+- **图仅含 activation**：weight/output 的逐层分布未单独绘图（weight 的 S\|MMM 层间同样平坦，与 runtime 同量级，见 §2 总表）。
+- 若后续换用 INT8/INT16 或 W4 配置，同一绘图脚本可直接复用（只需改数据源），用于观察低 bit 下落层间结构是否重现。
 
 ## 6. 修订记录
 
 | 日期 | 修改内容 | 修改人 |
 |---|---|---|
 | 2026-09-22 | 创建文档 | |
+| 2026-09-22 | 回填 S4 结果：S\|MMM pooled runtime bit = **54.11%**（+12.10pp vs 旧 1.MMM 42.01%）；验证审阅的 +12.5pp 预测；Gate 全 PASS | |
+| 2026-09-22 | 新增 §3.3 逐层分布图（聚合 / attention / mlp 三组 × VLM 折线 + Expert 热力图，共 6 张，activation only，共享色标） | |

@@ -44,6 +44,9 @@ experiments/*/tasks/*/generated/
 ### 工作日志（不进 git，仅本地保留） ###
 doc/logs/
 
+### 审阅草稿（不进 git，仅本地保留） ###
+er.md
+
 ### checkpoints（约 1-2GB，不进 git） ###
 checkpoints/
 *.safetensors

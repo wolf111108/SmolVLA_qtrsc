@@ -3,7 +3,7 @@
 > 本文档在实验开跑前填写；固定章节保留。
 
 - **实验名称**：2026-09-22_phaseI_vision-smmm-sparsity
-- **状态**：ready
+- **状态**：done（VS1 task0×1ep，2026-09-22 跑通）
 - **负责人**：
 - **创建日期**：2026-09-22
 - **相关前序实验**：2026-09-22_quickscan_smmm-bit-sparsity；Phase I VLIN / vision-sparsity-compute
@@ -75,7 +75,7 @@ bash experiments/2026-09-22_phaseI_vision-smmm-sparsity/scripts/run_vision_smmm_
 
 | config | output | 状态 |
 |---|---|---|
-| `vs1_full_vlin_smmm_1ep.yaml` | `outputs/2026-09-22_phaseI_vision-smmm-sparsity/vs1_full_vlin_smmm_1ep/` | pending |
+| `vs1_full_vlin_smmm_1ep.yaml` | `outputs/2026-09-22_phaseI_vision-smmm-sparsity/vs1_full_vlin_smmm_1ep/` | done（2026-09-22） |
 
 核心输出：`sparsity/module_sparsity.csv`、`sparsity/weight_sparsity_static.csv`、`sparsity/quantization_manifest.csv`、`vision_smmm_sparsity_summary.csv`、`scale_hashes.txt`、`run.log`。
 
