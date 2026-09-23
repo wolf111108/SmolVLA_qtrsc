@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "sites": 24,
+  "scale_files": 72,
+  "runtime_rows": 72,
+  "fp_bit_metric": "S|MMM",
+  "fp_bit_metric_version": 1,
+  "preflight_status": "PASS_WITH_BACKEND_DRIFT",
+  "backend_status": "DIFFERENT",
+  "scope": "engineering_smoke_only",
+  "element_sparsity": 0.07240352109862187,
+  "bit_sparsity": 0.5767607375057406
+}

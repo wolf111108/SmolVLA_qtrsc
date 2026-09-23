@@ -445,7 +445,16 @@ def main() -> None:
             "[sparsity] static weight collection finished: "
             f"{n_weight_layers} QuantizedLinear layers"
         )
-        if n_weight_layers <= 0:
+        # MatMul-only workloads (e.g. vision QK/PV) have no static weight
+        # (manual §25); only fail when QuantizedLinear layers exist but
+        # nothing was collected, or when no quantized module exists at all.
+        has_quant_linear = any(
+            type(m).__name__ == "QuantizedLinear" for m in model.modules()
+        )
+        has_quant_matmul = any(
+            type(m).__name__ == "QuantizedMatMul" for m in model.modules()
+        )
+        if n_weight_layers <= 0 and (has_quant_linear or not has_quant_matmul):
             raise RuntimeError(
                 "sparsity.enabled=true but no QuantizedLinear weight "
                 "sparsity was collected; check scale loading / wrapping."

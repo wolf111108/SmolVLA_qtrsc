@@ -101,6 +101,30 @@ def calibrate(
 
     stat_manager = QuantStatManager(str(scale_dir))
 
+    # Preserve sparsity collection across the calibration rebinding: the
+    # runtime/export stat manager (enabled in main.py step 2.5) would
+    # otherwise be silently replaced by a fresh manager with sparsity
+    # disabled, losing all post-calibration runtime sparsity stats.
+    existing_managers = {
+        m._stat_manager
+        for m in model.modules()
+        if isinstance(m, (QuantizedLinear, QuantizedMatMul))
+        and getattr(m, "_stat_manager", None) is not None
+    }
+    prior_sm = next(iter(existing_managers)) if existing_managers else None
+    if prior_sm is not None and getattr(prior_sm, "sparsity_enabled", False):
+        stat_manager.enable_sparsity(
+            enable=True,
+            chunk_size=prior_sm.sparse_stat_chunk_size,
+        )
+        stat_manager.enable_unit_sparsity = prior_sm.enable_unit_sparsity
+        stat_manager.unit_bit_group_size = prior_sm.unit_bit_group_size
+        stat_manager.unit_dim_group_size = prior_sm.unit_dim_group_size
+        print(
+            "[calibration] sparsity collection preserved from the "
+            "pre-calibration stat manager"
+        )
+
     for module in model.modules():
         if isinstance(module, (QuantizedLinear, QuantizedMatMul)):
             module._stat_manager = stat_manager
@@ -183,6 +207,16 @@ def calibrate(
 
     print("Saving quantization scales...")
     stat_manager.save_all_scales()
+
+    # Restore the pre-calibration stat manager binding when one existed:
+    # main.py exports runtime sparsity from wrapper.stat_manager, so eval
+    # statistics must accumulate there (scales are already on disk and do
+    # not depend on the calibration-time manager).
+    if prior_sm is not None:
+        for module in model.modules():
+            if isinstance(module, (QuantizedLinear, QuantizedMatMul)):
+                module._stat_manager = prior_sm
+        print("[calibration] stat manager binding restored for runtime stats")
 
     print(f"\n✓ Calibration completed in {calibration_time:.2f}s")
     print(f"✓ Scales saved to: {scale_dir}")
