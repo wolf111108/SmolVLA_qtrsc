@@ -46,7 +46,7 @@ Goal task0 × 1 episode，seed=1000，batch_size=1，n_action_steps=10，num_ste
 | 组 | 配置 / 入口 | 变量 | 验收 |
 |---|---|---|---|
 | 单元验证 | tests/test_vision_attention.py | 真实 transformers 小 attention，随机权重 | mask/no-mask raw 等价、scale 保存加载、quant 非 identity、统计角色、异常恢复 |
-| checkpoint raw gate | scripts/preflight.py | 原 attention vs 新 QK/PV raw | 12 层×2 mask 情形；1024 tokens；24 site 每个命中2次 |
+| checkpoint raw gate | scripts/preflight.py | 原 attention vs 新 QK/PV raw | 12 层×2 mask 情形；1024 tokens；三方对照；24 site 每个命中2次 |
 | VM1 | configs/vision_qkpv_fp8.yaml | Vision QK/PV-only FP8 PoT | rollout 正常结束；24 manifest、72 scales、72 runtime rows |
 
 实现约定：QK quantizer 输出为未乘 head scale 的矩阵，随后乘 self.scale、加 additive mask、FP32 softmax 后转 query dtype，再经 dropout 和 PV quantizer，最后 out_proj。mask 必须为 4D additive float，保持非因果语义。CURRENT_ATTN_KIND 在 finally 中恢复。
@@ -77,7 +77,25 @@ bash experiments/2026-09-23_phaseI_vision-attention-smoke/scripts/run_smoke.sh
 
 runner 顺序：保存版本 → 小型单元测试 → checkpoint raw gate → fresh calibration + task0 rollout → coverage 检查。任何步骤失败即停止。已有 run.log 或 scale 目录时拒绝覆盖，先归档旧输出再重跑。EGL 与 GPU 选择沿用当前环境，不硬编码设备编号。
 
-raw gate 容差：FP32 atol=1e-5 / rtol=1e-4；低精度 atol=5e-3 / rtol=5e-2，输出每层 max/mean absolute error。该 gate 是局部 attention 数值验证，并不等价于完整闭环 backend 对照。
+新版 raw gate（run #2 起）：
+
+- 同一 checkpoint、输入、mask 下分别执行原生 SDPA、原生 eager、新适配器 raw。
+- adapter_vs_eager：atol=1e-6 / rtol=1e-5，隔离适配器实现差异。
+- eager_vs_sdpa、adapter_vs_sdpa：保留原容差，FP32 atol=1e-5 / rtol=1e-4，低精度 atol=5e-3 / rtol=5e-2。
+- 所有比较与完整覆盖均通过才能继续；backend 差异不能仅靠 adapter/eager 通过而放行。
+- 误差和阈值在 FP32 中计算；逐层记录 max/mean abs error、最大误差位置、超差数量、非有限值数量、dtype、mask 情形以及每个 site 调用次数。
+- 临时给单个 attention 赋独立 config 副本以选择原生 backend，finally 恢复；不修改共享 config 或量化核心。
+- 单个 case 失败不会提前终止其他层的诊断。preflight.json 每个 case 原子更新，最终 FAIL/ERROR 时仍保存并非零退出；进程被外部中断时可能保留 RUNNING 状态，不可当作通过。
+- 该 gate 仅验证局部 attention，不等价于完整闭环 backend 对照。
+
+只跑诊断可使用以下命令（先归档旧 preflight.json）：
+
+```bash
+python experiments/2026-09-23_phaseI_vision-attention-smoke/scripts/preflight.py \
+  experiments/2026-09-23_phaseI_vision-attention-smoke/configs/vision_qkpv_fp8.yaml
+```
+
+上传回填时请附完整 preflight.json 与 run.log，以便独立核对。
 
 ## 7. 输出目录映射
 

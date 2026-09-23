@@ -1,8 +1,15 @@
-"""Checkpoint-backed routing and raw SDPA/eager equivalence gate; no rollout."""
+"""Three-way checkpoint attention diagnostic; write evidence before failing.
+
+No tolerance relaxation: adapter/eager correctness and SDPA/backend drift are
+separate gates. A failed backend gate still blocks calibration and rollout.
+"""
 import copy
+import importlib.metadata
 import json
 from pathlib import Path
+import subprocess
 import sys
+import traceback
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'src'))
@@ -12,48 +19,139 @@ from vla_tcs2.model_wrapper import ModelWrapper, _inject_smolvlm_vision_quantize
 from vla_tcs2.quant_matmul import QuantizedMatMul
 from vla_tcs2.quant_linear import QuantizedLinear
 
-cfg = yaml.safe_load(Path(sys.argv[1]).read_text())
-torch.manual_seed(1000)
-control = copy.deepcopy(cfg)
-control['quantization']['vision']['matmul']['enabled'] = False
-wrapper = ModelWrapper(control)
-model = wrapper.build(mode='raw').eval()
-assert not any(isinstance(m, (QuantizedLinear, QuantizedMatMul)) for m in model.modules())
-vision = model.model.vlm_with_expert.get_vlm_model().vision_model
-assert _inject_smolvlm_vision_quantized_matmul(model, cfg['quantization'], 'raw', wrapper.stat_manager) == 24
-modules = [m for m in model.modules() if isinstance(m, QuantizedMatMul)]
-expected_ids = {f'vision.layer.{i}.{op}' for i in range(12) for op in ('qk', 'pv')}
-assert {m.module_id for m in modules} == expected_ids
-assert len({m._scale_identity() for m in modules}) == 24
-calls = dict.fromkeys(expected_ids, 0)
-def hook(module, args, result):
-    calls[module.module_id] += 1
-handles = [m.register_forward_hook(hook) for m in modules]
-records = []
-try:
-    with torch.no_grad():
-        for i, layer in enumerate(vision.encoder.layers):
-            attn = layer.self_attn
-            weight = attn.q_proj.weight
-            x = torch.randn(1, 1024, attn.embed_dim, device=weight.device, dtype=weight.dtype)
-            # Test both no mask and a partial padding mask; never mask all keys.
-            for masked in (False, True):
-                mask = None
-                if masked:
-                    mask = torch.zeros(1, 1, 1024, 1024, device=x.device, dtype=x.dtype)
-                    mask[..., -16:] = torch.finfo(x.dtype).min
-                expected = attn._original_vision_forward(x, attention_mask=mask)[0]
-                actual = attn(x, attention_mask=mask)[0]
-                atol, rtol = ((1e-5, 1e-4) if x.dtype == torch.float32 else (5e-3, 5e-2))
-                torch.testing.assert_close(actual, expected, atol=atol, rtol=rtol)
-                records.append({'layer': i, 'masked': masked, 'dtype': str(x.dtype),
-                                'max_abs_error': (actual-expected).abs().max().item(),
-                                'mean_abs_error': (actual-expected).abs().mean().item(),
-                                'atol': atol, 'rtol': rtol})
-finally:
-    for h in handles: h.remove()
-assert all(n == 2 for n in calls.values()), calls
-out = Path(cfg['output_dir']).parent / 'preflight.json'
-out.parent.mkdir(parents=True, exist_ok=True)
-out.write_text(json.dumps({'status': 'PASS', 'calls': calls, 'comparisons': records}, indent=2))
-print(f'PASS: 24 vision MatMul sites, raw equivalence; {out}')
+
+def compare(actual, expected, atol, rtol):
+    # Measure in FP32, rather than rounding errors/thresholds back into BF16.
+    a, b = actual.detach().float(), expected.detach().float()
+    finite = torch.isfinite(a) & torch.isfinite(b)
+    error = (a - b).abs()
+    limit = atol + rtol * b.abs()
+    mismatched = (~finite) | (error > limit)
+    valid_errors = error[finite]
+    flat_index = int(torch.where(finite, error, torch.full_like(error, float('inf'))).flatten().argmax())
+    index = []
+    for size in reversed(error.shape):
+        index.append(flat_index % size)
+        flat_index //= size
+    return {
+        'passed': not bool(mismatched.any()),
+        'numel': a.numel(), 'mismatched': int(mismatched.sum()),
+        'nonfinite': int((~finite).sum()),
+        'max_abs_error': float(valid_errors.max()) if valid_errors.numel() else None,
+        'mean_abs_error': float(valid_errors.mean()) if valid_errors.numel() else None,
+        'max_error_index': list(reversed(index)),
+        'atol': atol, 'rtol': rtol,
+        'criterion': 'abs(actual-expected) <= atol + rtol*abs(expected)',
+    }
+
+
+def original_forward(attn, backend, x, mask):
+    # The saved bound method uses attn.config. Assign an isolated copy to this
+    # instance; never mutate the shared vision config or global backend registry.
+    shared_config = attn.config
+    local_config = copy.deepcopy(shared_config)
+    local_config._attn_implementation = backend
+    attn.config = local_config
+    try:
+        return attn._original_vision_forward(
+            x, attention_mask=mask, output_attentions=False
+        )[0]
+    finally:
+        attn.config = shared_config
+
+
+def main():
+    cfg = yaml.safe_load(Path(sys.argv[1]).read_text())
+    out = Path(cfg['output_dir']).parent / 'preflight.json'
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if out.exists():
+        raise FileExistsError(f'Archive previous evidence before rerunning: {out}')
+    report = {'status': 'RUNNING', 'seed': 1000, 'calls': {}, 'comparisons': [],
+              'errors': [], 'gates': {}, 'torch': torch.__version__,
+              'cuda': torch.version.cuda}
+    handles = []
+
+    def save():
+        temporary = out.with_suffix('.json.tmp')
+        temporary.write_text(json.dumps(report, indent=2, allow_nan=False))
+        temporary.replace(out)
+
+    save()
+    try:
+        report['commit'] = subprocess.check_output(
+            ['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+        report['transformers'] = importlib.metadata.version('transformers')
+        torch.manual_seed(1000)
+        control = copy.deepcopy(cfg)
+        control['quantization']['vision']['matmul']['enabled'] = False
+        wrapper = ModelWrapper(control)
+        model = wrapper.build(mode='raw').eval()
+        if any(isinstance(m, (QuantizedLinear, QuantizedMatMul)) for m in model.modules()):
+            raise RuntimeError('Control must contain no quantized modules')
+        vision = model.model.vlm_with_expert.get_vlm_model().vision_model
+        count = _inject_smolvlm_vision_quantized_matmul(
+            model, cfg['quantization'], 'raw', wrapper.stat_manager)
+        modules = [m for m in model.modules() if isinstance(m, QuantizedMatMul)]
+        expected_ids = {f'vision.layer.{i}.{op}' for i in range(12) for op in ('qk', 'pv')}
+        if (count != 24 or len(modules) != 24 or
+                {m.module_id for m in modules} != expected_ids or
+                len({m._scale_identity() for m in modules}) != 24 or
+                any(m.mode != 'raw' for m in modules)):
+            raise RuntimeError('Expected 24 unique raw vision MatMul sites and scale groups')
+        report['calls'] = dict.fromkeys(sorted(expected_ids), 0)
+
+        def hook(module, args, result):
+            report['calls'][module.module_id] += 1
+        handles = [m.register_forward_hook(hook) for m in modules]
+        with torch.no_grad():
+            for i, layer in enumerate(vision.encoder.layers):
+                attn = layer.self_attn
+                weight = attn.q_proj.weight
+                for masked in (False, True):
+                    record = {'layer': i, 'masked': masked, 'dtype': str(weight.dtype),
+                              'device': str(weight.device),
+                              'original_backend': attn.config._attn_implementation}
+                    report['comparisons'].append(record)
+                    try:
+                        x = torch.randn(1, 1024, attn.embed_dim,
+                                        device=weight.device, dtype=weight.dtype)
+                        mask = None
+                        if masked:
+                            mask = torch.zeros(1, 1, 1024, 1024, device=x.device, dtype=x.dtype)
+                            mask[..., -16:] = torch.finfo(x.dtype).min
+                        # Identical checkpoint weights, input and mask for all three paths.
+                        sdpa = original_forward(attn, 'sdpa', x, mask)
+                        eager = original_forward(attn, 'eager', x, mask)
+                        adapted = attn(x, attention_mask=mask, output_attentions=False)[0]
+                        backend_tol = (1e-5, 1e-4) if x.dtype == torch.float32 else (5e-3, 5e-2)
+                        record['adapter_vs_eager'] = compare(adapted, eager, 1e-6, 1e-5)
+                        record['eager_vs_sdpa'] = compare(eager, sdpa, *backend_tol)
+                        record['adapter_vs_sdpa'] = compare(adapted, sdpa, *backend_tol)
+                        print(f"layer={i} masked={masked}: " + ', '.join(
+                            f"{name} mismatched={record[name]['mismatched']}"
+                            for name in ('adapter_vs_eager', 'eager_vs_sdpa', 'adapter_vs_sdpa')))
+                    except Exception:
+                        record['error'] = traceback.format_exc()
+                        report['errors'].append({'layer': i, 'masked': masked, 'error': record['error']})
+                    save()  # Persist each case, including failures; inspect remaining layers.
+        complete = len(report['comparisons']) == 24 and not report['errors']
+        report['gates'] = {
+            'complete': complete,
+            'coverage': all(n == 2 for n in report['calls'].values()),
+            **{name: complete and all(r[name]['passed'] for r in report['comparisons'])
+               for name in ('adapter_vs_eager', 'eager_vs_sdpa', 'adapter_vs_sdpa')},
+        }
+        report['status'] = 'PASS' if all(report['gates'].values()) else 'FAIL'
+    except Exception:
+        report['errors'].append({'error': traceback.format_exc()})
+        report['status'] = 'ERROR'
+    finally:
+        for handle in handles:
+            handle.remove()
+        save()
+    print(f"{report['status']}: {out}; gates={report['gates']}")
+    return 0 if report['status'] == 'PASS' else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
