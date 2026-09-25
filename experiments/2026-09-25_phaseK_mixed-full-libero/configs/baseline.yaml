@@ -1,0 +1,122 @@
+# Use scripts/run_arm.py, NOT main.py: baseline must retain eager wrappers in raw mode.
+output_dir: outputs/2026-09-25_phaseK_mixed-full-libero/baseline
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  device: cuda
+  revision: 31d453f7edd78c839a8bbc39744a292686daf0de
+  overrides:
+    chunk_size: 50
+    n_action_steps: 10
+    num_steps: 10
+quantization:
+  enabled: true
+  mode: raw
+  method: pot_fp8_outlier
+  scale_dir: scales/2026-09-25_phaseK_mixed-full-libero/quant
+  quantize_matmul: true
+  matmul_scale_granularity: per_site
+  linear_scale_granularity: per_site
+  outlier_ratio: 0.01
+  calibration_policy:
+    default: recalibrate
+  qk_matmul: &id001
+    A_bit: e4m3
+    B_bit: e4m3
+    O_bit: e4m3
+    d_bit: 4
+    outlier_ratio: 0.01
+    p: 4
+  pv_matmul: *id001
+  vision:
+    enabled: true
+    linear:
+      mlp: true
+      attn_proj: true
+    matmul:
+      enabled: true
+      calibration_policy: recalibrate
+    calibration_policy: recalibrate
+  connector:
+    enabled: false
+  linear:
+    enabled: true
+    include:
+    - vision.*
+    - vlm.*
+    - expert.*
+    exclude: []
+    overrides:
+    - name: vision_w8
+      target:
+        component: vision
+      config:
+        a_bit: e4m3
+        w_bit: 8
+        o_bit: e4m3
+        method: pot_ao_outlier
+        outlier_ratio: 0.01
+        d_bit: 4
+        p: 4
+    - name: vlm_w8
+      target:
+        component: vlm
+      config:
+        a_bit: e4m3
+        w_bit: 8
+        o_bit: e4m3
+        method: pot_ao_outlier
+        outlier_ratio: 0.01
+        d_bit: 4
+        p: 4
+    - name: expert_w4
+      target:
+        component: expert
+      config:
+        a_bit: e4m3
+        w_bit: 4
+        o_bit: e4m3
+        method: pot_ao_outlier
+        outlier_ratio: 0.01
+        d_bit: 4
+        p: 4
+  weight_quant_granularity: per_tensor
+  weight_group_size: null
+sparsity:
+  enabled: false
+  chunk_size: 4194304
+  unit:
+    enabled: false
+  export:
+    dir: null
+calibration:
+  dataset_repo_id: HuggingFaceVLA/libero
+  dataset_revision: v3.0
+  episodes: 8
+  batch_size: 1
+  frame_stride: 4
+  seed: 42
+evaluation:
+  env:
+    type: libero
+    task: libero_goal
+    max_parallel_tasks: 1
+    task_ids:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+  n_episodes: 10
+  batch_size: 1
+  use_async_envs: false
+  seed: 1000
+  max_episodes_rendered: 0
+  rename_map:
+    observation.images.image: observation.images.camera1
+    observation.images.image2: observation.images.camera2
