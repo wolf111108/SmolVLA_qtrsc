@@ -1,0 +1,46 @@
+{
+  "status": "PASS",
+  "scope": "vision_joint_engineering_smoke_only",
+  "linear_sites": 72,
+  "matmul_sites": 24,
+  "scale_files": 288,
+  "runtime_rows": 216,
+  "weight_rows": 72,
+  "fp_bit_metric": "S|MMM",
+  "fp_bit_metric_version": 1,
+  "preflight_status": "PASS_WITH_BACKEND_DRIFT",
+  "backend_status": "DIFFERENT",
+  "episode_success": true,
+  "runtime_linear": {
+    "zero_elements": 246702371,
+    "total_elements": 6057787392,
+    "sparse_bits": 11767650686,
+    "total_bits": 24231149568,
+    "element_sparsity": 0.040724831532681166,
+    "bit_sparsity": 0.48564145307990364
+  },
+  "runtime_matmul": {
+    "zero_elements": 871531443,
+    "total_elements": 12097169628,
+    "sparse_bits": 27871129129,
+    "total_bits": 48388678512,
+    "element_sparsity": 0.07204424421583386,
+    "bit_sparsity": 0.5759845068322786
+  },
+  "runtime_pooled": {
+    "zero_elements": 1118233814,
+    "total_elements": 18154957020,
+    "sparse_bits": 39638779815,
+    "total_bits": 72619828080,
+    "element_sparsity": 0.06159385630977385,
+    "bit_sparsity": 0.5458396262152099
+  },
+  "static_weight": {
+    "zero_elements": 472,
+    "total_elements": 84934656,
+    "sparse_bits": 184854991,
+    "total_bits": 339738624,
+    "element_sparsity": 5.5572133005401236e-06,
+    "bit_sparsity": 0.5441094357290386
+  }
+}

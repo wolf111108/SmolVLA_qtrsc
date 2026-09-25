@@ -1,0 +1,2606 @@
+{
+  "status": "PASS_WITH_BACKEND_DRIFT",
+  "seed": 1000,
+  "calls": {
+    "vision.layer.0.pv": 2,
+    "vision.layer.0.qk": 2,
+    "vision.layer.1.pv": 2,
+    "vision.layer.1.qk": 2,
+    "vision.layer.10.pv": 2,
+    "vision.layer.10.qk": 2,
+    "vision.layer.11.pv": 2,
+    "vision.layer.11.qk": 2,
+    "vision.layer.2.pv": 2,
+    "vision.layer.2.qk": 2,
+    "vision.layer.3.pv": 2,
+    "vision.layer.3.qk": 2,
+    "vision.layer.4.pv": 2,
+    "vision.layer.4.qk": 2,
+    "vision.layer.5.pv": 2,
+    "vision.layer.5.qk": 2,
+    "vision.layer.6.pv": 2,
+    "vision.layer.6.qk": 2,
+    "vision.layer.7.pv": 2,
+    "vision.layer.7.qk": 2,
+    "vision.layer.8.pv": 2,
+    "vision.layer.8.qk": 2,
+    "vision.layer.9.pv": 2,
+    "vision.layer.9.qk": 2
+  },
+  "comparisons": [
+    {
+      "layer": 0,
+      "masked": false,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": false,
+        "numel": 786432,
+        "mismatched": 2,
+        "nonfinite": 0,
+        "max_abs_error": 0.015625,
+        "mean_abs_error": 0.0003305704740341753,
+        "max_error_index": [
+          0,
+          293,
+          551
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": false,
+        "numel": 786432,
+        "mismatched": 2,
+        "nonfinite": 0,
+        "max_abs_error": 0.015625,
+        "mean_abs_error": 0.0003305704740341753,
+        "max_error_index": [
+          0,
+          293,
+          551
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 0,
+      "masked": true,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.015625,
+        "mean_abs_error": 0.00027275702450424433,
+        "max_error_index": [
+          0,
+          102,
+          551
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.015625,
+        "mean_abs_error": 0.00027275702450424433,
+        "max_error_index": [
+          0,
+          102,
+          551
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 1,
+      "masked": false,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 0.0001729218492982909,
+        "max_error_index": [
+          0,
+          5,
+          525
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 0.0001729218492982909,
+        "max_error_index": [
+          0,
+          5,
+          525
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 1,
+      "masked": true,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 0.00015328035806305707,
+        "max_error_index": [
+          0,
+          15,
+          661
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 0.00015328035806305707,
+        "max_error_index": [
+          0,
+          15,
+          661
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 2,
+      "masked": false,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.2565760193392634e-05,
+        "max_error_index": [
+          0,
+          32,
+          457
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.2565760193392634e-05,
+        "max_error_index": [
+          0,
+          32,
+          457
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 2,
+      "masked": true,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.205576285836287e-05,
+        "max_error_index": [
+          0,
+          1,
+          457
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.205576285836287e-05,
+        "max_error_index": [
+          0,
+          1,
+          457
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 3,
+      "masked": false,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.298590308986604e-05,
+        "max_error_index": [
+          0,
+          81,
+          415
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.298590308986604e-05,
+        "max_error_index": [
+          0,
+          81,
+          415
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 3,
+      "masked": true,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.3827393053798005e-05,
+        "max_error_index": [
+          0,
+          5,
+          457
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.3827393053798005e-05,
+        "max_error_index": [
+          0,
+          5,
+          457
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 4,
+      "masked": false,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 2.941644925158471e-05,
+        "max_error_index": [
+          0,
+          198,
+          457
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 2.941644925158471e-05,
+        "max_error_index": [
+          0,
+          198,
+          457
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 4,
+      "masked": true,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.0145636628731154e-05,
+        "max_error_index": [
+          0,
+          39,
+          415
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.0145636628731154e-05,
+        "max_error_index": [
+          0,
+          39,
+          415
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 5,
+      "masked": false,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.00390625,
+        "mean_abs_error": 3.2411549909738824e-05,
+        "max_error_index": [
+          0,
+          53,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.00390625,
+        "mean_abs_error": 3.2411549909738824e-05,
+        "max_error_index": [
+          0,
+          53,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 5,
+      "masked": true,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.00390625,
+        "mean_abs_error": 3.265385748818517e-05,
+        "max_error_index": [
+          0,
+          19,
+          457
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.00390625,
+        "mean_abs_error": 3.265385748818517e-05,
+        "max_error_index": [
+          0,
+          19,
+          457
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 6,
+      "masked": false,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.393204679014161e-05,
+        "max_error_index": [
+          0,
+          24,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.393204679014161e-05,
+        "max_error_index": [
+          0,
+          24,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 6,
+      "masked": true,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.412903970456682e-05,
+        "max_error_index": [
+          0,
+          112,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.412903970456682e-05,
+        "max_error_index": [
+          0,
+          112,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 7,
+      "masked": false,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.00390625,
+        "mean_abs_error": 3.582950739655644e-05,
+        "max_error_index": [
+          0,
+          45,
+          200
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.00390625,
+        "mean_abs_error": 3.582950739655644e-05,
+        "max_error_index": [
+          0,
+          45,
+          200
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 7,
+      "masked": true,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.00390625,
+        "mean_abs_error": 3.609686245908961e-05,
+        "max_error_index": [
+          0,
+          59,
+          200
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.00390625,
+        "mean_abs_error": 3.609686245908961e-05,
+        "max_error_index": [
+          0,
+          59,
+          200
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 8,
+      "masked": false,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.00390625,
+        "mean_abs_error": 3.54697804141324e-05,
+        "max_error_index": [
+          0,
+          125,
+          170
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.00390625,
+        "mean_abs_error": 3.54697804141324e-05,
+        "max_error_index": [
+          0,
+          125,
+          170
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 8,
+      "masked": true,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.00390625,
+        "mean_abs_error": 3.5621298593468964e-05,
+        "max_error_index": [
+          0,
+          170,
+          170
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.00390625,
+        "mean_abs_error": 3.5621298593468964e-05,
+        "max_error_index": [
+          0,
+          170,
+          170
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 9,
+      "masked": false,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.7832651287317276e-05,
+        "max_error_index": [
+          0,
+          49,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.7832651287317276e-05,
+        "max_error_index": [
+          0,
+          49,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 9,
+      "masked": true,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.879419091390446e-05,
+        "max_error_index": [
+          0,
+          85,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0078125,
+        "mean_abs_error": 3.879419091390446e-05,
+        "max_error_index": [
+          0,
+          85,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 10,
+      "masked": false,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.015625,
+        "mean_abs_error": 4.423866266733967e-05,
+        "max_error_index": [
+          0,
+          115,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.015625,
+        "mean_abs_error": 4.423866266733967e-05,
+        "max_error_index": [
+          0,
+          115,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 10,
+      "masked": true,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.015625,
+        "mean_abs_error": 4.474719025893137e-05,
+        "max_error_index": [
+          0,
+          76,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.015625,
+        "mean_abs_error": 4.474719025893137e-05,
+        "max_error_index": [
+          0,
+          76,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 11,
+      "masked": false,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.015625,
+        "mean_abs_error": 6.230561120901257e-05,
+        "max_error_index": [
+          0,
+          18,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.015625,
+        "mean_abs_error": 6.230561120901257e-05,
+        "max_error_index": [
+          0,
+          18,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    },
+    {
+      "layer": 11,
+      "masked": true,
+      "dtype": "torch.bfloat16",
+      "device": "cuda:0",
+      "original_backend": "sdpa",
+      "adapter_vs_eager": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_error_index": [
+          0,
+          0,
+          0
+        ],
+        "atol": 1e-06,
+        "rtol": 1e-05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "eager_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.015625,
+        "mean_abs_error": 6.171483255457133e-05,
+        "max_error_index": [
+          0,
+          149,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      },
+      "adapter_vs_sdpa": {
+        "passed": true,
+        "numel": 786432,
+        "mismatched": 0,
+        "nonfinite": 0,
+        "max_abs_error": 0.015625,
+        "mean_abs_error": 6.171483255457133e-05,
+        "max_error_index": [
+          0,
+          149,
+          650
+        ],
+        "atol": 0.005,
+        "rtol": 0.05,
+        "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)"
+      }
+    }
+  ],
+  "errors": [],
+  "gates": {
+    "complete": true,
+    "coverage": true,
+    "adapter_vs_eager": true,
+    "eager_vs_sdpa": false,
+    "adapter_vs_sdpa": false,
+    "linear_raw": true,
+    "finite": true
+  },
+  "torch": "2.7.1+cu118",
+  "cuda": "11.8",
+  "schema_version": 2,
+  "require_backend_equivalence": false,
+  "eligible_for_smoke": true,
+  "warnings": [
+    "Finite SDPA/eager drift retained at unchanged tolerances. Eligible for engineering smoke only; no closed-loop equivalence claim."
+  ],
+  "commit": "ca7e3526f87c2e8297e48a504fa7356487f77da0",
+  "transformers": "5.5.4",
+  "linear_comparisons": [
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.0.self_attn.k_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.0.self_attn.v_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.0.self_attn.q_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.0.self_attn.out_proj"
+    },
+    {
+      "passed": true,
+      "numel": 24576,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.0.mlp.fc1"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.0.mlp.fc2"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.1.self_attn.k_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.1.self_attn.v_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.1.self_attn.q_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.1.self_attn.out_proj"
+    },
+    {
+      "passed": true,
+      "numel": 24576,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.1.mlp.fc1"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.1.mlp.fc2"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.2.self_attn.k_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.2.self_attn.v_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.2.self_attn.q_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.2.self_attn.out_proj"
+    },
+    {
+      "passed": true,
+      "numel": 24576,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.2.mlp.fc1"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.2.mlp.fc2"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.3.self_attn.k_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.3.self_attn.v_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.3.self_attn.q_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.3.self_attn.out_proj"
+    },
+    {
+      "passed": true,
+      "numel": 24576,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.3.mlp.fc1"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.3.mlp.fc2"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.4.self_attn.k_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.4.self_attn.v_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.4.self_attn.q_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.4.self_attn.out_proj"
+    },
+    {
+      "passed": true,
+      "numel": 24576,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.4.mlp.fc1"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.4.mlp.fc2"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.5.self_attn.k_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.5.self_attn.v_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.5.self_attn.q_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.5.self_attn.out_proj"
+    },
+    {
+      "passed": true,
+      "numel": 24576,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.5.mlp.fc1"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.5.mlp.fc2"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.6.self_attn.k_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.6.self_attn.v_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.6.self_attn.q_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.6.self_attn.out_proj"
+    },
+    {
+      "passed": true,
+      "numel": 24576,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.6.mlp.fc1"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.6.mlp.fc2"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.7.self_attn.k_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.7.self_attn.v_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.7.self_attn.q_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.7.self_attn.out_proj"
+    },
+    {
+      "passed": true,
+      "numel": 24576,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.7.mlp.fc1"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.7.mlp.fc2"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.8.self_attn.k_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.8.self_attn.v_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.8.self_attn.q_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.8.self_attn.out_proj"
+    },
+    {
+      "passed": true,
+      "numel": 24576,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.8.mlp.fc1"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.8.mlp.fc2"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.9.self_attn.k_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.9.self_attn.v_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.9.self_attn.q_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.9.self_attn.out_proj"
+    },
+    {
+      "passed": true,
+      "numel": 24576,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.9.mlp.fc1"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.9.mlp.fc2"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.10.self_attn.k_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.10.self_attn.v_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.10.self_attn.q_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.10.self_attn.out_proj"
+    },
+    {
+      "passed": true,
+      "numel": 24576,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.10.mlp.fc1"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.10.mlp.fc2"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.11.self_attn.k_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.11.self_attn.v_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.11.self_attn.q_proj"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.11.self_attn.out_proj"
+    },
+    {
+      "passed": true,
+      "numel": 24576,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.11.mlp.fc1"
+    },
+    {
+      "passed": true,
+      "numel": 6144,
+      "mismatched": 0,
+      "nonfinite": 0,
+      "max_abs_error": 0.0,
+      "mean_abs_error": 0.0,
+      "max_error_index": [
+        0,
+        0,
+        0
+      ],
+      "atol": 1e-06,
+      "rtol": 1e-05,
+      "criterion": "abs(actual-expected) <= atol + rtol*abs(expected)",
+      "module_id": "vision.layers.11.mlp.fc2"
+    }
+  ],
+  "hard_gates": {
+    "complete": true,
+    "coverage": true,
+    "finite": true,
+    "adapter_vs_eager": true,
+    "linear_raw": true
+  },
+  "backend_status": "DIFFERENT"
+}
