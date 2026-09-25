@@ -56,6 +56,8 @@ import yaml
 
 from vla_tcs2.calibration import calibrate
 from vla_tcs2.eval import evaluate
+from vla_tcs2.quant_linear import QuantizedLinear
+from vla_tcs2.quant_matmul import QuantizedMatMul
 from vla_tcs2.model_wrapper import (
     ModelWrapper,
     apply_sensitivity_target,
@@ -449,10 +451,10 @@ def main() -> None:
         # (manual §25); only fail when QuantizedLinear layers exist but
         # nothing was collected, or when no quantized module exists at all.
         has_quant_linear = any(
-            type(m).__name__ == "QuantizedLinear" for m in model.modules()
+            isinstance(m, QuantizedLinear) for m in model.modules()
         )
         has_quant_matmul = any(
-            type(m).__name__ == "QuantizedMatMul" for m in model.modules()
+            isinstance(m, QuantizedMatMul) for m in model.modules()
         )
         if n_weight_layers <= 0 and (has_quant_linear or not has_quant_matmul):
             raise RuntimeError(

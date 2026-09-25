@@ -129,3 +129,12 @@ run #2 的原始 `docs/preflight_run2.json` 保持不变，其 FAIL 是当时严
 回填材料：preflight.json、run.log、coverage_summary.json、评测结果以及 sparsity CSV。单 episode 只证明链路可运行，不代表 Goal suite 成功率。后续正式精度实验需要同协议 eager raw 基线以隔离量化误差与 backend 变化。
 
 实际 run #2 环境为 torch 2.7.1+cu118 / transformers 5.5.4；此前 CPU 小型测试为 torch 2.14.0+cpu / transformers 4.52.4。本次只修改验收逻辑与文档，未运行验证。
+
+
+### 2026-09-25 校准统计器生命周期修复
+
+`calibrate()` 逐模块保存 `_stat_manager` 原绑定，在 `try/finally` 中临时切换至校准统计器。正常结束、全部 reuse 提前返回、reuse 校验失败、数据准备/forward/scale 保存异常均恢复原绑定；保留各模块不同 manager、显式 None 和原本没有该属性的区别。
+
+校准 manager 仅收集 scale，不再复制运行时 sparsity 配置。运行时 manager 的配置和已有计数保持原样，避免将校准样本混入 rollout 统计。MatMul-only 静态权重防护使用 `isinstance`，支持量化模块子类。
+
+此次为代码修复，未运行测试或 rollout；run #6 的历史证据与结论不变。本地回归建议覆盖：全 reuse（含 skip_calibration=True）、正常 recalibrate、缺失 reuse scale、数据准备/forward/save 异常，均检查每个模块的 manager 对象身份在调用前后保持一致，再确认 runtime 统计仍进入 wrapper.stat_manager。

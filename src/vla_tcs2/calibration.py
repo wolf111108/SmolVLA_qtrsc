@@ -101,125 +101,111 @@ def calibrate(
 
     stat_manager = QuantStatManager(str(scale_dir))
 
-    # Preserve sparsity collection across the calibration rebinding: the
-    # runtime/export stat manager (enabled in main.py step 2.5) would
-    # otherwise be silently replaced by a fresh manager with sparsity
-    # disabled, losing all post-calibration runtime sparsity stats.
-    existing_managers = {
-        m._stat_manager
-        for m in model.modules()
-        if isinstance(m, (QuantizedLinear, QuantizedMatMul))
-        and getattr(m, "_stat_manager", None) is not None
-    }
-    prior_sm = next(iter(existing_managers)) if existing_managers else None
-    if prior_sm is not None and getattr(prior_sm, "sparsity_enabled", False):
-        stat_manager.enable_sparsity(
-            enable=True,
-            chunk_size=prior_sm.sparse_stat_chunk_size,
-        )
-        stat_manager.enable_unit_sparsity = prior_sm.enable_unit_sparsity
-        stat_manager.unit_bit_group_size = prior_sm.unit_bit_group_size
-        stat_manager.unit_dim_group_size = prior_sm.unit_dim_group_size
-        print(
-            "[calibration] sparsity collection preserved from the "
-            "pre-calibration stat manager"
-        )
+    # Calibration collects scales in an isolated manager. Runtime sparsity
+    # settings and counters stay on each module's original manager untouched.
+    # A sentinel preserves the distinction between missing and explicit None.
+    missing = object()
+    bindings = [
+        (module, getattr(module, "_stat_manager", missing))
+        for module in model.modules()
+        if isinstance(module, (QuantizedLinear, QuantizedMatMul))
+    ]
 
-    for module in model.modules():
-        if isinstance(module, (QuantizedLinear, QuantizedMatMul)):
+    try:
+        for module, _ in bindings:
             module._stat_manager = stat_manager
 
-    # -------------------------------------------------------------------------
-    # 2. Action plan: reuse vs recalibrate
-    # -------------------------------------------------------------------------
+        # -------------------------------------------------------------------------
+        # 2. Action plan: reuse vs recalibrate
+        # -------------------------------------------------------------------------
 
-    summary = calibration_action_summary(model)
-    print(f"Calibration action summary: {summary}")
+        summary = calibration_action_summary(model)
+        print(f"Calibration action summary: {summary}")
 
-    validate_reuse_layers_have_scales(model)
+        validate_reuse_layers_have_scales(model)
 
-    # Only allow truly skipping when every layer already has scales.
-    if skip_calibration:
+        # Only allow truly skipping when every layer already has scales.
+        if skip_calibration:
+            if summary["recalibrate"] == 0:
+                print("✓ --skip-calibration: all quantized layers are reuse; skipping.")
+                return
+            print(
+                "⚠ --skip-calibration is set, but some layers still require "
+                "recalibration. Continuing."
+            )
+
         if summary["recalibrate"] == 0:
-            print("✓ --skip-calibration: all quantized layers are reuse; skipping.")
+            print("✓ All quantized layers are reuse; skipping calibration dataloader.")
             return
-        print(
-            "⚠ --skip-calibration is set, but some layers still require "
-            "recalibration. Continuing."
+
+        # -------------------------------------------------------------------------
+        # 3. Prepare calibration data
+        # -------------------------------------------------------------------------
+
+        calib_cfg = config.get("calibration", {})
+
+        # The checkpoint's input features use camera1/camera2 keys (training
+        # naming). Reuse the evaluation rename_map unless the calibration
+        # section overrides it with its own dataset-facing names.
+        if "rename_map" not in calib_cfg:
+            calib_cfg["rename_map"] = (
+                config.get("evaluation", {}).get("rename_map", {}) or {}
+            )
+
+        print("Preparing calibration data...")
+
+        batches = prepare_calibration_batches(
+            model=model,
+            calib_cfg=calib_cfg,
+            device=device,
+            fallback_rename_map=(
+                config.get("evaluation", {}).get("rename_map", {}) or {}
+            ),
         )
 
-    if summary["recalibrate"] == 0:
-        print("✓ All quantized layers are reuse; skipping calibration dataloader.")
-        return
+        print(f"Running calibration on {len(batches)} batches...")
 
-    # -------------------------------------------------------------------------
-    # 3. Prepare calibration data
-    # -------------------------------------------------------------------------
+        # -------------------------------------------------------------------------
+        # 4. Scale inspection forward
+        # -------------------------------------------------------------------------
 
-    calib_cfg = config.get("calibration", {})
+        model.eval()
 
-    # The checkpoint's input features use camera1/camera2 keys (training
-    # naming). Reuse the evaluation rename_map unless the calibration
-    # section overrides it with its own dataset-facing names.
-    if "rename_map" not in calib_cfg:
-        calib_cfg["rename_map"] = (
-            config.get("evaluation", {}).get("rename_map", {}) or {}
-        )
+        start_time = time.time()
 
-    print("Preparing calibration data...")
+        with torch.no_grad():
+            for step, batch in enumerate(batches):
+                # Deployment-faithful forward: the inference path exercised
+                # during LIBERO rollouts (VLM backbone + action expert).
+                model.predict_action_chunk(batch)
 
-    batches = prepare_calibration_batches(
-        model=model,
-        calib_cfg=calib_cfg,
-        device=device,
-        fallback_rename_map=(
-            config.get("evaluation", {}).get("rename_map", {}) or {}
-        ),
-    )
+                if step % 10 == 0 or step == len(batches) - 1:
+                    print(f"[calibration] forward {step + 1}/{len(batches)}")
 
-    print(f"Running calibration on {len(batches)} batches...")
+        calibration_time = time.time() - start_time
 
-    # -------------------------------------------------------------------------
-    # 4. Scale inspection forward
-    # -------------------------------------------------------------------------
+        # -------------------------------------------------------------------------
+        # 5. Summary + save
+        # -------------------------------------------------------------------------
 
-    model.eval()
+        print("\n" + "-" * 80)
+        stat_manager.print_summary()
 
-    start_time = time.time()
+        print("Saving quantization scales...")
+        stat_manager.save_all_scales()
 
-    with torch.no_grad():
-        for step, batch in enumerate(batches):
-            # Deployment-faithful forward: the inference path exercised
-            # during LIBERO rollouts (VLM backbone + action expert).
-            model.predict_action_chunk(batch)
+        print(f"\n✓ Calibration completed in {calibration_time:.2f}s")
+        print(f"✓ Scales saved to: {scale_dir}")
 
-            if step % 10 == 0 or step == len(batches) - 1:
-                print(f"[calibration] forward {step + 1}/{len(batches)}")
-
-    calibration_time = time.time() - start_time
-
-    # -------------------------------------------------------------------------
-    # 5. Summary + save
-    # -------------------------------------------------------------------------
-
-    print("\n" + "-" * 80)
-    stat_manager.print_summary()
-
-    print("Saving quantization scales...")
-    stat_manager.save_all_scales()
-
-    # Restore the pre-calibration stat manager binding when one existed:
-    # main.py exports runtime sparsity from wrapper.stat_manager, so eval
-    # statistics must accumulate there (scales are already on disk and do
-    # not depend on the calibration-time manager).
-    if prior_sm is not None:
-        for module in model.modules():
-            if isinstance(module, (QuantizedLinear, QuantizedMatMul)):
-                module._stat_manager = prior_sm
-        print("[calibration] stat manager binding restored for runtime stats")
-
-    print(f"\n✓ Calibration completed in {calibration_time:.2f}s")
-    print(f"✓ Scales saved to: {scale_dir}")
+    finally:
+        # Covers reuse-only returns and failures in validation, data loading,
+        # forward or saving. Never merge distinct runtime managers.
+        for module, previous in bindings:
+            if previous is missing:
+                if hasattr(module, "_stat_manager"):
+                    delattr(module, "_stat_manager")
+            else:
+                module._stat_manager = previous
 
 
 # =============================================================================
