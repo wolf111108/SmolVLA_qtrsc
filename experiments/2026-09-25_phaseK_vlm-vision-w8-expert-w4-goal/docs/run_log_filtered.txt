@@ -1,0 +1,4434 @@
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 9 files:  89%|████████▉ | 8/9 [00:00<00:00, 31.57it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 29.81it/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+WARNING:huggingface_hub.utils._http:Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading SmolVLA from: /home/zyzhao/.cache/huggingface/hub/models--lerobot--smolvla_libero/snapshots/31d453f7edd78c839a8bbc39744a292686daf0de
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  92%|█████████▏| 448/489 [00:00<00:00, 4478.65it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 4614.60it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+Replaced 224 Linear modules.
+Replaced 72 vision/connector Linear modules.
+Injected Vision QuantizedMatMul (24 physical qk/pv objects)
+Injected SmolVLA QuantizedMatMul (64 physical qk/pv objects)
+Switched 384 quantized modules to mode=raw
+
+Model wrapper summary
+---------------------
+Model type       : smolvla
+Total parameters : 450,046,176
+Quantization     : True
+Quantized modules: 384
+
+Switched 384 quantized modules to mode=scale_inspection
+[calibration] scale_dir: scales/2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal/quant
+Calibration action summary: {'reuse': 0, 'recalibrate': 384}
+Preparing calibration data...
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files: 100%|██████████| 4/4 [00:00<00:00, 1123.35it/s]
+WARNING:lerobot.utils.import_utils:Could not load libtorchcodec. Likely causes:
+          1. FFmpeg is not properly installed in your environment. We support
+             versions 4, 5, 6, 7, and 8, and we attempt to load libtorchcodec
+             for each of those versions. Errors for versions not installed on
+             your system are expected; only the error for your installed FFmpeg
+             version is relevant. On Windows, ensure you've installed the
+             "full-shared" version which ships DLLs.
+          2. The PyTorch version (2.7.1+cu118) is not compatible with
+             this version of TorchCodec. Refer to the version compatibility
+             table:
+             https://github.com/pytorch/torchcodec?tab=readme-ov-file#installing-torchcodec.
+          3. Another runtime dependency; see exceptions below.
+
+        The following exceptions were raised as we tried to load libtorchcodec:
+        
+[start of libtorchcodec loading traceback]
+FFmpeg version 8:
+Traceback (most recent call last):
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/torchcodec/_internally_replaced_utils.py", line 93, in load_torchcodec_shared_libraries
+    torch.ops.load_library(core_library_path)
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/torch/_ops.py", line 1392, in load_library
+    ctypes.CDLL(path)
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/ctypes/__init__.py", line 379, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: libavutil.so.60: cannot open shared object file: No such file or directory
+
+FFmpeg version 7:
+Traceback (most recent call last):
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/torchcodec/_internally_replaced_utils.py", line 93, in load_torchcodec_shared_libraries
+    torch.ops.load_library(core_library_path)
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/torch/_ops.py", line 1392, in load_library
+    ctypes.CDLL(path)
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/ctypes/__init__.py", line 379, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: libavutil.so.59: cannot open shared object file: No such file or directory
+
+FFmpeg version 6:
+Traceback (most recent call last):
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/torchcodec/_internally_replaced_utils.py", line 93, in load_torchcodec_shared_libraries
+    torch.ops.load_library(core_library_path)
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/torch/_ops.py", line 1392, in load_library
+    ctypes.CDLL(path)
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/ctypes/__init__.py", line 379, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: libavutil.so.58: cannot open shared object file: No such file or directory
+
+FFmpeg version 5:
+Traceback (most recent call last):
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/torchcodec/_internally_replaced_utils.py", line 93, in load_torchcodec_shared_libraries
+    torch.ops.load_library(core_library_path)
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/torch/_ops.py", line 1392, in load_library
+    ctypes.CDLL(path)
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/ctypes/__init__.py", line 379, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: libavutil.so.57: cannot open shared object file: No such file or directory
+
+FFmpeg version 4:
+Traceback (most recent call last):
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/torchcodec/_internally_replaced_utils.py", line 93, in load_torchcodec_shared_libraries
+    torch.ops.load_library(core_library_path)
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/torch/_ops.py", line 1392, in load_library
+    ctypes.CDLL(path)
+  File "/home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/ctypes/__init__.py", line 379, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: /home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/torchcodec/libtorchcodec_core4.so: undefined symbol: torch_dtype_float4_e2m1fn_x2
+[end of libtorchcodec loading traceback].
+'torchcodec' is installed but cannot be loaded (see the error above). Falling back to 'pyav' as a default decoder.
+[calibration] dataset: HuggingFaceVLA/libero (rev=v3.0), 1693 episodes total, sampled: [51, 228, 285, 457, 501, 563, 1309, 1518]
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files: 100%|██████████| 4/4 [00:00<00:00, 1169.63it/s]
+[calibration] 8 episodes -> 356 frames (frame_stride=4)
+[calibration] prepared 356 batches (batch_size=1, cameras=['observation.images.image', 'observation.images.image2'])
+Running calibration on 356 batches...
+[calibration] forward 1/356
+[calibration] forward 11/356
+[calibration] forward 21/356
+[calibration] forward 31/356
+[calibration] forward 41/356
+[calibration] forward 51/356
+[calibration] forward 61/356
+[calibration] forward 71/356
+[calibration] forward 81/356
+[calibration] forward 91/356
+[calibration] forward 101/356
+[calibration] forward 111/356
+[calibration] forward 121/356
+[calibration] forward 131/356
+[calibration] forward 141/356
+[calibration] forward 151/356
+[calibration] forward 161/356
+[calibration] forward 171/356
+[calibration] forward 181/356
+[calibration] forward 191/356
+[calibration] forward 201/356
+[calibration] forward 211/356
+[calibration] forward 221/356
+[calibration] forward 231/356
+[calibration] forward 241/356
+[calibration] forward 251/356
+[calibration] forward 261/356
+[calibration] forward 271/356
+[calibration] forward 281/356
+[calibration] forward 291/356
+[calibration] forward 301/356
+[calibration] forward 311/356
+[calibration] forward 321/356
+[calibration] forward 331/356
+[calibration] forward 341/356
+[calibration] forward 351/356
+[calibration] forward 356/356
+
+--------------------------------------------------------------------------------
+
+================================================================================
+Quantization Statistics Summary
+================================================================================
+Total layers: 384
+Total samples: 632256
+
+Per-layer statistics:
+--------------------------------------------------------------------------------
+
+vision_q_proj_0:
+  Samples: 712
+  Scales:
+    w_scale: 0.000724
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_k_proj_0:
+  Samples: 712
+  Scales:
+    w_scale: 0.000705
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_v_proj_0:
+  Samples: 712
+  Scales:
+    w_scale: 0.000318
+    a_scale: 0.031250
+    o_scale: 0.007812
+
+vision_qk_matmul_0:
+  Samples: 712
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.007812
+    O_scale: 0.500000
+
+vision_pv_matmul_0:
+  Samples: 712
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.001953
+    O_scale: 0.015625
+
+vision_out_proj_0:
+  Samples: 712
+  Scales:
+    w_scale: 0.000341
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_fc1_0:
+  Samples: 712
+  Scales:
+    w_scale: 0.000417
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_fc2_0:
+  Samples: 712
+  Scales:
+    w_scale: 0.000406
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+vision_q_proj_1:
+  Samples: 712
+  Scales:
+    w_scale: 0.000574
+    a_scale: 0.031250
+    o_scale: 0.031250
+
+vision_k_proj_1:
+  Samples: 712
+  Scales:
+    w_scale: 0.000586
+    a_scale: 0.031250
+    o_scale: 0.031250
+
+vision_v_proj_1:
+  Samples: 712
+  Scales:
+    w_scale: 0.000347
+    a_scale: 0.031250
+    o_scale: 0.007812
+
+vision_qk_matmul_1:
+  Samples: 712
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 1.000000
+
+vision_pv_matmul_1:
+  Samples: 712
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.003906
+    O_scale: 0.007812
+
+vision_out_proj_1:
+  Samples: 712
+  Scales:
+    w_scale: 0.000337
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_fc1_1:
+  Samples: 712
+  Scales:
+    w_scale: 0.000396
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_fc2_1:
+  Samples: 712
+  Scales:
+    w_scale: 0.000324
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_q_proj_2:
+  Samples: 712
+  Scales:
+    w_scale: 0.000475
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_k_proj_2:
+  Samples: 712
+  Scales:
+    w_scale: 0.000486
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_v_proj_2:
+  Samples: 712
+  Scales:
+    w_scale: 0.000318
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_qk_matmul_2:
+  Samples: 712
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 1.000000
+
+vision_pv_matmul_2:
+  Samples: 712
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.003906
+    O_scale: 0.015625
+
+vision_out_proj_2:
+  Samples: 712
+  Scales:
+    w_scale: 0.000310
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_fc1_2:
+  Samples: 712
+  Scales:
+    w_scale: 0.000400
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_fc2_2:
+  Samples: 712
+  Scales:
+    w_scale: 0.000327
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_q_proj_3:
+  Samples: 712
+  Scales:
+    w_scale: 0.000458
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_k_proj_3:
+  Samples: 712
+  Scales:
+    w_scale: 0.000448
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_v_proj_3:
+  Samples: 712
+  Scales:
+    w_scale: 0.000347
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_qk_matmul_3:
+  Samples: 712
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vision_pv_matmul_3:
+  Samples: 712
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+vision_out_proj_3:
+  Samples: 712
+  Scales:
+    w_scale: 0.000341
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_fc1_3:
+  Samples: 712
+  Scales:
+    w_scale: 0.000404
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_fc2_3:
+  Samples: 712
+  Scales:
+    w_scale: 0.000329
+    a_scale: 0.007812
+    o_scale: 0.007812
+
+vision_q_proj_4:
+  Samples: 712
+  Scales:
+    w_scale: 0.000414
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_k_proj_4:
+  Samples: 712
+  Scales:
+    w_scale: 0.000402
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_v_proj_4:
+  Samples: 712
+  Scales:
+    w_scale: 0.000337
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_qk_matmul_4:
+  Samples: 712
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vision_pv_matmul_4:
+  Samples: 712
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+vision_out_proj_4:
+  Samples: 712
+  Scales:
+    w_scale: 0.000341
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_fc1_4:
+  Samples: 712
+  Scales:
+    w_scale: 0.000404
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_fc2_4:
+  Samples: 712
+  Scales:
+    w_scale: 0.000348
+    a_scale: 0.007812
+    o_scale: 0.007812
+
+vision_q_proj_5:
+  Samples: 712
+  Scales:
+    w_scale: 0.000431
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_k_proj_5:
+  Samples: 712
+  Scales:
+    w_scale: 0.000425
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_v_proj_5:
+  Samples: 712
+  Scales:
+    w_scale: 0.000331
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_qk_matmul_5:
+  Samples: 712
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vision_pv_matmul_5:
+  Samples: 712
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+vision_out_proj_5:
+  Samples: 712
+  Scales:
+    w_scale: 0.000337
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_fc1_5:
+  Samples: 712
+  Scales:
+    w_scale: 0.000398
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_fc2_5:
+  Samples: 712
+  Scales:
+    w_scale: 0.000352
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+vision_q_proj_6:
+  Samples: 712
+  Scales:
+    w_scale: 0.000429
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_k_proj_6:
+  Samples: 712
+  Scales:
+    w_scale: 0.000425
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_v_proj_6:
+  Samples: 712
+  Scales:
+    w_scale: 0.000331
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_qk_matmul_6:
+  Samples: 712
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vision_pv_matmul_6:
+  Samples: 712
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+vision_out_proj_6:
+  Samples: 712
+  Scales:
+    w_scale: 0.000333
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_fc1_6:
+  Samples: 712
+  Scales:
+    w_scale: 0.000385
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_fc2_6:
+  Samples: 712
+  Scales:
+    w_scale: 0.000383
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_q_proj_7:
+  Samples: 712
+  Scales:
+    w_scale: 0.000423
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_k_proj_7:
+  Samples: 712
+  Scales:
+    w_scale: 0.000425
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_v_proj_7:
+  Samples: 712
+  Scales:
+    w_scale: 0.000339
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_qk_matmul_7:
+  Samples: 712
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vision_pv_matmul_7:
+  Samples: 712
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+vision_out_proj_7:
+  Samples: 712
+  Scales:
+    w_scale: 0.000335
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_fc1_7:
+  Samples: 712
+  Scales:
+    w_scale: 0.000371
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_fc2_7:
+  Samples: 712
+  Scales:
+    w_scale: 0.000385
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_q_proj_8:
+  Samples: 712
+  Scales:
+    w_scale: 0.000416
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_k_proj_8:
+  Samples: 712
+  Scales:
+    w_scale: 0.000417
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_v_proj_8:
+  Samples: 712
+  Scales:
+    w_scale: 0.000348
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_qk_matmul_8:
+  Samples: 712
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vision_pv_matmul_8:
+  Samples: 712
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+vision_out_proj_8:
+  Samples: 712
+  Scales:
+    w_scale: 0.000345
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_fc1_8:
+  Samples: 712
+  Scales:
+    w_scale: 0.000362
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+vision_fc2_8:
+  Samples: 712
+  Scales:
+    w_scale: 0.000410
+    a_scale: 0.015625
+    o_scale: 0.003906
+
+vision_q_proj_9:
+  Samples: 712
+  Scales:
+    w_scale: 0.000398
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_k_proj_9:
+  Samples: 712
+  Scales:
+    w_scale: 0.000404
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_v_proj_9:
+  Samples: 712
+  Scales:
+    w_scale: 0.000358
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_qk_matmul_9:
+  Samples: 712
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vision_pv_matmul_9:
+  Samples: 712
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+vision_out_proj_9:
+  Samples: 712
+  Scales:
+    w_scale: 0.000356
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+vision_fc1_9:
+  Samples: 712
+  Scales:
+    w_scale: 0.000387
+    a_scale: 0.062500
+    o_scale: 0.062500
+
+vision_fc2_9:
+  Samples: 712
+  Scales:
+    w_scale: 0.000410
+    a_scale: 0.031250
+    o_scale: 0.007812
+
+vision_q_proj_10:
+  Samples: 712
+  Scales:
+    w_scale: 0.000387
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_k_proj_10:
+  Samples: 712
+  Scales:
+    w_scale: 0.000391
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_v_proj_10:
+  Samples: 712
+  Scales:
+    w_scale: 0.000373
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_qk_matmul_10:
+  Samples: 712
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vision_pv_matmul_10:
+  Samples: 712
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+vision_out_proj_10:
+  Samples: 712
+  Scales:
+    w_scale: 0.000370
+    a_scale: 0.007812
+    o_scale: 0.007812
+
+vision_fc1_10:
+  Samples: 712
+  Scales:
+    w_scale: 0.000412
+    a_scale: 0.125000
+    o_scale: 0.125000
+
+vision_fc2_10:
+  Samples: 712
+  Scales:
+    w_scale: 0.000444
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_q_proj_11:
+  Samples: 712
+  Scales:
+    w_scale: 0.000387
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_k_proj_11:
+  Samples: 712
+  Scales:
+    w_scale: 0.000404
+    a_scale: 0.062500
+    o_scale: 0.031250
+
+vision_v_proj_11:
+  Samples: 712
+  Scales:
+    w_scale: 0.000398
+    a_scale: 0.062500
+    o_scale: 0.015625
+
+vision_qk_matmul_11:
+  Samples: 712
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vision_pv_matmul_11:
+  Samples: 712
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+vision_out_proj_11:
+  Samples: 712
+  Scales:
+    w_scale: 0.000396
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+vision_fc1_11:
+  Samples: 712
+  Scales:
+    w_scale: 0.000419
+    a_scale: 0.125000
+    o_scale: 0.125000
+
+vision_fc2_11:
+  Samples: 712
+  Scales:
+    w_scale: 0.000440
+    a_scale: 0.125000
+    o_scale: 0.062500
+
+vlm_q_proj_0:
+  Samples: 356
+  Scales:
+    w_scale: 0.003232
+    a_scale: 0.001953
+    o_scale: 0.031250
+
+vlm_k_proj_0:
+  Samples: 356
+  Scales:
+    w_scale: 0.005178
+    a_scale: 0.001953
+    o_scale: 0.031250
+
+vlm_v_proj_0:
+  Samples: 356
+  Scales:
+    w_scale: 0.000754
+    a_scale: 0.001953
+    o_scale: 0.001953
+
+vlm_qk_matmul_0:
+  Samples: 356
+  Scales:
+    A_scale: 0.062500
+    B_scale: 0.015625
+    O_scale: 1.000000
+
+vlm_pv_matmul_0:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.000488
+    O_scale: 0.001953
+
+vlm_o_proj_0:
+  Samples: 356
+  Scales:
+    w_scale: 0.000896
+    a_scale: 0.000977
+    o_scale: 0.000977
+
+vlm_gate_proj_0:
+  Samples: 356
+  Scales:
+    w_scale: 0.002773
+    a_scale: 0.003906
+    o_scale: 0.007812
+
+vlm_up_proj_0:
+  Samples: 356
+  Scales:
+    w_scale: 0.002757
+    a_scale: 0.003906
+    o_scale: 0.007812
+
+vlm_down_proj_0:
+  Samples: 356
+  Scales:
+    w_scale: 0.003294
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_q_proj_1:
+  Samples: 356
+  Scales:
+    w_scale: 0.003983
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_k_proj_1:
+  Samples: 356
+  Scales:
+    w_scale: 0.004810
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_v_proj_1:
+  Samples: 356
+  Scales:
+    w_scale: 0.001884
+    a_scale: 0.003906
+    o_scale: 0.007812
+
+vlm_qk_matmul_1:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vlm_pv_matmul_1:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.003906
+    O_scale: 0.007812
+
+vlm_o_proj_1:
+  Samples: 356
+  Scales:
+    w_scale: 0.002145
+    a_scale: 0.003906
+    o_scale: 0.007812
+
+vlm_gate_proj_1:
+  Samples: 356
+  Scales:
+    w_scale: 0.002972
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_up_proj_1:
+  Samples: 356
+  Scales:
+    w_scale: 0.002635
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_down_proj_1:
+  Samples: 356
+  Scales:
+    w_scale: 0.002681
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_q_proj_2:
+  Samples: 356
+  Scales:
+    w_scale: 0.003615
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_k_proj_2:
+  Samples: 356
+  Scales:
+    w_scale: 0.004136
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_v_proj_2:
+  Samples: 356
+  Scales:
+    w_scale: 0.002175
+    a_scale: 0.003906
+    o_scale: 0.007812
+
+vlm_qk_matmul_2:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vlm_pv_matmul_2:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.003906
+    O_scale: 0.007812
+
+vlm_o_proj_2:
+  Samples: 356
+  Scales:
+    w_scale: 0.002267
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_gate_proj_2:
+  Samples: 356
+  Scales:
+    w_scale: 0.002911
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_up_proj_2:
+  Samples: 356
+  Scales:
+    w_scale: 0.002696
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_down_proj_2:
+  Samples: 356
+  Scales:
+    w_scale: 0.002742
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_q_proj_3:
+  Samples: 356
+  Scales:
+    w_scale: 0.003692
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_k_proj_3:
+  Samples: 356
+  Scales:
+    w_scale: 0.004259
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_v_proj_3:
+  Samples: 356
+  Scales:
+    w_scale: 0.001831
+    a_scale: 0.003906
+    o_scale: 0.007812
+
+vlm_qk_matmul_3:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vlm_pv_matmul_3:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.003906
+    O_scale: 0.007812
+
+vlm_o_proj_3:
+  Samples: 356
+  Scales:
+    w_scale: 0.002160
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_gate_proj_3:
+  Samples: 356
+  Scales:
+    w_scale: 0.002911
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_up_proj_3:
+  Samples: 356
+  Scales:
+    w_scale: 0.002711
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_down_proj_3:
+  Samples: 356
+  Scales:
+    w_scale: 0.002711
+    a_scale: 0.007812
+    o_scale: 0.062500
+
+vlm_q_proj_4:
+  Samples: 356
+  Scales:
+    w_scale: 0.003569
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_k_proj_4:
+  Samples: 356
+  Scales:
+    w_scale: 0.004075
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_v_proj_4:
+  Samples: 356
+  Scales:
+    w_scale: 0.002221
+    a_scale: 0.003906
+    o_scale: 0.007812
+
+vlm_qk_matmul_4:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.031250
+    O_scale: 0.500000
+
+vlm_pv_matmul_4:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+vlm_o_proj_4:
+  Samples: 356
+  Scales:
+    w_scale: 0.002328
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_gate_proj_4:
+  Samples: 356
+  Scales:
+    w_scale: 0.002849
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_up_proj_4:
+  Samples: 356
+  Scales:
+    w_scale: 0.002757
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_down_proj_4:
+  Samples: 356
+  Scales:
+    w_scale: 0.002757
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_q_proj_5:
+  Samples: 356
+  Scales:
+    w_scale: 0.003339
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_k_proj_5:
+  Samples: 356
+  Scales:
+    w_scale: 0.003615
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_v_proj_5:
+  Samples: 356
+  Scales:
+    w_scale: 0.002512
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_qk_matmul_5:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vlm_pv_matmul_5:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+vlm_o_proj_5:
+  Samples: 356
+  Scales:
+    w_scale: 0.002436
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_gate_proj_5:
+  Samples: 356
+  Scales:
+    w_scale: 0.002803
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_up_proj_5:
+  Samples: 356
+  Scales:
+    w_scale: 0.002773
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_down_proj_5:
+  Samples: 356
+  Scales:
+    w_scale: 0.002757
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_q_proj_6:
+  Samples: 356
+  Scales:
+    w_scale: 0.003309
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_k_proj_6:
+  Samples: 356
+  Scales:
+    w_scale: 0.003676
+    a_scale: 0.003906
+    o_scale: 0.062500
+
+vlm_v_proj_6:
+  Samples: 356
+  Scales:
+    w_scale: 0.002512
+    a_scale: 0.003906
+    o_scale: 0.007812
+
+vlm_qk_matmul_6:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.031250
+    O_scale: 0.500000
+
+vlm_pv_matmul_6:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+vlm_o_proj_6:
+  Samples: 356
+  Scales:
+    w_scale: 0.002466
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_gate_proj_6:
+  Samples: 356
+  Scales:
+    w_scale: 0.002773
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_up_proj_6:
+  Samples: 356
+  Scales:
+    w_scale: 0.002819
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_down_proj_6:
+  Samples: 356
+  Scales:
+    w_scale: 0.002803
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_q_proj_7:
+  Samples: 356
+  Scales:
+    w_scale: 0.003294
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_k_proj_7:
+  Samples: 356
+  Scales:
+    w_scale: 0.003401
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_v_proj_7:
+  Samples: 356
+  Scales:
+    w_scale: 0.003033
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_qk_matmul_7:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.031250
+    O_scale: 0.500000
+
+vlm_pv_matmul_7:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+vlm_o_proj_7:
+  Samples: 356
+  Scales:
+    w_scale: 0.002696
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_gate_proj_7:
+  Samples: 356
+  Scales:
+    w_scale: 0.002788
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_up_proj_7:
+  Samples: 356
+  Scales:
+    w_scale: 0.002865
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_down_proj_7:
+  Samples: 356
+  Scales:
+    w_scale: 0.002849
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_q_proj_8:
+  Samples: 356
+  Scales:
+    w_scale: 0.003263
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_k_proj_8:
+  Samples: 356
+  Scales:
+    w_scale: 0.003493
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_v_proj_8:
+  Samples: 356
+  Scales:
+    w_scale: 0.002665
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_qk_matmul_8:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.031250
+    O_scale: 0.250000
+
+vlm_pv_matmul_8:
+  Samples: 356
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+vlm_o_proj_8:
+  Samples: 356
+  Scales:
+    w_scale: 0.002589
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_gate_proj_8:
+  Samples: 356
+  Scales:
+    w_scale: 0.002987
+    a_scale: 0.001953
+    o_scale: 0.015625
+
+vlm_up_proj_8:
+  Samples: 356
+  Scales:
+    w_scale: 0.002711
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_down_proj_8:
+  Samples: 356
+  Scales:
+    w_scale: 0.002681
+    a_scale: 0.015625
+    o_scale: 0.031250
+
+vlm_q_proj_9:
+  Samples: 356
+  Scales:
+    w_scale: 0.003462
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_k_proj_9:
+  Samples: 356
+  Scales:
+    w_scale: 0.003631
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_v_proj_9:
+  Samples: 356
+  Scales:
+    w_scale: 0.002696
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_qk_matmul_9:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vlm_pv_matmul_9:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+vlm_o_proj_9:
+  Samples: 356
+  Scales:
+    w_scale: 0.002543
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_gate_proj_9:
+  Samples: 356
+  Scales:
+    w_scale: 0.002880
+    a_scale: 0.001953
+    o_scale: 0.015625
+
+vlm_up_proj_9:
+  Samples: 356
+  Scales:
+    w_scale: 0.002803
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_down_proj_9:
+  Samples: 356
+  Scales:
+    w_scale: 0.002757
+    a_scale: 0.015625
+    o_scale: 0.031250
+
+vlm_q_proj_10:
+  Samples: 356
+  Scales:
+    w_scale: 0.003477
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_k_proj_10:
+  Samples: 356
+  Scales:
+    w_scale: 0.003738
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_v_proj_10:
+  Samples: 356
+  Scales:
+    w_scale: 0.002757
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_qk_matmul_10:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vlm_pv_matmul_10:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+vlm_o_proj_10:
+  Samples: 356
+  Scales:
+    w_scale: 0.002696
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_gate_proj_10:
+  Samples: 356
+  Scales:
+    w_scale: 0.002788
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_up_proj_10:
+  Samples: 356
+  Scales:
+    w_scale: 0.002880
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_down_proj_10:
+  Samples: 356
+  Scales:
+    w_scale: 0.002849
+    a_scale: 0.015625
+    o_scale: 0.031250
+
+vlm_q_proj_11:
+  Samples: 356
+  Scales:
+    w_scale: 0.003140
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_k_proj_11:
+  Samples: 356
+  Scales:
+    w_scale: 0.003385
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_v_proj_11:
+  Samples: 356
+  Scales:
+    w_scale: 0.002650
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_qk_matmul_11:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+vlm_pv_matmul_11:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+vlm_o_proj_11:
+  Samples: 356
+  Scales:
+    w_scale: 0.002604
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_gate_proj_11:
+  Samples: 356
+  Scales:
+    w_scale: 0.002757
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_up_proj_11:
+  Samples: 356
+  Scales:
+    w_scale: 0.002987
+    a_scale: 0.001953
+    o_scale: 0.007812
+
+vlm_down_proj_11:
+  Samples: 356
+  Scales:
+    w_scale: 0.002972
+    a_scale: 0.015625
+    o_scale: 0.031250
+
+vlm_q_proj_12:
+  Samples: 356
+  Scales:
+    w_scale: 0.003431
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_k_proj_12:
+  Samples: 356
+  Scales:
+    w_scale: 0.003615
+    a_scale: 0.007812
+    o_scale: 0.062500
+
+vlm_v_proj_12:
+  Samples: 356
+  Scales:
+    w_scale: 0.002604
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_qk_matmul_12:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.031250
+    O_scale: 0.500000
+
+vlm_pv_matmul_12:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+vlm_o_proj_12:
+  Samples: 356
+  Scales:
+    w_scale: 0.002604
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_gate_proj_12:
+  Samples: 356
+  Scales:
+    w_scale: 0.002696
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_up_proj_12:
+  Samples: 356
+  Scales:
+    w_scale: 0.003094
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_down_proj_12:
+  Samples: 356
+  Scales:
+    w_scale: 0.003002
+    a_scale: 0.015625
+    o_scale: 0.031250
+
+vlm_q_proj_13:
+  Samples: 356
+  Scales:
+    w_scale: 0.003385
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_k_proj_13:
+  Samples: 356
+  Scales:
+    w_scale: 0.003508
+    a_scale: 0.003906
+    o_scale: 0.031250
+
+vlm_v_proj_13:
+  Samples: 356
+  Scales:
+    w_scale: 0.002650
+    a_scale: 0.003906
+    o_scale: 0.007812
+
+vlm_qk_matmul_13:
+  Samples: 356
+  Scales:
+    A_scale: 0.031250
+    B_scale: 0.031250
+    O_scale: 0.500000
+
+vlm_pv_matmul_13:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+vlm_o_proj_13:
+  Samples: 356
+  Scales:
+    w_scale: 0.002574
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_gate_proj_13:
+  Samples: 356
+  Scales:
+    w_scale: 0.002727
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_up_proj_13:
+  Samples: 356
+  Scales:
+    w_scale: 0.003125
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_down_proj_13:
+  Samples: 356
+  Scales:
+    w_scale: 0.003033
+    a_scale: 0.015625
+    o_scale: 0.062500
+
+vlm_q_proj_14:
+  Samples: 356
+  Scales:
+    w_scale: 0.003401
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_k_proj_14:
+  Samples: 356
+  Scales:
+    w_scale: 0.003447
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_v_proj_14:
+  Samples: 356
+  Scales:
+    w_scale: 0.002635
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_qk_matmul_14:
+  Samples: 356
+  Scales:
+    A_scale: 0.062500
+    B_scale: 0.031250
+    O_scale: 0.500000
+
+vlm_pv_matmul_14:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+vlm_o_proj_14:
+  Samples: 356
+  Scales:
+    w_scale: 0.002665
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_gate_proj_14:
+  Samples: 356
+  Scales:
+    w_scale: 0.002788
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_up_proj_14:
+  Samples: 356
+  Scales:
+    w_scale: 0.003079
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_down_proj_14:
+  Samples: 356
+  Scales:
+    w_scale: 0.003002
+    a_scale: 0.015625
+    o_scale: 0.031250
+
+vlm_q_proj_15:
+  Samples: 356
+  Scales:
+    w_scale: 0.003401
+    a_scale: 0.007812
+    o_scale: 0.062500
+
+vlm_k_proj_15:
+  Samples: 356
+  Scales:
+    w_scale: 0.003539
+    a_scale: 0.007812
+    o_scale: 0.062500
+
+vlm_v_proj_15:
+  Samples: 356
+  Scales:
+    w_scale: 0.002604
+    a_scale: 0.007812
+    o_scale: 0.015625
+
+vlm_qk_matmul_15:
+  Samples: 356
+  Scales:
+    A_scale: 0.062500
+    B_scale: 0.031250
+    O_scale: 0.500000
+
+vlm_pv_matmul_15:
+  Samples: 356
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+vlm_o_proj_15:
+  Samples: 356
+  Scales:
+    w_scale: 0.002665
+    a_scale: 0.007812
+    o_scale: 0.031250
+
+vlm_gate_proj_15:
+  Samples: 356
+  Scales:
+    w_scale: 0.002865
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_up_proj_15:
+  Samples: 356
+  Scales:
+    w_scale: 0.003064
+    a_scale: 0.003906
+    o_scale: 0.015625
+
+vlm_down_proj_15:
+  Samples: 356
+  Scales:
+    w_scale: 0.002987
+    a_scale: 0.015625
+    o_scale: 0.062500
+
+expert_q_proj_0:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_k_proj_0:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_v_proj_0:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_qk_matmul_0:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.250000
+
+expert_pv_matmul_0:
+  Samples: 3560
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+expert_o_proj_0:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_gate_proj_0:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_0:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_0:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_q_proj_1:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_k_proj_1:
+  Samples: 3560
+  Scales:
+    w_scale: 0.010371
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+expert_v_proj_1:
+  Samples: 3560
+  Scales:
+    w_scale: 0.011205
+    a_scale: 0.007812
+    o_scale: 0.007812
+
+expert_qk_matmul_1:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+expert_pv_matmul_1:
+  Samples: 3560
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.001953
+    O_scale: 0.007812
+
+expert_o_proj_1:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_gate_proj_1:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_1:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_1:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.003906
+    o_scale: 0.003906
+
+expert_q_proj_2:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_k_proj_2:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_v_proj_2:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_qk_matmul_2:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+expert_pv_matmul_2:
+  Samples: 3560
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.003906
+    O_scale: 0.007812
+
+expert_o_proj_2:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_gate_proj_2:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_2:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_2:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.003906
+    o_scale: 0.001953
+
+expert_q_proj_3:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_k_proj_3:
+  Samples: 3560
+  Scales:
+    w_scale: 0.010411
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+expert_v_proj_3:
+  Samples: 3560
+  Scales:
+    w_scale: 0.011000
+    a_scale: 0.007812
+    o_scale: 0.007812
+
+expert_qk_matmul_3:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+expert_pv_matmul_3:
+  Samples: 3560
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.003906
+    O_scale: 0.007812
+
+expert_o_proj_3:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.003906
+    o_scale: 0.003906
+
+expert_gate_proj_3:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_3:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_3:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.003906
+    o_scale: 0.001953
+
+expert_q_proj_4:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_k_proj_4:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_v_proj_4:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_qk_matmul_4:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.250000
+
+expert_pv_matmul_4:
+  Samples: 3560
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.003906
+    O_scale: 0.007812
+
+expert_o_proj_4:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_gate_proj_4:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_4:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_4:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.003906
+    o_scale: 0.001953
+
+expert_q_proj_5:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_k_proj_5:
+  Samples: 3560
+  Scales:
+    w_scale: 0.010610
+    a_scale: 0.031250
+    o_scale: 0.015625
+
+expert_v_proj_5:
+  Samples: 3560
+  Scales:
+    w_scale: 0.010797
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_qk_matmul_5:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+expert_pv_matmul_5:
+  Samples: 3560
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.003906
+    O_scale: 0.015625
+
+expert_o_proj_5:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.007812
+
+expert_gate_proj_5:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_5:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_5:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_q_proj_6:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_k_proj_6:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_v_proj_6:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_qk_matmul_6:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.250000
+
+expert_pv_matmul_6:
+  Samples: 3560
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+expert_o_proj_6:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_gate_proj_6:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_6:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_6:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_q_proj_7:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_k_proj_7:
+  Samples: 3560
+  Scales:
+    w_scale: 0.011383
+    a_scale: 0.031250
+    o_scale: 0.031250
+
+expert_v_proj_7:
+  Samples: 3560
+  Scales:
+    w_scale: 0.010536
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_qk_matmul_7:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+expert_pv_matmul_7:
+  Samples: 3560
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.003906
+    O_scale: 0.007812
+
+expert_o_proj_7:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_gate_proj_7:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_7:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_7:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_q_proj_8:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_k_proj_8:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_v_proj_8:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_qk_matmul_8:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+expert_pv_matmul_8:
+  Samples: 3560
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+expert_o_proj_8:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_gate_proj_8:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_8:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_8:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_q_proj_9:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_k_proj_9:
+  Samples: 3560
+  Scales:
+    w_scale: 0.012096
+    a_scale: 0.031250
+    o_scale: 0.031250
+
+expert_v_proj_9:
+  Samples: 3560
+  Scales:
+    w_scale: 0.010725
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_qk_matmul_9:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+expert_pv_matmul_9:
+  Samples: 3560
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.003906
+    O_scale: 0.007812
+
+expert_o_proj_9:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_gate_proj_9:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_9:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_9:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_q_proj_10:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_k_proj_10:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006803
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_v_proj_10:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_qk_matmul_10:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.250000
+
+expert_pv_matmul_10:
+  Samples: 3560
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+expert_o_proj_10:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_gate_proj_10:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_10:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_10:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_q_proj_11:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_k_proj_11:
+  Samples: 3560
+  Scales:
+    w_scale: 0.012723
+    a_scale: 0.031250
+    o_scale: 0.031250
+
+expert_v_proj_11:
+  Samples: 3560
+  Scales:
+    w_scale: 0.010566
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_qk_matmul_11:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.031250
+    O_scale: 1.000000
+
+expert_pv_matmul_11:
+  Samples: 3560
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+expert_o_proj_11:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_gate_proj_11:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_11:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_11:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_q_proj_12:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_k_proj_12:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_v_proj_12:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_qk_matmul_12:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.250000
+
+expert_pv_matmul_12:
+  Samples: 3560
+  Scales:
+    A_scale: 0.001953
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+expert_o_proj_12:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_gate_proj_12:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_12:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_12:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_q_proj_13:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_k_proj_13:
+  Samples: 3560
+  Scales:
+    w_scale: 0.013361
+    a_scale: 0.031250
+    o_scale: 0.062500
+
+expert_v_proj_13:
+  Samples: 3560
+  Scales:
+    w_scale: 0.010895
+    a_scale: 0.007812
+    o_scale: 0.007812
+
+expert_qk_matmul_13:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.031250
+    O_scale: 1.000000
+
+expert_pv_matmul_13:
+  Samples: 3560
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.003906
+    O_scale: 0.007812
+
+expert_o_proj_13:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_gate_proj_13:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_13:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_13:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_q_proj_14:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_k_proj_14:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_v_proj_14:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_qk_matmul_14:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.015625
+    O_scale: 0.500000
+
+expert_pv_matmul_14:
+  Samples: 3560
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.007812
+
+expert_o_proj_14:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.007812
+
+expert_gate_proj_14:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006706
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_14:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_14:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.003906
+
+expert_q_proj_15:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_k_proj_15:
+  Samples: 3560
+  Scales:
+    w_scale: 0.013423
+    a_scale: 0.062500
+    o_scale: 0.062500
+
+expert_v_proj_15:
+  Samples: 3560
+  Scales:
+    w_scale: 0.010707
+    a_scale: 0.015625
+    o_scale: 0.015625
+
+expert_qk_matmul_15:
+  Samples: 3560
+  Scales:
+    A_scale: 0.015625
+    B_scale: 0.031250
+    O_scale: 1.000000
+
+expert_pv_matmul_15:
+  Samples: 3560
+  Scales:
+    A_scale: 0.003906
+    B_scale: 0.007812
+    O_scale: 0.015625
+
+expert_o_proj_15:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.003906
+
+expert_gate_proj_15:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_up_proj_15:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.015625
+    o_scale: 0.007812
+
+expert_down_proj_15:
+  Samples: 3560
+  Scales:
+    w_scale: 0.006771
+    a_scale: 0.007812
+    o_scale: 0.007812
+================================================================================
+
+Saving quantization scales...
+Saving scales to scales/2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal/quant...
+  Saved vision_q_proj_w_scale_0.p: 0.000724
+  Saved vision_q_proj_a_scale_0.p: 0.031250
+  Saved vision_q_proj_o_scale_0.p: 0.015625
+  Saved vision_k_proj_w_scale_0.p: 0.000705
+  Saved vision_k_proj_a_scale_0.p: 0.031250
+  Saved vision_k_proj_o_scale_0.p: 0.015625
+  Saved vision_v_proj_w_scale_0.p: 0.000318
+  Saved vision_v_proj_a_scale_0.p: 0.031250
+  Saved vision_v_proj_o_scale_0.p: 0.007812
+  Saved vision_qk_matmul_A_scale_0.p: 0.015625
+  Saved vision_qk_matmul_B_scale_0.p: 0.007812
+  Saved vision_qk_matmul_O_scale_0.p: 0.500000
+  Saved vision_pv_matmul_A_scale_0.p: 0.003906
+  Saved vision_pv_matmul_B_scale_0.p: 0.001953
+  Saved vision_pv_matmul_O_scale_0.p: 0.015625
+  Saved vision_out_proj_w_scale_0.p: 0.000341
+  Saved vision_out_proj_a_scale_0.p: 0.007812
+  Saved vision_out_proj_o_scale_0.p: 0.003906
+  Saved vision_fc1_w_scale_0.p: 0.000417
+  Saved vision_fc1_a_scale_0.p: 0.062500
+  Saved vision_fc1_o_scale_0.p: 0.031250
+  Saved vision_fc2_w_scale_0.p: 0.000406
+  Saved vision_fc2_a_scale_0.p: 0.015625
+  Saved vision_fc2_o_scale_0.p: 0.015625
+  Saved vision_q_proj_w_scale_1.p: 0.000574
+  Saved vision_q_proj_a_scale_1.p: 0.031250
+  Saved vision_q_proj_o_scale_1.p: 0.031250
+  Saved vision_k_proj_w_scale_1.p: 0.000586
+  Saved vision_k_proj_a_scale_1.p: 0.031250
+  Saved vision_k_proj_o_scale_1.p: 0.031250
+  Saved vision_v_proj_w_scale_1.p: 0.000347
+  Saved vision_v_proj_a_scale_1.p: 0.031250
+  Saved vision_v_proj_o_scale_1.p: 0.007812
+  Saved vision_qk_matmul_A_scale_1.p: 0.031250
+  Saved vision_qk_matmul_B_scale_1.p: 0.015625
+  Saved vision_qk_matmul_O_scale_1.p: 1.000000
+  Saved vision_pv_matmul_A_scale_1.p: 0.003906
+  Saved vision_pv_matmul_B_scale_1.p: 0.003906
+  Saved vision_pv_matmul_O_scale_1.p: 0.007812
+  Saved vision_out_proj_w_scale_1.p: 0.000337
+  Saved vision_out_proj_a_scale_1.p: 0.007812
+  Saved vision_out_proj_o_scale_1.p: 0.003906
+  Saved vision_fc1_w_scale_1.p: 0.000396
+  Saved vision_fc1_a_scale_1.p: 0.031250
+  Saved vision_fc1_o_scale_1.p: 0.015625
+  Saved vision_fc2_w_scale_1.p: 0.000324
+  Saved vision_fc2_a_scale_1.p: 0.007812
+  Saved vision_fc2_o_scale_1.p: 0.003906
+  Saved vision_q_proj_w_scale_2.p: 0.000475
+  Saved vision_q_proj_a_scale_2.p: 0.062500
+  Saved vision_q_proj_o_scale_2.p: 0.031250
+  Saved vision_k_proj_w_scale_2.p: 0.000486
+  Saved vision_k_proj_a_scale_2.p: 0.062500
+  Saved vision_k_proj_o_scale_2.p: 0.031250
+  Saved vision_v_proj_w_scale_2.p: 0.000318
+  Saved vision_v_proj_a_scale_2.p: 0.062500
+  Saved vision_v_proj_o_scale_2.p: 0.015625
+  Saved vision_qk_matmul_A_scale_2.p: 0.031250
+  Saved vision_qk_matmul_B_scale_2.p: 0.015625
+  Saved vision_qk_matmul_O_scale_2.p: 1.000000
+  Saved vision_pv_matmul_A_scale_2.p: 0.003906
+  Saved vision_pv_matmul_B_scale_2.p: 0.003906
+  Saved vision_pv_matmul_O_scale_2.p: 0.015625
+  Saved vision_out_proj_w_scale_2.p: 0.000310
+  Saved vision_out_proj_a_scale_2.p: 0.007812
+  Saved vision_out_proj_o_scale_2.p: 0.003906
+  Saved vision_fc1_w_scale_2.p: 0.000400
+  Saved vision_fc1_a_scale_2.p: 0.031250
+  Saved vision_fc1_o_scale_2.p: 0.015625
+  Saved vision_fc2_w_scale_2.p: 0.000327
+  Saved vision_fc2_a_scale_2.p: 0.007812
+  Saved vision_fc2_o_scale_2.p: 0.003906
+  Saved vision_q_proj_w_scale_3.p: 0.000458
+  Saved vision_q_proj_a_scale_3.p: 0.062500
+  Saved vision_q_proj_o_scale_3.p: 0.015625
+  Saved vision_k_proj_w_scale_3.p: 0.000448
+  Saved vision_k_proj_a_scale_3.p: 0.062500
+  Saved vision_k_proj_o_scale_3.p: 0.015625
+  Saved vision_v_proj_w_scale_3.p: 0.000347
+  Saved vision_v_proj_a_scale_3.p: 0.062500
+  Saved vision_v_proj_o_scale_3.p: 0.015625
+  Saved vision_qk_matmul_A_scale_3.p: 0.031250
+  Saved vision_qk_matmul_B_scale_3.p: 0.015625
+  Saved vision_qk_matmul_O_scale_3.p: 0.500000
+  Saved vision_pv_matmul_A_scale_3.p: 0.003906
+  Saved vision_pv_matmul_B_scale_3.p: 0.007812
+  Saved vision_pv_matmul_O_scale_3.p: 0.015625
+  Saved vision_out_proj_w_scale_3.p: 0.000341
+  Saved vision_out_proj_a_scale_3.p: 0.007812
+  Saved vision_out_proj_o_scale_3.p: 0.003906
+  Saved vision_fc1_w_scale_3.p: 0.000404
+  Saved vision_fc1_a_scale_3.p: 0.031250
+  Saved vision_fc1_o_scale_3.p: 0.015625
+  Saved vision_fc2_w_scale_3.p: 0.000329
+  Saved vision_fc2_a_scale_3.p: 0.007812
+  Saved vision_fc2_o_scale_3.p: 0.007812
+  Saved vision_q_proj_w_scale_4.p: 0.000414
+  Saved vision_q_proj_a_scale_4.p: 0.031250
+  Saved vision_q_proj_o_scale_4.p: 0.015625
+  Saved vision_k_proj_w_scale_4.p: 0.000402
+  Saved vision_k_proj_a_scale_4.p: 0.031250
+  Saved vision_k_proj_o_scale_4.p: 0.015625
+  Saved vision_v_proj_w_scale_4.p: 0.000337
+  Saved vision_v_proj_a_scale_4.p: 0.031250
+  Saved vision_v_proj_o_scale_4.p: 0.015625
+  Saved vision_qk_matmul_A_scale_4.p: 0.031250
+  Saved vision_qk_matmul_B_scale_4.p: 0.015625
+  Saved vision_qk_matmul_O_scale_4.p: 0.500000
+  Saved vision_pv_matmul_A_scale_4.p: 0.003906
+  Saved vision_pv_matmul_B_scale_4.p: 0.007812
+  Saved vision_pv_matmul_O_scale_4.p: 0.015625
+  Saved vision_out_proj_w_scale_4.p: 0.000341
+  Saved vision_out_proj_a_scale_4.p: 0.007812
+  Saved vision_out_proj_o_scale_4.p: 0.003906
+  Saved vision_fc1_w_scale_4.p: 0.000404
+  Saved vision_fc1_a_scale_4.p: 0.031250
+  Saved vision_fc1_o_scale_4.p: 0.015625
+  Saved vision_fc2_w_scale_4.p: 0.000348
+  Saved vision_fc2_a_scale_4.p: 0.007812
+  Saved vision_fc2_o_scale_4.p: 0.007812
+  Saved vision_q_proj_w_scale_5.p: 0.000431
+  Saved vision_q_proj_a_scale_5.p: 0.062500
+  Saved vision_q_proj_o_scale_5.p: 0.015625
+  Saved vision_k_proj_w_scale_5.p: 0.000425
+  Saved vision_k_proj_a_scale_5.p: 0.062500
+  Saved vision_k_proj_o_scale_5.p: 0.015625
+  Saved vision_v_proj_w_scale_5.p: 0.000331
+  Saved vision_v_proj_a_scale_5.p: 0.062500
+  Saved vision_v_proj_o_scale_5.p: 0.015625
+  Saved vision_qk_matmul_A_scale_5.p: 0.031250
+  Saved vision_qk_matmul_B_scale_5.p: 0.015625
+  Saved vision_qk_matmul_O_scale_5.p: 0.500000
+  Saved vision_pv_matmul_A_scale_5.p: 0.001953
+  Saved vision_pv_matmul_B_scale_5.p: 0.007812
+  Saved vision_pv_matmul_O_scale_5.p: 0.015625
+  Saved vision_out_proj_w_scale_5.p: 0.000337
+  Saved vision_out_proj_a_scale_5.p: 0.007812
+  Saved vision_out_proj_o_scale_5.p: 0.003906
+  Saved vision_fc1_w_scale_5.p: 0.000398
+  Saved vision_fc1_a_scale_5.p: 0.031250
+  Saved vision_fc1_o_scale_5.p: 0.015625
+  Saved vision_fc2_w_scale_5.p: 0.000352
+  Saved vision_fc2_a_scale_5.p: 0.015625
+  Saved vision_fc2_o_scale_5.p: 0.015625
+  Saved vision_q_proj_w_scale_6.p: 0.000429
+  Saved vision_q_proj_a_scale_6.p: 0.062500
+  Saved vision_q_proj_o_scale_6.p: 0.031250
+  Saved vision_k_proj_w_scale_6.p: 0.000425
+  Saved vision_k_proj_a_scale_6.p: 0.062500
+  Saved vision_k_proj_o_scale_6.p: 0.031250
+  Saved vision_v_proj_w_scale_6.p: 0.000331
+  Saved vision_v_proj_a_scale_6.p: 0.062500
+  Saved vision_v_proj_o_scale_6.p: 0.015625
+  Saved vision_qk_matmul_A_scale_6.p: 0.031250
+  Saved vision_qk_matmul_B_scale_6.p: 0.015625
+  Saved vision_qk_matmul_O_scale_6.p: 0.500000
+  Saved vision_pv_matmul_A_scale_6.p: 0.003906
+  Saved vision_pv_matmul_B_scale_6.p: 0.007812
+  Saved vision_pv_matmul_O_scale_6.p: 0.015625
+  Saved vision_out_proj_w_scale_6.p: 0.000333
+  Saved vision_out_proj_a_scale_6.p: 0.007812
+  Saved vision_out_proj_o_scale_6.p: 0.003906
+  Saved vision_fc1_w_scale_6.p: 0.000385
+  Saved vision_fc1_a_scale_6.p: 0.031250
+  Saved vision_fc1_o_scale_6.p: 0.015625
+  Saved vision_fc2_w_scale_6.p: 0.000383
+  Saved vision_fc2_a_scale_6.p: 0.007812
+  Saved vision_fc2_o_scale_6.p: 0.003906
+  Saved vision_q_proj_w_scale_7.p: 0.000423
+  Saved vision_q_proj_a_scale_7.p: 0.062500
+  Saved vision_q_proj_o_scale_7.p: 0.031250
+  Saved vision_k_proj_w_scale_7.p: 0.000425
+  Saved vision_k_proj_a_scale_7.p: 0.062500
+  Saved vision_k_proj_o_scale_7.p: 0.031250
+  Saved vision_v_proj_w_scale_7.p: 0.000339
+  Saved vision_v_proj_a_scale_7.p: 0.062500
+  Saved vision_v_proj_o_scale_7.p: 0.015625
+  Saved vision_qk_matmul_A_scale_7.p: 0.031250
+  Saved vision_qk_matmul_B_scale_7.p: 0.015625
+  Saved vision_qk_matmul_O_scale_7.p: 0.500000
+  Saved vision_pv_matmul_A_scale_7.p: 0.001953
+  Saved vision_pv_matmul_B_scale_7.p: 0.007812
+  Saved vision_pv_matmul_O_scale_7.p: 0.015625
+  Saved vision_out_proj_w_scale_7.p: 0.000335
+  Saved vision_out_proj_a_scale_7.p: 0.007812
+  Saved vision_out_proj_o_scale_7.p: 0.003906
+  Saved vision_fc1_w_scale_7.p: 0.000371
+  Saved vision_fc1_a_scale_7.p: 0.031250
+  Saved vision_fc1_o_scale_7.p: 0.015625
+  Saved vision_fc2_w_scale_7.p: 0.000385
+  Saved vision_fc2_a_scale_7.p: 0.007812
+  Saved vision_fc2_o_scale_7.p: 0.003906
+  Saved vision_q_proj_w_scale_8.p: 0.000416
+  Saved vision_q_proj_a_scale_8.p: 0.062500
+  Saved vision_q_proj_o_scale_8.p: 0.031250
+  Saved vision_k_proj_w_scale_8.p: 0.000417
+  Saved vision_k_proj_a_scale_8.p: 0.062500
+  Saved vision_k_proj_o_scale_8.p: 0.031250
+  Saved vision_v_proj_w_scale_8.p: 0.000348
+  Saved vision_v_proj_a_scale_8.p: 0.062500
+  Saved vision_v_proj_o_scale_8.p: 0.015625
+  Saved vision_qk_matmul_A_scale_8.p: 0.031250
+  Saved vision_qk_matmul_B_scale_8.p: 0.015625
+  Saved vision_qk_matmul_O_scale_8.p: 0.500000
+  Saved vision_pv_matmul_A_scale_8.p: 0.001953
+  Saved vision_pv_matmul_B_scale_8.p: 0.007812
+  Saved vision_pv_matmul_O_scale_8.p: 0.015625
+  Saved vision_out_proj_w_scale_8.p: 0.000345
+  Saved vision_out_proj_a_scale_8.p: 0.007812
+  Saved vision_out_proj_o_scale_8.p: 0.003906
+  Saved vision_fc1_w_scale_8.p: 0.000362
+  Saved vision_fc1_a_scale_8.p: 0.031250
+  Saved vision_fc1_o_scale_8.p: 0.015625
+  Saved vision_fc2_w_scale_8.p: 0.000410
+  Saved vision_fc2_a_scale_8.p: 0.015625
+  Saved vision_fc2_o_scale_8.p: 0.003906
+  Saved vision_q_proj_w_scale_9.p: 0.000398
+  Saved vision_q_proj_a_scale_9.p: 0.062500
+  Saved vision_q_proj_o_scale_9.p: 0.031250
+  Saved vision_k_proj_w_scale_9.p: 0.000404
+  Saved vision_k_proj_a_scale_9.p: 0.062500
+  Saved vision_k_proj_o_scale_9.p: 0.031250
+  Saved vision_v_proj_w_scale_9.p: 0.000358
+  Saved vision_v_proj_a_scale_9.p: 0.062500
+  Saved vision_v_proj_o_scale_9.p: 0.015625
+  Saved vision_qk_matmul_A_scale_9.p: 0.031250
+  Saved vision_qk_matmul_B_scale_9.p: 0.015625
+  Saved vision_qk_matmul_O_scale_9.p: 0.500000
+  Saved vision_pv_matmul_A_scale_9.p: 0.001953
+  Saved vision_pv_matmul_B_scale_9.p: 0.007812
+  Saved vision_pv_matmul_O_scale_9.p: 0.015625
+  Saved vision_out_proj_w_scale_9.p: 0.000356
+  Saved vision_out_proj_a_scale_9.p: 0.007812
+  Saved vision_out_proj_o_scale_9.p: 0.003906
+  Saved vision_fc1_w_scale_9.p: 0.000387
+  Saved vision_fc1_a_scale_9.p: 0.062500
+  Saved vision_fc1_o_scale_9.p: 0.062500
+  Saved vision_fc2_w_scale_9.p: 0.000410
+  Saved vision_fc2_a_scale_9.p: 0.031250
+  Saved vision_fc2_o_scale_9.p: 0.007812
+  Saved vision_q_proj_w_scale_10.p: 0.000387
+  Saved vision_q_proj_a_scale_10.p: 0.062500
+  Saved vision_q_proj_o_scale_10.p: 0.031250
+  Saved vision_k_proj_w_scale_10.p: 0.000391
+  Saved vision_k_proj_a_scale_10.p: 0.062500
+  Saved vision_k_proj_o_scale_10.p: 0.031250
+  Saved vision_v_proj_w_scale_10.p: 0.000373
+  Saved vision_v_proj_a_scale_10.p: 0.062500
+  Saved vision_v_proj_o_scale_10.p: 0.015625
+  Saved vision_qk_matmul_A_scale_10.p: 0.031250
+  Saved vision_qk_matmul_B_scale_10.p: 0.015625
+  Saved vision_qk_matmul_O_scale_10.p: 0.500000
+  Saved vision_pv_matmul_A_scale_10.p: 0.001953
+  Saved vision_pv_matmul_B_scale_10.p: 0.007812
+  Saved vision_pv_matmul_O_scale_10.p: 0.015625
+  Saved vision_out_proj_w_scale_10.p: 0.000370
+  Saved vision_out_proj_a_scale_10.p: 0.007812
+  Saved vision_out_proj_o_scale_10.p: 0.007812
+  Saved vision_fc1_w_scale_10.p: 0.000412
+  Saved vision_fc1_a_scale_10.p: 0.125000
+  Saved vision_fc1_o_scale_10.p: 0.125000
+  Saved vision_fc2_w_scale_10.p: 0.000444
+  Saved vision_fc2_a_scale_10.p: 0.062500
+  Saved vision_fc2_o_scale_10.p: 0.015625
+  Saved vision_q_proj_w_scale_11.p: 0.000387
+  Saved vision_q_proj_a_scale_11.p: 0.062500
+  Saved vision_q_proj_o_scale_11.p: 0.031250
+  Saved vision_k_proj_w_scale_11.p: 0.000404
+  Saved vision_k_proj_a_scale_11.p: 0.062500
+  Saved vision_k_proj_o_scale_11.p: 0.031250
+  Saved vision_v_proj_w_scale_11.p: 0.000398
+  Saved vision_v_proj_a_scale_11.p: 0.062500
+  Saved vision_v_proj_o_scale_11.p: 0.015625
+  Saved vision_qk_matmul_A_scale_11.p: 0.031250
+  Saved vision_qk_matmul_B_scale_11.p: 0.015625
+  Saved vision_qk_matmul_O_scale_11.p: 0.500000
+  Saved vision_pv_matmul_A_scale_11.p: 0.001953
+  Saved vision_pv_matmul_B_scale_11.p: 0.007812
+  Saved vision_pv_matmul_O_scale_11.p: 0.015625
+  Saved vision_out_proj_w_scale_11.p: 0.000396
+  Saved vision_out_proj_a_scale_11.p: 0.015625
+  Saved vision_out_proj_o_scale_11.p: 0.007812
+  Saved vision_fc1_w_scale_11.p: 0.000419
+  Saved vision_fc1_a_scale_11.p: 0.125000
+  Saved vision_fc1_o_scale_11.p: 0.125000
+  Saved vision_fc2_w_scale_11.p: 0.000440
+  Saved vision_fc2_a_scale_11.p: 0.125000
+  Saved vision_fc2_o_scale_11.p: 0.062500
+  Saved vlm_q_proj_w_scale_0.p: 0.003232
+  Saved vlm_q_proj_a_scale_0.p: 0.001953
+  Saved vlm_q_proj_o_scale_0.p: 0.031250
+  Saved vlm_k_proj_w_scale_0.p: 0.005178
+  Saved vlm_k_proj_a_scale_0.p: 0.001953
+  Saved vlm_k_proj_o_scale_0.p: 0.031250
+  Saved vlm_v_proj_w_scale_0.p: 0.000754
+  Saved vlm_v_proj_a_scale_0.p: 0.001953
+  Saved vlm_v_proj_o_scale_0.p: 0.001953
+  Saved vlm_qk_matmul_A_scale_0.p: 0.062500
+  Saved vlm_qk_matmul_B_scale_0.p: 0.015625
+  Saved vlm_qk_matmul_O_scale_0.p: 1.000000
+  Saved vlm_pv_matmul_A_scale_0.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_0.p: 0.000488
+  Saved vlm_pv_matmul_O_scale_0.p: 0.001953
+  Saved vlm_o_proj_w_scale_0.p: 0.000896
+  Saved vlm_o_proj_a_scale_0.p: 0.000977
+  Saved vlm_o_proj_o_scale_0.p: 0.000977
+  Saved vlm_gate_proj_w_scale_0.p: 0.002773
+  Saved vlm_gate_proj_a_scale_0.p: 0.003906
+  Saved vlm_gate_proj_o_scale_0.p: 0.007812
+  Saved vlm_up_proj_w_scale_0.p: 0.002757
+  Saved vlm_up_proj_a_scale_0.p: 0.003906
+  Saved vlm_up_proj_o_scale_0.p: 0.007812
+  Saved vlm_down_proj_w_scale_0.p: 0.003294
+  Saved vlm_down_proj_a_scale_0.p: 0.007812
+  Saved vlm_down_proj_o_scale_0.p: 0.031250
+  Saved vlm_q_proj_w_scale_1.p: 0.003983
+  Saved vlm_q_proj_a_scale_1.p: 0.003906
+  Saved vlm_q_proj_o_scale_1.p: 0.031250
+  Saved vlm_k_proj_w_scale_1.p: 0.004810
+  Saved vlm_k_proj_a_scale_1.p: 0.003906
+  Saved vlm_k_proj_o_scale_1.p: 0.031250
+  Saved vlm_v_proj_w_scale_1.p: 0.001884
+  Saved vlm_v_proj_a_scale_1.p: 0.003906
+  Saved vlm_v_proj_o_scale_1.p: 0.007812
+  Saved vlm_qk_matmul_A_scale_1.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_1.p: 0.015625
+  Saved vlm_qk_matmul_O_scale_1.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_1.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_1.p: 0.003906
+  Saved vlm_pv_matmul_O_scale_1.p: 0.007812
+  Saved vlm_o_proj_w_scale_1.p: 0.002145
+  Saved vlm_o_proj_a_scale_1.p: 0.003906
+  Saved vlm_o_proj_o_scale_1.p: 0.007812
+  Saved vlm_gate_proj_w_scale_1.p: 0.002972
+  Saved vlm_gate_proj_a_scale_1.p: 0.001953
+  Saved vlm_gate_proj_o_scale_1.p: 0.007812
+  Saved vlm_up_proj_w_scale_1.p: 0.002635
+  Saved vlm_up_proj_a_scale_1.p: 0.001953
+  Saved vlm_up_proj_o_scale_1.p: 0.007812
+  Saved vlm_down_proj_w_scale_1.p: 0.002681
+  Saved vlm_down_proj_a_scale_1.p: 0.007812
+  Saved vlm_down_proj_o_scale_1.p: 0.015625
+  Saved vlm_q_proj_w_scale_2.p: 0.003615
+  Saved vlm_q_proj_a_scale_2.p: 0.003906
+  Saved vlm_q_proj_o_scale_2.p: 0.015625
+  Saved vlm_k_proj_w_scale_2.p: 0.004136
+  Saved vlm_k_proj_a_scale_2.p: 0.003906
+  Saved vlm_k_proj_o_scale_2.p: 0.031250
+  Saved vlm_v_proj_w_scale_2.p: 0.002175
+  Saved vlm_v_proj_a_scale_2.p: 0.003906
+  Saved vlm_v_proj_o_scale_2.p: 0.007812
+  Saved vlm_qk_matmul_A_scale_2.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_2.p: 0.015625
+  Saved vlm_qk_matmul_O_scale_2.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_2.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_2.p: 0.003906
+  Saved vlm_pv_matmul_O_scale_2.p: 0.007812
+  Saved vlm_o_proj_w_scale_2.p: 0.002267
+  Saved vlm_o_proj_a_scale_2.p: 0.003906
+  Saved vlm_o_proj_o_scale_2.p: 0.015625
+  Saved vlm_gate_proj_w_scale_2.p: 0.002911
+  Saved vlm_gate_proj_a_scale_2.p: 0.001953
+  Saved vlm_gate_proj_o_scale_2.p: 0.007812
+  Saved vlm_up_proj_w_scale_2.p: 0.002696
+  Saved vlm_up_proj_a_scale_2.p: 0.001953
+  Saved vlm_up_proj_o_scale_2.p: 0.007812
+  Saved vlm_down_proj_w_scale_2.p: 0.002742
+  Saved vlm_down_proj_a_scale_2.p: 0.007812
+  Saved vlm_down_proj_o_scale_2.p: 0.031250
+  Saved vlm_q_proj_w_scale_3.p: 0.003692
+  Saved vlm_q_proj_a_scale_3.p: 0.003906
+  Saved vlm_q_proj_o_scale_3.p: 0.015625
+  Saved vlm_k_proj_w_scale_3.p: 0.004259
+  Saved vlm_k_proj_a_scale_3.p: 0.003906
+  Saved vlm_k_proj_o_scale_3.p: 0.031250
+  Saved vlm_v_proj_w_scale_3.p: 0.001831
+  Saved vlm_v_proj_a_scale_3.p: 0.003906
+  Saved vlm_v_proj_o_scale_3.p: 0.007812
+  Saved vlm_qk_matmul_A_scale_3.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_3.p: 0.015625
+  Saved vlm_qk_matmul_O_scale_3.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_3.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_3.p: 0.003906
+  Saved vlm_pv_matmul_O_scale_3.p: 0.007812
+  Saved vlm_o_proj_w_scale_3.p: 0.002160
+  Saved vlm_o_proj_a_scale_3.p: 0.003906
+  Saved vlm_o_proj_o_scale_3.p: 0.015625
+  Saved vlm_gate_proj_w_scale_3.p: 0.002911
+  Saved vlm_gate_proj_a_scale_3.p: 0.001953
+  Saved vlm_gate_proj_o_scale_3.p: 0.007812
+  Saved vlm_up_proj_w_scale_3.p: 0.002711
+  Saved vlm_up_proj_a_scale_3.p: 0.001953
+  Saved vlm_up_proj_o_scale_3.p: 0.007812
+  Saved vlm_down_proj_w_scale_3.p: 0.002711
+  Saved vlm_down_proj_a_scale_3.p: 0.007812
+  Saved vlm_down_proj_o_scale_3.p: 0.062500
+  Saved vlm_q_proj_w_scale_4.p: 0.003569
+  Saved vlm_q_proj_a_scale_4.p: 0.003906
+  Saved vlm_q_proj_o_scale_4.p: 0.031250
+  Saved vlm_k_proj_w_scale_4.p: 0.004075
+  Saved vlm_k_proj_a_scale_4.p: 0.003906
+  Saved vlm_k_proj_o_scale_4.p: 0.031250
+  Saved vlm_v_proj_w_scale_4.p: 0.002221
+  Saved vlm_v_proj_a_scale_4.p: 0.003906
+  Saved vlm_v_proj_o_scale_4.p: 0.007812
+  Saved vlm_qk_matmul_A_scale_4.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_4.p: 0.031250
+  Saved vlm_qk_matmul_O_scale_4.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_4.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_4.p: 0.007812
+  Saved vlm_pv_matmul_O_scale_4.p: 0.007812
+  Saved vlm_o_proj_w_scale_4.p: 0.002328
+  Saved vlm_o_proj_a_scale_4.p: 0.007812
+  Saved vlm_o_proj_o_scale_4.p: 0.015625
+  Saved vlm_gate_proj_w_scale_4.p: 0.002849
+  Saved vlm_gate_proj_a_scale_4.p: 0.001953
+  Saved vlm_gate_proj_o_scale_4.p: 0.007812
+  Saved vlm_up_proj_w_scale_4.p: 0.002757
+  Saved vlm_up_proj_a_scale_4.p: 0.001953
+  Saved vlm_up_proj_o_scale_4.p: 0.007812
+  Saved vlm_down_proj_w_scale_4.p: 0.002757
+  Saved vlm_down_proj_a_scale_4.p: 0.007812
+  Saved vlm_down_proj_o_scale_4.p: 0.031250
+  Saved vlm_q_proj_w_scale_5.p: 0.003339
+  Saved vlm_q_proj_a_scale_5.p: 0.003906
+  Saved vlm_q_proj_o_scale_5.p: 0.031250
+  Saved vlm_k_proj_w_scale_5.p: 0.003615
+  Saved vlm_k_proj_a_scale_5.p: 0.003906
+  Saved vlm_k_proj_o_scale_5.p: 0.031250
+  Saved vlm_v_proj_w_scale_5.p: 0.002512
+  Saved vlm_v_proj_a_scale_5.p: 0.003906
+  Saved vlm_v_proj_o_scale_5.p: 0.015625
+  Saved vlm_qk_matmul_A_scale_5.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_5.p: 0.015625
+  Saved vlm_qk_matmul_O_scale_5.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_5.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_5.p: 0.007812
+  Saved vlm_pv_matmul_O_scale_5.p: 0.007812
+  Saved vlm_o_proj_w_scale_5.p: 0.002436
+  Saved vlm_o_proj_a_scale_5.p: 0.007812
+  Saved vlm_o_proj_o_scale_5.p: 0.015625
+  Saved vlm_gate_proj_w_scale_5.p: 0.002803
+  Saved vlm_gate_proj_a_scale_5.p: 0.001953
+  Saved vlm_gate_proj_o_scale_5.p: 0.007812
+  Saved vlm_up_proj_w_scale_5.p: 0.002773
+  Saved vlm_up_proj_a_scale_5.p: 0.001953
+  Saved vlm_up_proj_o_scale_5.p: 0.007812
+  Saved vlm_down_proj_w_scale_5.p: 0.002757
+  Saved vlm_down_proj_a_scale_5.p: 0.007812
+  Saved vlm_down_proj_o_scale_5.p: 0.031250
+  Saved vlm_q_proj_w_scale_6.p: 0.003309
+  Saved vlm_q_proj_a_scale_6.p: 0.003906
+  Saved vlm_q_proj_o_scale_6.p: 0.031250
+  Saved vlm_k_proj_w_scale_6.p: 0.003676
+  Saved vlm_k_proj_a_scale_6.p: 0.003906
+  Saved vlm_k_proj_o_scale_6.p: 0.062500
+  Saved vlm_v_proj_w_scale_6.p: 0.002512
+  Saved vlm_v_proj_a_scale_6.p: 0.003906
+  Saved vlm_v_proj_o_scale_6.p: 0.007812
+  Saved vlm_qk_matmul_A_scale_6.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_6.p: 0.031250
+  Saved vlm_qk_matmul_O_scale_6.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_6.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_6.p: 0.007812
+  Saved vlm_pv_matmul_O_scale_6.p: 0.007812
+  Saved vlm_o_proj_w_scale_6.p: 0.002466
+  Saved vlm_o_proj_a_scale_6.p: 0.007812
+  Saved vlm_o_proj_o_scale_6.p: 0.015625
+  Saved vlm_gate_proj_w_scale_6.p: 0.002773
+  Saved vlm_gate_proj_a_scale_6.p: 0.001953
+  Saved vlm_gate_proj_o_scale_6.p: 0.007812
+  Saved vlm_up_proj_w_scale_6.p: 0.002819
+  Saved vlm_up_proj_a_scale_6.p: 0.001953
+  Saved vlm_up_proj_o_scale_6.p: 0.007812
+  Saved vlm_down_proj_w_scale_6.p: 0.002803
+  Saved vlm_down_proj_a_scale_6.p: 0.007812
+  Saved vlm_down_proj_o_scale_6.p: 0.031250
+  Saved vlm_q_proj_w_scale_7.p: 0.003294
+  Saved vlm_q_proj_a_scale_7.p: 0.007812
+  Saved vlm_q_proj_o_scale_7.p: 0.031250
+  Saved vlm_k_proj_w_scale_7.p: 0.003401
+  Saved vlm_k_proj_a_scale_7.p: 0.007812
+  Saved vlm_k_proj_o_scale_7.p: 0.031250
+  Saved vlm_v_proj_w_scale_7.p: 0.003033
+  Saved vlm_v_proj_a_scale_7.p: 0.007812
+  Saved vlm_v_proj_o_scale_7.p: 0.015625
+  Saved vlm_qk_matmul_A_scale_7.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_7.p: 0.031250
+  Saved vlm_qk_matmul_O_scale_7.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_7.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_7.p: 0.007812
+  Saved vlm_pv_matmul_O_scale_7.p: 0.007812
+  Saved vlm_o_proj_w_scale_7.p: 0.002696
+  Saved vlm_o_proj_a_scale_7.p: 0.007812
+  Saved vlm_o_proj_o_scale_7.p: 0.015625
+  Saved vlm_gate_proj_w_scale_7.p: 0.002788
+  Saved vlm_gate_proj_a_scale_7.p: 0.001953
+  Saved vlm_gate_proj_o_scale_7.p: 0.007812
+  Saved vlm_up_proj_w_scale_7.p: 0.002865
+  Saved vlm_up_proj_a_scale_7.p: 0.001953
+  Saved vlm_up_proj_o_scale_7.p: 0.007812
+  Saved vlm_down_proj_w_scale_7.p: 0.002849
+  Saved vlm_down_proj_a_scale_7.p: 0.007812
+  Saved vlm_down_proj_o_scale_7.p: 0.031250
+  Saved vlm_q_proj_w_scale_8.p: 0.003263
+  Saved vlm_q_proj_a_scale_8.p: 0.003906
+  Saved vlm_q_proj_o_scale_8.p: 0.031250
+  Saved vlm_k_proj_w_scale_8.p: 0.003493
+  Saved vlm_k_proj_a_scale_8.p: 0.003906
+  Saved vlm_k_proj_o_scale_8.p: 0.031250
+  Saved vlm_v_proj_w_scale_8.p: 0.002665
+  Saved vlm_v_proj_a_scale_8.p: 0.003906
+  Saved vlm_v_proj_o_scale_8.p: 0.015625
+  Saved vlm_qk_matmul_A_scale_8.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_8.p: 0.031250
+  Saved vlm_qk_matmul_O_scale_8.p: 0.250000
+  Saved vlm_pv_matmul_A_scale_8.p: 0.001953
+  Saved vlm_pv_matmul_B_scale_8.p: 0.007812
+  Saved vlm_pv_matmul_O_scale_8.p: 0.007812
+  Saved vlm_o_proj_w_scale_8.p: 0.002589
+  Saved vlm_o_proj_a_scale_8.p: 0.007812
+  Saved vlm_o_proj_o_scale_8.p: 0.015625
+  Saved vlm_gate_proj_w_scale_8.p: 0.002987
+  Saved vlm_gate_proj_a_scale_8.p: 0.001953
+  Saved vlm_gate_proj_o_scale_8.p: 0.015625
+  Saved vlm_up_proj_w_scale_8.p: 0.002711
+  Saved vlm_up_proj_a_scale_8.p: 0.001953
+  Saved vlm_up_proj_o_scale_8.p: 0.007812
+  Saved vlm_down_proj_w_scale_8.p: 0.002681
+  Saved vlm_down_proj_a_scale_8.p: 0.015625
+  Saved vlm_down_proj_o_scale_8.p: 0.031250
+  Saved vlm_q_proj_w_scale_9.p: 0.003462
+  Saved vlm_q_proj_a_scale_9.p: 0.007812
+  Saved vlm_q_proj_o_scale_9.p: 0.031250
+  Saved vlm_k_proj_w_scale_9.p: 0.003631
+  Saved vlm_k_proj_a_scale_9.p: 0.007812
+  Saved vlm_k_proj_o_scale_9.p: 0.031250
+  Saved vlm_v_proj_w_scale_9.p: 0.002696
+  Saved vlm_v_proj_a_scale_9.p: 0.007812
+  Saved vlm_v_proj_o_scale_9.p: 0.015625
+  Saved vlm_qk_matmul_A_scale_9.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_9.p: 0.015625
+  Saved vlm_qk_matmul_O_scale_9.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_9.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_9.p: 0.007812
+  Saved vlm_pv_matmul_O_scale_9.p: 0.007812
+  Saved vlm_o_proj_w_scale_9.p: 0.002543
+  Saved vlm_o_proj_a_scale_9.p: 0.007812
+  Saved vlm_o_proj_o_scale_9.p: 0.015625
+  Saved vlm_gate_proj_w_scale_9.p: 0.002880
+  Saved vlm_gate_proj_a_scale_9.p: 0.001953
+  Saved vlm_gate_proj_o_scale_9.p: 0.015625
+  Saved vlm_up_proj_w_scale_9.p: 0.002803
+  Saved vlm_up_proj_a_scale_9.p: 0.001953
+  Saved vlm_up_proj_o_scale_9.p: 0.007812
+  Saved vlm_down_proj_w_scale_9.p: 0.002757
+  Saved vlm_down_proj_a_scale_9.p: 0.015625
+  Saved vlm_down_proj_o_scale_9.p: 0.031250
+  Saved vlm_q_proj_w_scale_10.p: 0.003477
+  Saved vlm_q_proj_a_scale_10.p: 0.003906
+  Saved vlm_q_proj_o_scale_10.p: 0.031250
+  Saved vlm_k_proj_w_scale_10.p: 0.003738
+  Saved vlm_k_proj_a_scale_10.p: 0.003906
+  Saved vlm_k_proj_o_scale_10.p: 0.031250
+  Saved vlm_v_proj_w_scale_10.p: 0.002757
+  Saved vlm_v_proj_a_scale_10.p: 0.003906
+  Saved vlm_v_proj_o_scale_10.p: 0.015625
+  Saved vlm_qk_matmul_A_scale_10.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_10.p: 0.015625
+  Saved vlm_qk_matmul_O_scale_10.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_10.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_10.p: 0.007812
+  Saved vlm_pv_matmul_O_scale_10.p: 0.007812
+  Saved vlm_o_proj_w_scale_10.p: 0.002696
+  Saved vlm_o_proj_a_scale_10.p: 0.007812
+  Saved vlm_o_proj_o_scale_10.p: 0.015625
+  Saved vlm_gate_proj_w_scale_10.p: 0.002788
+  Saved vlm_gate_proj_a_scale_10.p: 0.001953
+  Saved vlm_gate_proj_o_scale_10.p: 0.007812
+  Saved vlm_up_proj_w_scale_10.p: 0.002880
+  Saved vlm_up_proj_a_scale_10.p: 0.001953
+  Saved vlm_up_proj_o_scale_10.p: 0.007812
+  Saved vlm_down_proj_w_scale_10.p: 0.002849
+  Saved vlm_down_proj_a_scale_10.p: 0.015625
+  Saved vlm_down_proj_o_scale_10.p: 0.031250
+  Saved vlm_q_proj_w_scale_11.p: 0.003140
+  Saved vlm_q_proj_a_scale_11.p: 0.007812
+  Saved vlm_q_proj_o_scale_11.p: 0.031250
+  Saved vlm_k_proj_w_scale_11.p: 0.003385
+  Saved vlm_k_proj_a_scale_11.p: 0.007812
+  Saved vlm_k_proj_o_scale_11.p: 0.031250
+  Saved vlm_v_proj_w_scale_11.p: 0.002650
+  Saved vlm_v_proj_a_scale_11.p: 0.007812
+  Saved vlm_v_proj_o_scale_11.p: 0.015625
+  Saved vlm_qk_matmul_A_scale_11.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_11.p: 0.015625
+  Saved vlm_qk_matmul_O_scale_11.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_11.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_11.p: 0.007812
+  Saved vlm_pv_matmul_O_scale_11.p: 0.015625
+  Saved vlm_o_proj_w_scale_11.p: 0.002604
+  Saved vlm_o_proj_a_scale_11.p: 0.007812
+  Saved vlm_o_proj_o_scale_11.p: 0.031250
+  Saved vlm_gate_proj_w_scale_11.p: 0.002757
+  Saved vlm_gate_proj_a_scale_11.p: 0.001953
+  Saved vlm_gate_proj_o_scale_11.p: 0.007812
+  Saved vlm_up_proj_w_scale_11.p: 0.002987
+  Saved vlm_up_proj_a_scale_11.p: 0.001953
+  Saved vlm_up_proj_o_scale_11.p: 0.007812
+  Saved vlm_down_proj_w_scale_11.p: 0.002972
+  Saved vlm_down_proj_a_scale_11.p: 0.015625
+  Saved vlm_down_proj_o_scale_11.p: 0.031250
+  Saved vlm_q_proj_w_scale_12.p: 0.003431
+  Saved vlm_q_proj_a_scale_12.p: 0.007812
+  Saved vlm_q_proj_o_scale_12.p: 0.031250
+  Saved vlm_k_proj_w_scale_12.p: 0.003615
+  Saved vlm_k_proj_a_scale_12.p: 0.007812
+  Saved vlm_k_proj_o_scale_12.p: 0.062500
+  Saved vlm_v_proj_w_scale_12.p: 0.002604
+  Saved vlm_v_proj_a_scale_12.p: 0.007812
+  Saved vlm_v_proj_o_scale_12.p: 0.015625
+  Saved vlm_qk_matmul_A_scale_12.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_12.p: 0.031250
+  Saved vlm_qk_matmul_O_scale_12.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_12.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_12.p: 0.007812
+  Saved vlm_pv_matmul_O_scale_12.p: 0.007812
+  Saved vlm_o_proj_w_scale_12.p: 0.002604
+  Saved vlm_o_proj_a_scale_12.p: 0.007812
+  Saved vlm_o_proj_o_scale_12.p: 0.015625
+  Saved vlm_gate_proj_w_scale_12.p: 0.002696
+  Saved vlm_gate_proj_a_scale_12.p: 0.003906
+  Saved vlm_gate_proj_o_scale_12.p: 0.015625
+  Saved vlm_up_proj_w_scale_12.p: 0.003094
+  Saved vlm_up_proj_a_scale_12.p: 0.003906
+  Saved vlm_up_proj_o_scale_12.p: 0.015625
+  Saved vlm_down_proj_w_scale_12.p: 0.003002
+  Saved vlm_down_proj_a_scale_12.p: 0.015625
+  Saved vlm_down_proj_o_scale_12.p: 0.031250
+  Saved vlm_q_proj_w_scale_13.p: 0.003385
+  Saved vlm_q_proj_a_scale_13.p: 0.003906
+  Saved vlm_q_proj_o_scale_13.p: 0.031250
+  Saved vlm_k_proj_w_scale_13.p: 0.003508
+  Saved vlm_k_proj_a_scale_13.p: 0.003906
+  Saved vlm_k_proj_o_scale_13.p: 0.031250
+  Saved vlm_v_proj_w_scale_13.p: 0.002650
+  Saved vlm_v_proj_a_scale_13.p: 0.003906
+  Saved vlm_v_proj_o_scale_13.p: 0.007812
+  Saved vlm_qk_matmul_A_scale_13.p: 0.031250
+  Saved vlm_qk_matmul_B_scale_13.p: 0.031250
+  Saved vlm_qk_matmul_O_scale_13.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_13.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_13.p: 0.007812
+  Saved vlm_pv_matmul_O_scale_13.p: 0.007812
+  Saved vlm_o_proj_w_scale_13.p: 0.002574
+  Saved vlm_o_proj_a_scale_13.p: 0.007812
+  Saved vlm_o_proj_o_scale_13.p: 0.015625
+  Saved vlm_gate_proj_w_scale_13.p: 0.002727
+  Saved vlm_gate_proj_a_scale_13.p: 0.003906
+  Saved vlm_gate_proj_o_scale_13.p: 0.015625
+  Saved vlm_up_proj_w_scale_13.p: 0.003125
+  Saved vlm_up_proj_a_scale_13.p: 0.003906
+  Saved vlm_up_proj_o_scale_13.p: 0.015625
+  Saved vlm_down_proj_w_scale_13.p: 0.003033
+  Saved vlm_down_proj_a_scale_13.p: 0.015625
+  Saved vlm_down_proj_o_scale_13.p: 0.062500
+  Saved vlm_q_proj_w_scale_14.p: 0.003401
+  Saved vlm_q_proj_a_scale_14.p: 0.007812
+  Saved vlm_q_proj_o_scale_14.p: 0.031250
+  Saved vlm_k_proj_w_scale_14.p: 0.003447
+  Saved vlm_k_proj_a_scale_14.p: 0.007812
+  Saved vlm_k_proj_o_scale_14.p: 0.031250
+  Saved vlm_v_proj_w_scale_14.p: 0.002635
+  Saved vlm_v_proj_a_scale_14.p: 0.007812
+  Saved vlm_v_proj_o_scale_14.p: 0.015625
+  Saved vlm_qk_matmul_A_scale_14.p: 0.062500
+  Saved vlm_qk_matmul_B_scale_14.p: 0.031250
+  Saved vlm_qk_matmul_O_scale_14.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_14.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_14.p: 0.007812
+  Saved vlm_pv_matmul_O_scale_14.p: 0.015625
+  Saved vlm_o_proj_w_scale_14.p: 0.002665
+  Saved vlm_o_proj_a_scale_14.p: 0.007812
+  Saved vlm_o_proj_o_scale_14.p: 0.031250
+  Saved vlm_gate_proj_w_scale_14.p: 0.002788
+  Saved vlm_gate_proj_a_scale_14.p: 0.003906
+  Saved vlm_gate_proj_o_scale_14.p: 0.015625
+  Saved vlm_up_proj_w_scale_14.p: 0.003079
+  Saved vlm_up_proj_a_scale_14.p: 0.003906
+  Saved vlm_up_proj_o_scale_14.p: 0.015625
+  Saved vlm_down_proj_w_scale_14.p: 0.003002
+  Saved vlm_down_proj_a_scale_14.p: 0.015625
+  Saved vlm_down_proj_o_scale_14.p: 0.031250
+  Saved vlm_q_proj_w_scale_15.p: 0.003401
+  Saved vlm_q_proj_a_scale_15.p: 0.007812
+  Saved vlm_q_proj_o_scale_15.p: 0.062500
+  Saved vlm_k_proj_w_scale_15.p: 0.003539
+  Saved vlm_k_proj_a_scale_15.p: 0.007812
+  Saved vlm_k_proj_o_scale_15.p: 0.062500
+  Saved vlm_v_proj_w_scale_15.p: 0.002604
+  Saved vlm_v_proj_a_scale_15.p: 0.007812
+  Saved vlm_v_proj_o_scale_15.p: 0.015625
+  Saved vlm_qk_matmul_A_scale_15.p: 0.062500
+  Saved vlm_qk_matmul_B_scale_15.p: 0.031250
+  Saved vlm_qk_matmul_O_scale_15.p: 0.500000
+  Saved vlm_pv_matmul_A_scale_15.p: 0.003906
+  Saved vlm_pv_matmul_B_scale_15.p: 0.007812
+  Saved vlm_pv_matmul_O_scale_15.p: 0.015625
+  Saved vlm_o_proj_w_scale_15.p: 0.002665
+  Saved vlm_o_proj_a_scale_15.p: 0.007812
+  Saved vlm_o_proj_o_scale_15.p: 0.031250
+  Saved vlm_gate_proj_w_scale_15.p: 0.002865
+  Saved vlm_gate_proj_a_scale_15.p: 0.003906
+  Saved vlm_gate_proj_o_scale_15.p: 0.015625
+  Saved vlm_up_proj_w_scale_15.p: 0.003064
+  Saved vlm_up_proj_a_scale_15.p: 0.003906
+  Saved vlm_up_proj_o_scale_15.p: 0.015625
+  Saved vlm_down_proj_w_scale_15.p: 0.002987
+  Saved vlm_down_proj_a_scale_15.p: 0.015625
+  Saved vlm_down_proj_o_scale_15.p: 0.062500
+  Saved expert_q_proj_w_scale_0.p: 0.006771
+  Saved expert_q_proj_a_scale_0.p: 0.015625
+  Saved expert_q_proj_o_scale_0.p: 0.015625
+  Saved expert_k_proj_w_scale_0.p: 0.006771
+  Saved expert_k_proj_a_scale_0.p: 0.015625
+  Saved expert_k_proj_o_scale_0.p: 0.015625
+  Saved expert_v_proj_w_scale_0.p: 0.006771
+  Saved expert_v_proj_a_scale_0.p: 0.015625
+  Saved expert_v_proj_o_scale_0.p: 0.007812
+  Saved expert_qk_matmul_A_scale_0.p: 0.015625
+  Saved expert_qk_matmul_B_scale_0.p: 0.015625
+  Saved expert_qk_matmul_O_scale_0.p: 0.250000
+  Saved expert_pv_matmul_A_scale_0.p: 0.001953
+  Saved expert_pv_matmul_B_scale_0.p: 0.007812
+  Saved expert_pv_matmul_O_scale_0.p: 0.007812
+  Saved expert_o_proj_w_scale_0.p: 0.006771
+  Saved expert_o_proj_a_scale_0.p: 0.007812
+  Saved expert_o_proj_o_scale_0.p: 0.003906
+  Saved expert_gate_proj_w_scale_0.p: 0.006771
+  Saved expert_gate_proj_a_scale_0.p: 0.015625
+  Saved expert_gate_proj_o_scale_0.p: 0.007812
+  Saved expert_up_proj_w_scale_0.p: 0.006771
+  Saved expert_up_proj_a_scale_0.p: 0.015625
+  Saved expert_up_proj_o_scale_0.p: 0.007812
+  Saved expert_down_proj_w_scale_0.p: 0.006771
+  Saved expert_down_proj_a_scale_0.p: 0.007812
+  Saved expert_down_proj_o_scale_0.p: 0.003906
+  Saved expert_q_proj_w_scale_1.p: 0.006771
+  Saved expert_q_proj_a_scale_1.p: 0.015625
+  Saved expert_q_proj_o_scale_1.p: 0.015625
+  Saved expert_k_proj_w_scale_1.p: 0.010371
+  Saved expert_k_proj_a_scale_1.p: 0.031250
+  Saved expert_k_proj_o_scale_1.p: 0.015625
+  Saved expert_v_proj_w_scale_1.p: 0.011205
+  Saved expert_v_proj_a_scale_1.p: 0.007812
+  Saved expert_v_proj_o_scale_1.p: 0.007812
+  Saved expert_qk_matmul_A_scale_1.p: 0.015625
+  Saved expert_qk_matmul_B_scale_1.p: 0.015625
+  Saved expert_qk_matmul_O_scale_1.p: 0.500000
+  Saved expert_pv_matmul_A_scale_1.p: 0.003906
+  Saved expert_pv_matmul_B_scale_1.p: 0.001953
+  Saved expert_pv_matmul_O_scale_1.p: 0.007812
+  Saved expert_o_proj_w_scale_1.p: 0.006771
+  Saved expert_o_proj_a_scale_1.p: 0.007812
+  Saved expert_o_proj_o_scale_1.p: 0.003906
+  Saved expert_gate_proj_w_scale_1.p: 0.006771
+  Saved expert_gate_proj_a_scale_1.p: 0.015625
+  Saved expert_gate_proj_o_scale_1.p: 0.007812
+  Saved expert_up_proj_w_scale_1.p: 0.006771
+  Saved expert_up_proj_a_scale_1.p: 0.015625
+  Saved expert_up_proj_o_scale_1.p: 0.007812
+  Saved expert_down_proj_w_scale_1.p: 0.006706
+  Saved expert_down_proj_a_scale_1.p: 0.003906
+  Saved expert_down_proj_o_scale_1.p: 0.003906
+  Saved expert_q_proj_w_scale_2.p: 0.006771
+  Saved expert_q_proj_a_scale_2.p: 0.015625
+  Saved expert_q_proj_o_scale_2.p: 0.015625
+  Saved expert_k_proj_w_scale_2.p: 0.006706
+  Saved expert_k_proj_a_scale_2.p: 0.015625
+  Saved expert_k_proj_o_scale_2.p: 0.007812
+  Saved expert_v_proj_w_scale_2.p: 0.006771
+  Saved expert_v_proj_a_scale_2.p: 0.015625
+  Saved expert_v_proj_o_scale_2.p: 0.007812
+  Saved expert_qk_matmul_A_scale_2.p: 0.015625
+  Saved expert_qk_matmul_B_scale_2.p: 0.015625
+  Saved expert_qk_matmul_O_scale_2.p: 0.500000
+  Saved expert_pv_matmul_A_scale_2.p: 0.001953
+  Saved expert_pv_matmul_B_scale_2.p: 0.003906
+  Saved expert_pv_matmul_O_scale_2.p: 0.007812
+  Saved expert_o_proj_w_scale_2.p: 0.006771
+  Saved expert_o_proj_a_scale_2.p: 0.007812
+  Saved expert_o_proj_o_scale_2.p: 0.003906
+  Saved expert_gate_proj_w_scale_2.p: 0.006771
+  Saved expert_gate_proj_a_scale_2.p: 0.015625
+  Saved expert_gate_proj_o_scale_2.p: 0.007812
+  Saved expert_up_proj_w_scale_2.p: 0.006771
+  Saved expert_up_proj_a_scale_2.p: 0.015625
+  Saved expert_up_proj_o_scale_2.p: 0.007812
+  Saved expert_down_proj_w_scale_2.p: 0.006706
+  Saved expert_down_proj_a_scale_2.p: 0.003906
+  Saved expert_down_proj_o_scale_2.p: 0.001953
+  Saved expert_q_proj_w_scale_3.p: 0.006706
+  Saved expert_q_proj_a_scale_3.p: 0.015625
+  Saved expert_q_proj_o_scale_3.p: 0.015625
+  Saved expert_k_proj_w_scale_3.p: 0.010411
+  Saved expert_k_proj_a_scale_3.p: 0.031250
+  Saved expert_k_proj_o_scale_3.p: 0.015625
+  Saved expert_v_proj_w_scale_3.p: 0.011000
+  Saved expert_v_proj_a_scale_3.p: 0.007812
+  Saved expert_v_proj_o_scale_3.p: 0.007812
+  Saved expert_qk_matmul_A_scale_3.p: 0.015625
+  Saved expert_qk_matmul_B_scale_3.p: 0.015625
+  Saved expert_qk_matmul_O_scale_3.p: 0.500000
+  Saved expert_pv_matmul_A_scale_3.p: 0.003906
+  Saved expert_pv_matmul_B_scale_3.p: 0.003906
+  Saved expert_pv_matmul_O_scale_3.p: 0.007812
+  Saved expert_o_proj_w_scale_3.p: 0.006771
+  Saved expert_o_proj_a_scale_3.p: 0.003906
+  Saved expert_o_proj_o_scale_3.p: 0.003906
+  Saved expert_gate_proj_w_scale_3.p: 0.006706
+  Saved expert_gate_proj_a_scale_3.p: 0.015625
+  Saved expert_gate_proj_o_scale_3.p: 0.007812
+  Saved expert_up_proj_w_scale_3.p: 0.006771
+  Saved expert_up_proj_a_scale_3.p: 0.015625
+  Saved expert_up_proj_o_scale_3.p: 0.007812
+  Saved expert_down_proj_w_scale_3.p: 0.006771
+  Saved expert_down_proj_a_scale_3.p: 0.003906
+  Saved expert_down_proj_o_scale_3.p: 0.001953
+  Saved expert_q_proj_w_scale_4.p: 0.006706
+  Saved expert_q_proj_a_scale_4.p: 0.015625
+  Saved expert_q_proj_o_scale_4.p: 0.007812
+  Saved expert_k_proj_w_scale_4.p: 0.006706
+  Saved expert_k_proj_a_scale_4.p: 0.015625
+  Saved expert_k_proj_o_scale_4.p: 0.015625
+  Saved expert_v_proj_w_scale_4.p: 0.006771
+  Saved expert_v_proj_a_scale_4.p: 0.015625
+  Saved expert_v_proj_o_scale_4.p: 0.007812
+  Saved expert_qk_matmul_A_scale_4.p: 0.015625
+  Saved expert_qk_matmul_B_scale_4.p: 0.015625
+  Saved expert_qk_matmul_O_scale_4.p: 0.250000
+  Saved expert_pv_matmul_A_scale_4.p: 0.001953
+  Saved expert_pv_matmul_B_scale_4.p: 0.003906
+  Saved expert_pv_matmul_O_scale_4.p: 0.007812
+  Saved expert_o_proj_w_scale_4.p: 0.006771
+  Saved expert_o_proj_a_scale_4.p: 0.007812
+  Saved expert_o_proj_o_scale_4.p: 0.003906
+  Saved expert_gate_proj_w_scale_4.p: 0.006771
+  Saved expert_gate_proj_a_scale_4.p: 0.015625
+  Saved expert_gate_proj_o_scale_4.p: 0.007812
+  Saved expert_up_proj_w_scale_4.p: 0.006771
+  Saved expert_up_proj_a_scale_4.p: 0.015625
+  Saved expert_up_proj_o_scale_4.p: 0.007812
+  Saved expert_down_proj_w_scale_4.p: 0.006771
+  Saved expert_down_proj_a_scale_4.p: 0.003906
+  Saved expert_down_proj_o_scale_4.p: 0.001953
+  Saved expert_q_proj_w_scale_5.p: 0.006771
+  Saved expert_q_proj_a_scale_5.p: 0.015625
+  Saved expert_q_proj_o_scale_5.p: 0.015625
+  Saved expert_k_proj_w_scale_5.p: 0.010610
+  Saved expert_k_proj_a_scale_5.p: 0.031250
+  Saved expert_k_proj_o_scale_5.p: 0.015625
+  Saved expert_v_proj_w_scale_5.p: 0.010797
+  Saved expert_v_proj_a_scale_5.p: 0.015625
+  Saved expert_v_proj_o_scale_5.p: 0.007812
+  Saved expert_qk_matmul_A_scale_5.p: 0.015625
+  Saved expert_qk_matmul_B_scale_5.p: 0.015625
+  Saved expert_qk_matmul_O_scale_5.p: 0.500000
+  Saved expert_pv_matmul_A_scale_5.p: 0.003906
+  Saved expert_pv_matmul_B_scale_5.p: 0.003906
+  Saved expert_pv_matmul_O_scale_5.p: 0.015625
+  Saved expert_o_proj_w_scale_5.p: 0.006771
+  Saved expert_o_proj_a_scale_5.p: 0.007812
+  Saved expert_o_proj_o_scale_5.p: 0.007812
+  Saved expert_gate_proj_w_scale_5.p: 0.006771
+  Saved expert_gate_proj_a_scale_5.p: 0.015625
+  Saved expert_gate_proj_o_scale_5.p: 0.007812
+  Saved expert_up_proj_w_scale_5.p: 0.006771
+  Saved expert_up_proj_a_scale_5.p: 0.015625
+  Saved expert_up_proj_o_scale_5.p: 0.007812
+  Saved expert_down_proj_w_scale_5.p: 0.006771
+  Saved expert_down_proj_a_scale_5.p: 0.007812
+  Saved expert_down_proj_o_scale_5.p: 0.003906
+  Saved expert_q_proj_w_scale_6.p: 0.006771
+  Saved expert_q_proj_a_scale_6.p: 0.015625
+  Saved expert_q_proj_o_scale_6.p: 0.007812
+  Saved expert_k_proj_w_scale_6.p: 0.006706
+  Saved expert_k_proj_a_scale_6.p: 0.015625
+  Saved expert_k_proj_o_scale_6.p: 0.015625
+  Saved expert_v_proj_w_scale_6.p: 0.006706
+  Saved expert_v_proj_a_scale_6.p: 0.015625
+  Saved expert_v_proj_o_scale_6.p: 0.007812
+  Saved expert_qk_matmul_A_scale_6.p: 0.015625
+  Saved expert_qk_matmul_B_scale_6.p: 0.015625
+  Saved expert_qk_matmul_O_scale_6.p: 0.250000
+  Saved expert_pv_matmul_A_scale_6.p: 0.001953
+  Saved expert_pv_matmul_B_scale_6.p: 0.007812
+  Saved expert_pv_matmul_O_scale_6.p: 0.007812
+  Saved expert_o_proj_w_scale_6.p: 0.006771
+  Saved expert_o_proj_a_scale_6.p: 0.007812
+  Saved expert_o_proj_o_scale_6.p: 0.003906
+  Saved expert_gate_proj_w_scale_6.p: 0.006771
+  Saved expert_gate_proj_a_scale_6.p: 0.015625
+  Saved expert_gate_proj_o_scale_6.p: 0.007812
+  Saved expert_up_proj_w_scale_6.p: 0.006771
+  Saved expert_up_proj_a_scale_6.p: 0.015625
+  Saved expert_up_proj_o_scale_6.p: 0.007812
+  Saved expert_down_proj_w_scale_6.p: 0.006771
+  Saved expert_down_proj_a_scale_6.p: 0.007812
+  Saved expert_down_proj_o_scale_6.p: 0.003906
+  Saved expert_q_proj_w_scale_7.p: 0.006771
+  Saved expert_q_proj_a_scale_7.p: 0.015625
+  Saved expert_q_proj_o_scale_7.p: 0.015625
+  Saved expert_k_proj_w_scale_7.p: 0.011383
+  Saved expert_k_proj_a_scale_7.p: 0.031250
+  Saved expert_k_proj_o_scale_7.p: 0.031250
+  Saved expert_v_proj_w_scale_7.p: 0.010536
+  Saved expert_v_proj_a_scale_7.p: 0.015625
+  Saved expert_v_proj_o_scale_7.p: 0.007812
+  Saved expert_qk_matmul_A_scale_7.p: 0.015625
+  Saved expert_qk_matmul_B_scale_7.p: 0.015625
+  Saved expert_qk_matmul_O_scale_7.p: 0.500000
+  Saved expert_pv_matmul_A_scale_7.p: 0.003906
+  Saved expert_pv_matmul_B_scale_7.p: 0.003906
+  Saved expert_pv_matmul_O_scale_7.p: 0.007812
+  Saved expert_o_proj_w_scale_7.p: 0.006771
+  Saved expert_o_proj_a_scale_7.p: 0.007812
+  Saved expert_o_proj_o_scale_7.p: 0.003906
+  Saved expert_gate_proj_w_scale_7.p: 0.006771
+  Saved expert_gate_proj_a_scale_7.p: 0.015625
+  Saved expert_gate_proj_o_scale_7.p: 0.007812
+  Saved expert_up_proj_w_scale_7.p: 0.006706
+  Saved expert_up_proj_a_scale_7.p: 0.015625
+  Saved expert_up_proj_o_scale_7.p: 0.007812
+  Saved expert_down_proj_w_scale_7.p: 0.006771
+  Saved expert_down_proj_a_scale_7.p: 0.007812
+  Saved expert_down_proj_o_scale_7.p: 0.003906
+  Saved expert_q_proj_w_scale_8.p: 0.006771
+  Saved expert_q_proj_a_scale_8.p: 0.015625
+  Saved expert_q_proj_o_scale_8.p: 0.007812
+  Saved expert_k_proj_w_scale_8.p: 0.006706
+  Saved expert_k_proj_a_scale_8.p: 0.015625
+  Saved expert_k_proj_o_scale_8.p: 0.015625
+  Saved expert_v_proj_w_scale_8.p: 0.006706
+  Saved expert_v_proj_a_scale_8.p: 0.015625
+  Saved expert_v_proj_o_scale_8.p: 0.007812
+  Saved expert_qk_matmul_A_scale_8.p: 0.015625
+  Saved expert_qk_matmul_B_scale_8.p: 0.015625
+  Saved expert_qk_matmul_O_scale_8.p: 0.500000
+  Saved expert_pv_matmul_A_scale_8.p: 0.001953
+  Saved expert_pv_matmul_B_scale_8.p: 0.007812
+  Saved expert_pv_matmul_O_scale_8.p: 0.007812
+  Saved expert_o_proj_w_scale_8.p: 0.006771
+  Saved expert_o_proj_a_scale_8.p: 0.007812
+  Saved expert_o_proj_o_scale_8.p: 0.003906
+  Saved expert_gate_proj_w_scale_8.p: 0.006771
+  Saved expert_gate_proj_a_scale_8.p: 0.015625
+  Saved expert_gate_proj_o_scale_8.p: 0.007812
+  Saved expert_up_proj_w_scale_8.p: 0.006771
+  Saved expert_up_proj_a_scale_8.p: 0.015625
+  Saved expert_up_proj_o_scale_8.p: 0.007812
+  Saved expert_down_proj_w_scale_8.p: 0.006771
+  Saved expert_down_proj_a_scale_8.p: 0.007812
+  Saved expert_down_proj_o_scale_8.p: 0.003906
+  Saved expert_q_proj_w_scale_9.p: 0.006771
+  Saved expert_q_proj_a_scale_9.p: 0.015625
+  Saved expert_q_proj_o_scale_9.p: 0.015625
+  Saved expert_k_proj_w_scale_9.p: 0.012096
+  Saved expert_k_proj_a_scale_9.p: 0.031250
+  Saved expert_k_proj_o_scale_9.p: 0.031250
+  Saved expert_v_proj_w_scale_9.p: 0.010725
+  Saved expert_v_proj_a_scale_9.p: 0.015625
+  Saved expert_v_proj_o_scale_9.p: 0.007812
+  Saved expert_qk_matmul_A_scale_9.p: 0.015625
+  Saved expert_qk_matmul_B_scale_9.p: 0.015625
+  Saved expert_qk_matmul_O_scale_9.p: 0.500000
+  Saved expert_pv_matmul_A_scale_9.p: 0.003906
+  Saved expert_pv_matmul_B_scale_9.p: 0.003906
+  Saved expert_pv_matmul_O_scale_9.p: 0.007812
+  Saved expert_o_proj_w_scale_9.p: 0.006706
+  Saved expert_o_proj_a_scale_9.p: 0.007812
+  Saved expert_o_proj_o_scale_9.p: 0.003906
+  Saved expert_gate_proj_w_scale_9.p: 0.006771
+  Saved expert_gate_proj_a_scale_9.p: 0.015625
+  Saved expert_gate_proj_o_scale_9.p: 0.007812
+  Saved expert_up_proj_w_scale_9.p: 0.006771
+  Saved expert_up_proj_a_scale_9.p: 0.015625
+  Saved expert_up_proj_o_scale_9.p: 0.007812
+  Saved expert_down_proj_w_scale_9.p: 0.006771
+  Saved expert_down_proj_a_scale_9.p: 0.007812
+  Saved expert_down_proj_o_scale_9.p: 0.003906
+  Saved expert_q_proj_w_scale_10.p: 0.006771
+  Saved expert_q_proj_a_scale_10.p: 0.015625
+  Saved expert_q_proj_o_scale_10.p: 0.007812
+  Saved expert_k_proj_w_scale_10.p: 0.006803
+  Saved expert_k_proj_a_scale_10.p: 0.015625
+  Saved expert_k_proj_o_scale_10.p: 0.015625
+  Saved expert_v_proj_w_scale_10.p: 0.006706
+  Saved expert_v_proj_a_scale_10.p: 0.015625
+  Saved expert_v_proj_o_scale_10.p: 0.007812
+  Saved expert_qk_matmul_A_scale_10.p: 0.015625
+  Saved expert_qk_matmul_B_scale_10.p: 0.015625
+  Saved expert_qk_matmul_O_scale_10.p: 0.250000
+  Saved expert_pv_matmul_A_scale_10.p: 0.001953
+  Saved expert_pv_matmul_B_scale_10.p: 0.007812
+  Saved expert_pv_matmul_O_scale_10.p: 0.007812
+  Saved expert_o_proj_w_scale_10.p: 0.006771
+  Saved expert_o_proj_a_scale_10.p: 0.007812
+  Saved expert_o_proj_o_scale_10.p: 0.003906
+  Saved expert_gate_proj_w_scale_10.p: 0.006771
+  Saved expert_gate_proj_a_scale_10.p: 0.015625
+  Saved expert_gate_proj_o_scale_10.p: 0.007812
+  Saved expert_up_proj_w_scale_10.p: 0.006771
+  Saved expert_up_proj_a_scale_10.p: 0.015625
+  Saved expert_up_proj_o_scale_10.p: 0.007812
+  Saved expert_down_proj_w_scale_10.p: 0.006771
+  Saved expert_down_proj_a_scale_10.p: 0.007812
+  Saved expert_down_proj_o_scale_10.p: 0.003906
+  Saved expert_q_proj_w_scale_11.p: 0.006771
+  Saved expert_q_proj_a_scale_11.p: 0.015625
+  Saved expert_q_proj_o_scale_11.p: 0.015625
+  Saved expert_k_proj_w_scale_11.p: 0.012723
+  Saved expert_k_proj_a_scale_11.p: 0.031250
+  Saved expert_k_proj_o_scale_11.p: 0.031250
+  Saved expert_v_proj_w_scale_11.p: 0.010566
+  Saved expert_v_proj_a_scale_11.p: 0.015625
+  Saved expert_v_proj_o_scale_11.p: 0.015625
+  Saved expert_qk_matmul_A_scale_11.p: 0.015625
+  Saved expert_qk_matmul_B_scale_11.p: 0.031250
+  Saved expert_qk_matmul_O_scale_11.p: 1.000000
+  Saved expert_pv_matmul_A_scale_11.p: 0.003906
+  Saved expert_pv_matmul_B_scale_11.p: 0.007812
+  Saved expert_pv_matmul_O_scale_11.p: 0.007812
+  Saved expert_o_proj_w_scale_11.p: 0.006771
+  Saved expert_o_proj_a_scale_11.p: 0.007812
+  Saved expert_o_proj_o_scale_11.p: 0.003906
+  Saved expert_gate_proj_w_scale_11.p: 0.006706
+  Saved expert_gate_proj_a_scale_11.p: 0.015625
+  Saved expert_gate_proj_o_scale_11.p: 0.007812
+  Saved expert_up_proj_w_scale_11.p: 0.006771
+  Saved expert_up_proj_a_scale_11.p: 0.015625
+  Saved expert_up_proj_o_scale_11.p: 0.007812
+  Saved expert_down_proj_w_scale_11.p: 0.006771
+  Saved expert_down_proj_a_scale_11.p: 0.007812
+  Saved expert_down_proj_o_scale_11.p: 0.003906
+  Saved expert_q_proj_w_scale_12.p: 0.006706
+  Saved expert_q_proj_a_scale_12.p: 0.015625
+  Saved expert_q_proj_o_scale_12.p: 0.007812
+  Saved expert_k_proj_w_scale_12.p: 0.006771
+  Saved expert_k_proj_a_scale_12.p: 0.015625
+  Saved expert_k_proj_o_scale_12.p: 0.015625
+  Saved expert_v_proj_w_scale_12.p: 0.006771
+  Saved expert_v_proj_a_scale_12.p: 0.015625
+  Saved expert_v_proj_o_scale_12.p: 0.007812
+  Saved expert_qk_matmul_A_scale_12.p: 0.015625
+  Saved expert_qk_matmul_B_scale_12.p: 0.015625
+  Saved expert_qk_matmul_O_scale_12.p: 0.250000
+  Saved expert_pv_matmul_A_scale_12.p: 0.001953
+  Saved expert_pv_matmul_B_scale_12.p: 0.007812
+  Saved expert_pv_matmul_O_scale_12.p: 0.007812
+  Saved expert_o_proj_w_scale_12.p: 0.006771
+  Saved expert_o_proj_a_scale_12.p: 0.007812
+  Saved expert_o_proj_o_scale_12.p: 0.003906
+  Saved expert_gate_proj_w_scale_12.p: 0.006771
+  Saved expert_gate_proj_a_scale_12.p: 0.015625
+  Saved expert_gate_proj_o_scale_12.p: 0.007812
+  Saved expert_up_proj_w_scale_12.p: 0.006771
+  Saved expert_up_proj_a_scale_12.p: 0.015625
+  Saved expert_up_proj_o_scale_12.p: 0.007812
+  Saved expert_down_proj_w_scale_12.p: 0.006771
+  Saved expert_down_proj_a_scale_12.p: 0.007812
+  Saved expert_down_proj_o_scale_12.p: 0.003906
+  Saved expert_q_proj_w_scale_13.p: 0.006771
+  Saved expert_q_proj_a_scale_13.p: 0.015625
+  Saved expert_q_proj_o_scale_13.p: 0.015625
+  Saved expert_k_proj_w_scale_13.p: 0.013361
+  Saved expert_k_proj_a_scale_13.p: 0.031250
+  Saved expert_k_proj_o_scale_13.p: 0.062500
+  Saved expert_v_proj_w_scale_13.p: 0.010895
+  Saved expert_v_proj_a_scale_13.p: 0.007812
+  Saved expert_v_proj_o_scale_13.p: 0.007812
+  Saved expert_qk_matmul_A_scale_13.p: 0.015625
+  Saved expert_qk_matmul_B_scale_13.p: 0.031250
+  Saved expert_qk_matmul_O_scale_13.p: 1.000000
+  Saved expert_pv_matmul_A_scale_13.p: 0.003906
+  Saved expert_pv_matmul_B_scale_13.p: 0.003906
+  Saved expert_pv_matmul_O_scale_13.p: 0.007812
+  Saved expert_o_proj_w_scale_13.p: 0.006771
+  Saved expert_o_proj_a_scale_13.p: 0.007812
+  Saved expert_o_proj_o_scale_13.p: 0.003906
+  Saved expert_gate_proj_w_scale_13.p: 0.006771
+  Saved expert_gate_proj_a_scale_13.p: 0.015625
+  Saved expert_gate_proj_o_scale_13.p: 0.007812
+  Saved expert_up_proj_w_scale_13.p: 0.006771
+  Saved expert_up_proj_a_scale_13.p: 0.015625
+  Saved expert_up_proj_o_scale_13.p: 0.007812
+  Saved expert_down_proj_w_scale_13.p: 0.006771
+  Saved expert_down_proj_a_scale_13.p: 0.007812
+  Saved expert_down_proj_o_scale_13.p: 0.003906
+  Saved expert_q_proj_w_scale_14.p: 0.006771
+  Saved expert_q_proj_a_scale_14.p: 0.015625
+  Saved expert_q_proj_o_scale_14.p: 0.007812
+  Saved expert_k_proj_w_scale_14.p: 0.006771
+  Saved expert_k_proj_a_scale_14.p: 0.015625
+  Saved expert_k_proj_o_scale_14.p: 0.015625
+  Saved expert_v_proj_w_scale_14.p: 0.006771
+  Saved expert_v_proj_a_scale_14.p: 0.015625
+  Saved expert_v_proj_o_scale_14.p: 0.007812
+  Saved expert_qk_matmul_A_scale_14.p: 0.015625
+  Saved expert_qk_matmul_B_scale_14.p: 0.015625
+  Saved expert_qk_matmul_O_scale_14.p: 0.500000
+  Saved expert_pv_matmul_A_scale_14.p: 0.003906
+  Saved expert_pv_matmul_B_scale_14.p: 0.007812
+  Saved expert_pv_matmul_O_scale_14.p: 0.007812
+  Saved expert_o_proj_w_scale_14.p: 0.006771
+  Saved expert_o_proj_a_scale_14.p: 0.007812
+  Saved expert_o_proj_o_scale_14.p: 0.007812
+  Saved expert_gate_proj_w_scale_14.p: 0.006706
+  Saved expert_gate_proj_a_scale_14.p: 0.015625
+  Saved expert_gate_proj_o_scale_14.p: 0.007812
+  Saved expert_up_proj_w_scale_14.p: 0.006771
+  Saved expert_up_proj_a_scale_14.p: 0.015625
+  Saved expert_up_proj_o_scale_14.p: 0.007812
+  Saved expert_down_proj_w_scale_14.p: 0.006771
+  Saved expert_down_proj_a_scale_14.p: 0.007812
+  Saved expert_down_proj_o_scale_14.p: 0.003906
+  Saved expert_q_proj_w_scale_15.p: 0.006771
+  Saved expert_q_proj_a_scale_15.p: 0.015625
+  Saved expert_q_proj_o_scale_15.p: 0.015625
+  Saved expert_k_proj_w_scale_15.p: 0.013423
+  Saved expert_k_proj_a_scale_15.p: 0.062500
+  Saved expert_k_proj_o_scale_15.p: 0.062500
+  Saved expert_v_proj_w_scale_15.p: 0.010707
+  Saved expert_v_proj_a_scale_15.p: 0.015625
+  Saved expert_v_proj_o_scale_15.p: 0.015625
+  Saved expert_qk_matmul_A_scale_15.p: 0.015625
+  Saved expert_qk_matmul_B_scale_15.p: 0.031250
+  Saved expert_qk_matmul_O_scale_15.p: 1.000000
+  Saved expert_pv_matmul_A_scale_15.p: 0.003906
+  Saved expert_pv_matmul_B_scale_15.p: 0.007812
+  Saved expert_pv_matmul_O_scale_15.p: 0.015625
+  Saved expert_o_proj_w_scale_15.p: 0.006771
+  Saved expert_o_proj_a_scale_15.p: 0.015625
+  Saved expert_o_proj_o_scale_15.p: 0.003906
+  Saved expert_gate_proj_w_scale_15.p: 0.006771
+  Saved expert_gate_proj_a_scale_15.p: 0.015625
+  Saved expert_gate_proj_o_scale_15.p: 0.007812
+  Saved expert_up_proj_w_scale_15.p: 0.006771
+  Saved expert_up_proj_a_scale_15.p: 0.015625
+  Saved expert_up_proj_o_scale_15.p: 0.007812
+  Saved expert_down_proj_w_scale_15.p: 0.006771
+  Saved expert_down_proj_a_scale_15.p: 0.007812
+  Saved expert_down_proj_o_scale_15.p: 0.007812
+Total scales saved: 384 layers
+
+✓ Calibration completed in 6798.39s
+✓ Scales saved to: scales/2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal/quant
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+WARNING:huggingface_hub.utils._http:Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading SmolVLA from: /home/zyzhao/.cache/huggingface/hub/models--lerobot--smolvla_libero/snapshots/31d453f7edd78c839a8bbc39744a292686daf0de
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  70%|██████▉   | 342/489 [00:00<00:00, 3405.87it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 3967.93it/s]
+[robosuite WARNING] No private macro file found! (__init__.py:7)
+WARNING:robosuite_logs:No private macro file found!
+[robosuite WARNING] It is recommended to use a private macro file (__init__.py:8)
+WARNING:robosuite_logs:It is recommended to use a private macro file
+[robosuite WARNING] To setup, run: python /home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/robosuite/scripts/setup_macros.py (__init__.py:9)
+WARNING:robosuite_logs:To setup, run: python /home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/robosuite/scripts/setup_macros.py
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+Replaced 224 Linear modules.
+Replaced 72 vision/connector Linear modules.
+Injected Vision QuantizedMatMul (24 physical qk/pv objects)
+Injected SmolVLA QuantizedMatMul (64 physical qk/pv objects)
+Switched 384 quantized modules to mode=raw
+
+Model wrapper summary
+---------------------
+Model type       : smolvla
+Total parameters : 450,046,176
+Quantization     : True
+Quantized modules: 384
+
+Switched 384 quantized modules to mode=quant_forward
+[eval] env: libero {'task': 'libero_goal', 'max_parallel_tasks': 1, 'task_ids': [0]}
+Creating LIBERO envs | suites=['libero_goal'] | n_envs(per task)=1 | init_states=True
+Restricting to task_ids=[0]
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+Built vec env | suite=libero_goal | task_id=0 | n_envs=1
+[eval] 1 episodes x 1 envs (async=False)
+Assets already downloaded at /home/zyzhao/.cache/libero/assets
+
+[eval] overall: {'avg_sum_reward': 1.0, 'avg_max_reward': 1.0, 'pc_success': 100.0, 'n_episodes': 1, 'eval_s': 116.21666979789734, 'eval_ep_s': 116.21667051315308, 'video_paths': [], 'predicted_video_paths': []}
+[eval] results saved to: /home/zyzhao/VLA_tcs2/outputs/2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal/smoke/eval_info.json
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading SmolVLA from: /home/zyzhao/.cache/huggingface/hub/models--lerobot--smolvla_libero/snapshots/31d453f7edd78c839a8bbc39744a292686daf0de
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights: 100%|█████████▉| 488/489 [00:00<00:00, 4877.61it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 4873.38it/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+WARNING:huggingface_hub.utils._http:Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[robosuite WARNING] No private macro file found! (__init__.py:7)
+WARNING:robosuite_logs:No private macro file found!
+[robosuite WARNING] It is recommended to use a private macro file (__init__.py:8)
+WARNING:robosuite_logs:It is recommended to use a private macro file
+[robosuite WARNING] To setup, run: python /home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/robosuite/scripts/setup_macros.py (__init__.py:9)
+WARNING:robosuite_logs:To setup, run: python /home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/robosuite/scripts/setup_macros.py
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+Replaced 224 Linear modules.
+Replaced 72 vision/connector Linear modules.
+Injected Vision QuantizedMatMul (24 physical qk/pv objects)
+Injected SmolVLA QuantizedMatMul (64 physical qk/pv objects)
+Switched 384 quantized modules to mode=raw
+
+Model wrapper summary
+---------------------
+Model type       : smolvla
+Total parameters : 450,046,176
+Quantization     : True
+Quantized modules: 384
+
+Switched 384 quantized modules to mode=raw
+[eval] env: libero {'task': 'libero_goal', 'max_parallel_tasks': 1, 'task_ids': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]}
+Creating LIBERO envs | suites=['libero_goal'] | n_envs(per task)=1 | init_states=True
+Restricting to task_ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+Built vec env | suite=libero_goal | task_id=0 | n_envs=1
+Built vec env | suite=libero_goal | task_id=1 | n_envs=1
+Built vec env | suite=libero_goal | task_id=2 | n_envs=1
+Built vec env | suite=libero_goal | task_id=3 | n_envs=1
+Built vec env | suite=libero_goal | task_id=4 | n_envs=1
+Built vec env | suite=libero_goal | task_id=5 | n_envs=1
+Built vec env | suite=libero_goal | task_id=6 | n_envs=1
+Built vec env | suite=libero_goal | task_id=7 | n_envs=1
+Built vec env | suite=libero_goal | task_id=8 | n_envs=1
+Built vec env | suite=libero_goal | task_id=9 | n_envs=1
+[eval] 10 episodes x 1 envs (async=False)
+Assets already downloaded at /home/zyzhao/.cache/libero/assets
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+[eval] overall: {'avg_sum_reward': 0.87, 'avg_max_reward': 0.87, 'pc_success': 87.0, 'n_episodes': 100, 'eval_s': 4756.790350198746, 'eval_ep_s': 47.5679035115242, 'video_paths': [], 'predicted_video_paths': []}
+[eval] results saved to: /home/zyzhao/VLA_tcs2/outputs/2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal/baseline/eval_info.json
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+WARNING:huggingface_hub.utils._http:Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading SmolVLA from: /home/zyzhao/.cache/huggingface/hub/models--lerobot--smolvla_libero/snapshots/31d453f7edd78c839a8bbc39744a292686daf0de
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 5024.48it/s]
+[robosuite WARNING] No private macro file found! (__init__.py:7)
+WARNING:robosuite_logs:No private macro file found!
+[robosuite WARNING] It is recommended to use a private macro file (__init__.py:8)
+WARNING:robosuite_logs:It is recommended to use a private macro file
+[robosuite WARNING] To setup, run: python /home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/robosuite/scripts/setup_macros.py (__init__.py:9)
+WARNING:robosuite_logs:To setup, run: python /home/zyzhao/.conda/envs/smolvla_eval/lib/python3.12/site-packages/robosuite/scripts/setup_macros.py
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+Replaced 224 Linear modules.
+Replaced 72 vision/connector Linear modules.
+Injected Vision QuantizedMatMul (24 physical qk/pv objects)
+Injected SmolVLA QuantizedMatMul (64 physical qk/pv objects)
+Switched 384 quantized modules to mode=raw
+
+Model wrapper summary
+---------------------
+Model type       : smolvla
+Total parameters : 450,046,176
+Quantization     : True
+Quantized modules: 384
+
+Switched 384 quantized modules to mode=quant_forward
+[eval] env: libero {'task': 'libero_goal', 'max_parallel_tasks': 1, 'task_ids': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]}
+Creating LIBERO envs | suites=['libero_goal'] | n_envs(per task)=1 | init_states=True
+Restricting to task_ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+Built vec env | suite=libero_goal | task_id=0 | n_envs=1
+Built vec env | suite=libero_goal | task_id=1 | n_envs=1
+Built vec env | suite=libero_goal | task_id=2 | n_envs=1
+Built vec env | suite=libero_goal | task_id=3 | n_envs=1
+Built vec env | suite=libero_goal | task_id=4 | n_envs=1
+Built vec env | suite=libero_goal | task_id=5 | n_envs=1
+Built vec env | suite=libero_goal | task_id=6 | n_envs=1
+Built vec env | suite=libero_goal | task_id=7 | n_envs=1
+Built vec env | suite=libero_goal | task_id=8 | n_envs=1
+Built vec env | suite=libero_goal | task_id=9 | n_envs=1
+[eval] 10 episodes x 1 envs (async=False)
+Assets already downloaded at /home/zyzhao/.cache/libero/assets
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+  all_successes.append(torch.tensor(successes))
+
+[eval] overall: {'avg_sum_reward': 0.83, 'avg_max_reward': 0.83, 'pc_success': 83.0, 'n_episodes': 100, 'eval_s': 10910.733446836472, 'eval_ep_s': 109.10733448028564, 'video_paths': [], 'predicted_video_paths': []}
+[eval] results saved to: /home/zyzhao/VLA_tcs2/outputs/2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal/quant/eval_info.json
+PASS: summary.json and task_success.csv written

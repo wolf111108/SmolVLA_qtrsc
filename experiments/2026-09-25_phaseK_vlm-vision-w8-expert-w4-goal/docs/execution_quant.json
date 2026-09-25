@@ -1,0 +1,7 @@
+{
+  "mode": "quant_forward",
+  "linear_sites": 296,
+  "matmul_sites": 88,
+  "vision_backend": "explicit_eager",
+  "vlm_expert_backend": "injected_eager"
+}

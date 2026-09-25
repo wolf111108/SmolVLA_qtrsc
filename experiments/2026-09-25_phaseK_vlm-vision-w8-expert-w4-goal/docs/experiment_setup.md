@@ -1,7 +1,7 @@
 # 实验设置（Experiment Setup）
 
 - **实验名称**：2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal
-- **状态**：draft
+- **状态**：done（2026-09-25 在 commit `4cdccc4` 上按本文件协议执行完毕，结果见 results.md / logs.md）
 - **创建日期**：2026-09-25
 - **相关前序实验**：2026-09-25_phaseI_vision-joint-smoke（VJ1）；2026-09-23_phaseI_vision-attention-smoke
 
@@ -104,12 +104,12 @@ python experiments/2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal/scripts/summar
 
 | 阶段 | 输出 | 状态 |
 |---|---|---|
-| prepare | prepared.json、baseline_resolved.yaml、quant_resolved.yaml | pending |
-| 校准 | calibrate/scale_audit.json、completed.json | pending |
-| 预检 | smoke/result.json、coverage_summary.json、sparsity/ | pending |
-| B0 | baseline/result.json、execution.json、config.yaml | pending |
-| M0 | quant/result.json、execution.json、scale_audit.json、coverage_summary.json、sparsity/ | pending |
-| 汇总 | summary.json、task_success.csv | pending |
+| prepare | prepared.json、baseline_resolved.yaml、quant_resolved.yaml | done（snapshot `31d453f7…`） |
+| 校准 | calibrate/scale_audit.json、completed.json | done（PASS，384 sites / 1152 scales） |
+| 预检 | smoke/result.json、coverage_summary.json、sparsity/ | done（task0×1ep SR=100%，coverage PASS） |
+| B0 | baseline/result.json、execution.json、config.yaml | done（100ep SR=87%，`mode=raw`） |
+| M0 | quant/result.json、execution.json、scale_audit.json、coverage_summary.json、sparsity/ | done（100ep SR=83%，`mode=quant_forward`，coverage PASS） |
+| 汇总 | summary.json、task_success.csv | done（`delta_sr_pp=-4.0`） |
 
 scale目录：scales/2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal/quant/。
 
