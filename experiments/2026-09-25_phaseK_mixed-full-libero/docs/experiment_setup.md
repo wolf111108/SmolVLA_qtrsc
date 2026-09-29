@@ -1,7 +1,7 @@
 # 实验设置（Experiment Setup）
 
 - **实验名称**：2026-09-25_phaseK_mixed-full-libero
-- **状态**：draft
+- **状态**：done
 - **负责人**：无
 - **创建日期**：2026-09-25
 - **相关前序实验**：[Goal 联合量化](../../2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal/docs/experiment_setup.md)（87/100 → 83/100）
@@ -85,6 +85,8 @@ prepare 保存 `src/**/*.py`、本实验 scripts/configs 的 SHA256；每个后�
 
 connector/patch embedding/action projections 保持 raw。新增脚本不改变框架量化前向。
 
+> **执行期变更（2026-09-29）**：baseline 最终**未使用本轮 in-house 值**，而是统一采用前序实验的 FP baseline `outputs/table2_repro_audit/06_simulator/mj332_A_na10_ep10_*`（2026-08-27，FP/raw，100 ep/suite，协议逐项一致且四 suite 齐全）；Goal 跳过；Long baseline 不跑；`summarize.py` 不执行。详细偏离见 `docs/logs.md` §4，结果以 `docs/results.md` 为准。
+
 Gate：384 sites（296 Linear、88 MatMul）；每正式量化 suite 3736 条唯一 runtime 稀疏行、296 条静态权重；1152 scales；所有 10 tasks ×10 episodes 完整；compute 覆盖所有量化位点/flow step，调用数与每个 sparsity role 一致；Vision 未量化部分、connector、other 必须有实际调用。smoke 先走相同 Gate。
 
 ## 6. 运行命令
@@ -121,21 +123,21 @@ python "$EXP/scripts/summarize.py"
 
 | config / 阶段 | 相对输出目录 | 状态 |
 |---|---|---|
-| prepare | prepared.json、baseline_resolved.yaml、quant_resolved.yaml、版本记录 | pending |
-| quant.yaml / calibrate | calibrate/ | pending |
-| quant.yaml / smoke | smoke/ | pending |
-| baseline.yaml / Spatial | libero_spatial/baseline/ | pending |
-| quant.yaml / Spatial | libero_spatial/quant/ | pending |
-| baseline.yaml / Object | libero_object/baseline/ | pending |
-| quant.yaml / Object | libero_object/quant/ | pending |
-| baseline.yaml / Goal | libero_goal/baseline/ | pending |
-| quant.yaml / Goal | libero_goal/quant/ | pending |
-| baseline.yaml / Long | libero_10/baseline/ | pending |
-| quant.yaml / Long | libero_10/quant/ | pending |
+| prepare | prepared.json、baseline_resolved.yaml、quant_resolved.yaml、版本记录 | done |
+| quant.yaml / calibrate | calibrate/ | done |
+| quant.yaml / smoke | smoke/ | done |
+| baseline.yaml / Spatial | libero_spatial/baseline/ | done（86/100，仅作旁证） |
+| quant.yaml / Spatial | libero_spatial/quant/ | **done（81/100）** |
+| baseline.yaml / Object | libero_object/baseline/ | done（89/100，仅作旁证） |
+| quant.yaml / Object | libero_object/quant/ | **done（94/100）** |
+| baseline.yaml / Goal | libero_goal/baseline/ | **不适用**（Goal 跳过） |
+| quant.yaml / Goal | libero_goal/quant/ | **不适用**（M0=83 取自前序实验） |
+| baseline.yaml / Long | libero_10/baseline/ | **不适用**（不跑，采用 FP baseline 69） |
+| quant.yaml / Long | libero_10/quant/ | **done（74/100）** |
 
 每 stage 保存 config.yaml、result.json、execution.json、compute.csv、compute_summary.json、completed.json；quant 另保存 scale_audit.json、coverage_summary.json 与 sparsity/ 下的五张原始 CSV。
 
-根汇总：summary.json、success_summary.csv、task_success.csv（40 tasks +成败翻转）、sparsity_summary.csv、compute_summary.csv、outlier_summary.csv。整体静态权重取一份，runtime 计数跨四 suite 累加，计算量均值按 generation 加权。
+> **未生成根汇总（决策 D）**：不执行 `summarize.py`，因此**没有** `summary.json`、`success_summary.csv`、`task_success.csv`、`sparsity_summary.csv`、`compute_summary.csv`、`outlier_summary.csv`。原因：跳过 Goal 后该脚本硬编码的四 suite 与 `assert episodes==400` 会失败。结果改为人工按各 suite 原始产出汇总（见 `docs/results.md`）。静态权重仍只取一份（已逐位验证跨 suite 一致），runtime 计数按 suite 分别报告并另给合计。
 
 按仓库规范：原始数据留在 outputs 同名目录；docs/results.md 回填表格并链接原始输出，docs/logs.md 回填版本、运行进度与失败记录，不向 docs 复制原始大 CSV。
 
