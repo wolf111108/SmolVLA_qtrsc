@@ -28,7 +28,7 @@ prepare/calibrate/smoke 已完成；Spatial 两组已完成（86 vs 81）；Obje
 | Goal B0/M0 | **skipped** | — | 已由单 suite 实验覆盖，本轮不重跑（见 §4） |
 | Long baseline | pending | 无 | 守护进程 PID 1754657 等待 Object 完成后自动启动 |
 | Long quant | pending | 无 | 同链路自动衔接 |
-| summarize | blocked | 无 | 跳过 Goal 后 `summarize.py` 硬编码四 suite 会失败（见 §4） |
+| summarize | **skipped** | — | 决策 D：**不执行 `summarize.py`**，不生成根级 `summary.json` 与汇总 CSV；保留各 suite 原始产出供人工读取 |
 
 ## 2. 运行日志
 
@@ -60,7 +60,8 @@ prepare/calibrate/smoke 已完成；Spatial 两组已完成（86 vs 81）；Obje
 
 - **背景**：Goal 已由前序单 suite 实验 `2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal` 完整覆盖（commit `4cdccc4`，SR 87→83，100 ep，全 Gate PASS）。核对后确认两者**配置实质等价**：量化 overrides、checkpoint `31d453f7…`、`n_action_steps=10`、`num_steps=10`、`chunk_size=50`、seed 1000、10 tasks×10 ep 逐项一致；`src/` 框架代码在 `4cdccc4..b8115e2` 之间**零改动**。
 - **决策**：本轮不重跑 Goal，改为 Spatial + Object + Long **三 suite**（各 400 ep→共 600 ep/组）。
-- **后果**：`summarize.py` 硬编码 `SUITES`（四 suite）且断言 `episodes==400`，跳过 Goal 后会因 `libero_goal/baseline/result.json` 不存在而失败；`pooled` 与「四 suite 400 ep」表述也不再成立。**该问题尚未处理**，需在全部运行结束后以文档化方式解决（改造 summarize 支持 suite 子集，或在 EXP 外另写汇总脚本）。
+- **后果**：`summarize.py` 硬编码 `SUITES`（四 suite）且断言 `episodes==400`，跳过 Goal 后会因 `libero_goal/baseline/result.json` 不存在而失败；`pooled` 与「四 suite 400 ep」表述也不再成立。
+- **处理（决策 D，已采纳）**：**不执行 `summarize.py`**，也不生成根级 `summary.json` / `success_summary.csv` / `task_success.csv` / `sparsity_summary.csv` / `compute_summary.csv` / `outlier_summary.csv`；因此不修改 `summarize.py`。各 suite 原始产出（`result.json`、`eval_info.json`、`execution.json`、`compute.csv`、`compute_summary.json`、`coverage_summary.json`、`scale_audit.json`、`sparsity/*.csv`）保留在 `outputs/` 下供人工读取。
 - **约束**：`run_arm.py` 每阶段会断言 `source_fingerprint()==prepared['sources']`（覆盖 `src/**/*.py`、`EXP/scripts/*.py|*.sh`、`EXP/configs/*.yaml`），因此在 Long 运行结束前**不得修改上述任何文件**，否则 Long 的 run_arm 会被中止。
 
 ### 2026-09-28：Spatial quant 首跑中断
@@ -82,3 +83,4 @@ prepare/calibrate/smoke 已完成；Spatial 两组已完成（86 vs 81）；Obje
 | 2026-09-28 | 回填 prepare/calibrate/smoke/Spatial baseline 结果；记录 Spatial quant 首跑中断与归档续跑 | lfwang |
 | 2026-09-29 | 回填 Spatial quant 完成（81/100）；启动 Object baseline→quant 链路并登记 | lfwang |
 | 2026-09-29 | 记录跳过 Goal 的决策与理由、Long 守护链路 PID；登记 summarize.py 四 suite 硬依赖待决问题 | lfwang |
+| 2026-09-29 | 汇总方式定为决策 D：不执行 summarize.py、不生成根级汇总文件，保留原始产出人工读取 | lfwang |
