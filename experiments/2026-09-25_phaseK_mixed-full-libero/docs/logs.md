@@ -61,6 +61,8 @@ per-task 数据已从四个日志（`mj332_A_na10_ep10_logs/libero_*.log`）的 
 | 2026-09-29 | Object quant | run_arm.py quant --suite libero_object | done | libero_object/quant/ | 13:19:29 启动，15:21 完成；SR = **94/100**；eval 7266s；PPID=1（链路 wrapper 已终止） |
 | 2026-09-29 | Long quant（守护链路） | quant --suite libero_10（等 Object quant 退出后自动） | done | libero_10/quant/ | 15:21:27→19:46:10；SR = **74/100**；eval 15843s（4.40h）；日志 run_long_quant_0929.log |
 | 2026-09-29 | 回填与基准变更 | — | done | docs/results.md | 统一改用前序 FP baseline（`mj332_A_na10_ep10`）；补全 Long；重算四 suite 逐 task、翻转与合计 |
+| 2026-09-29 | 出图（7 张） | `scripts/plot_phaseK_pk_bars.py`、`scripts/plot_phaseK_sparsity_bars.py`、`scripts/plot_phaseK_operator_macs.py` | done | docs/figures/（+ outputs/figures/） | SR 四 suite 柱状图、Goal 阶梯、按部件 activation/weight 稀疏度、按部件算子级 MAC×activation；图已回填至 results.md §2/§3.3/§3.6 |
+| 2026-09-29 | 回填 Goal 稀疏数据 | — | done | docs/results.md | Goal 行补充 sparsity/outlier 数据（跨轮引用）；Goal 无 compute 数据已在 §3.6 注明 |
 
 ## 3. 后台任务
 
@@ -121,4 +123,5 @@ per-task 数据已从四个日志（`mj332_A_na10_ep10_logs/libero_*.log`）的 
 | 2026-09-29 | 汇总方式定为决策 D：不执行 summarize.py、不生成根级汇总文件，保留原始产出人工读取 | lfwang |
 | 2026-09-29 | 按要求停跑剩余 baseline；后统一改用前序 FP baseline（`mj332_A_na10_ep10`）为主参照 | lfwang |
 | 2026-09-29 | Object quant（94/100）与 Long quant（74/100）完成；实验转 done；新增 §1.1 FP baseline 参照表 | lfwang |
+| 2026-09-29 | 新增 7 张图并回填结果（含按部件稀疏度与算子级 MAC），图源脚本登记在 logs §2 | lfwang |
 | 2026-09-29 | 按要求停跑剩余 baseline：Object baseline 已完成（89/100）予以保留；Long 改用审计同协议数据（69.0），只跑 quant；新增 §1.1 参照表与可对比性风险说明 | lfwang |

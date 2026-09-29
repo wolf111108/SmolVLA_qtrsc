@@ -34,6 +34,7 @@ def stack_below_axes(
     gap_line: float = 0.013,
     fontsize: float = 8.2,
     legend_fontsize: float = 9.5,
+    legend_ncol: int = 1,
     color: str = "gray",
     warn_floor: float = 0.01,
 ):
@@ -47,6 +48,10 @@ def stack_below_axes(
                      centre, NOT 0.5, or side-by-side panels collide).
         gap_*:       vertical gaps in figure fraction between the successive
                      blocks (legend, text, then text-to-text).
+        legend_ncol: number of legend columns.  A multi-handle legend
+                     defaults to ONE column, which grows downward and can push
+                     the notes off the figure; pass a larger value to lay it
+                     out horizontally.
         warn_floor:  warn if a note would fall below this y.
 
     Returns:
@@ -61,8 +66,9 @@ def stack_below_axes(
     if handles:
         legend = fig.legend(handles=handles, loc="upper center",
                             bbox_to_anchor=(xc, y), fontsize=legend_fontsize,
+                            ncol=legend_ncol,
                             frameon=True, framealpha=0.95, borderpad=0.7,
-                            handlelength=2.4)
+                            handlelength=2.4, columnspacing=1.4)
         fig.canvas.draw()
         y = legend.get_window_extent(r).transformed(inv).y0 - gap_text
 

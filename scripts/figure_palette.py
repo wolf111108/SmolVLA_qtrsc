@@ -37,6 +37,18 @@ SUITE_SHADES = {
 # Greens 3/6/8); the lightest entry extends the ramp with Greens 2.
 GOAL_SHADES_4 = ("#c7e9c0", "#a1d99b", "#31a354", "#006d2c")
 
+# Phase K component palette: one hue per model component, for figures whose x
+# axis groups by LIBERO suite while the bars WITHIN a group are components
+# (Encoder / VLM / Expert).  Here the hue must identify the component across
+# the whole chart, so it is fixed per component instead of per suite -- the
+# transpose of the SUITE_SHADES convention above.  Hues are lifted from the
+# Phase F four-suite family so both figure sets read as one collection.
+COMPONENT_SHADES = {
+    "Encoder": "#4292c6",  # blue   (Phase F Spatial mid)
+    "VLM":     "#e6550d",  # orange (Phase F Object mid)
+    "Expert":  "#31a354",  # green  (Phase F Goal mid)
+}
+
 # Five-step blue ramp (ColorBrewer Blues 3/4/6/7/9). Used when a figure zooms
 # into one branch of the hierarchy and needs five distinguishable steps of the
 # same hue -- e.g. Phase I breaking Vision+Connector down into its sub-modules,

@@ -45,6 +45,12 @@ FP baseline → M0 对照：
 | **Spatial+Object+Long** | **83.0**（249/300） | **83.0**（249/300） | **0.0** | 300/300 | [汇总目录](../../../../outputs/2026-09-25_phaseK_mixed-full-libero/) |
 | **四 suite** | **84.5**（338/400） | **83.0**（332/400） | **−1.5** | 400/400 | 同上 |
 
+报表：
+
+![Four-suite success rate](figures/phaseK_PK_foursuite_bars.png)
+
+![Goal precision ladder](figures/phaseK_PK_goal_ladder.png)
+
 > 注 1：合计行是**人工按原始 `result.json` 累加**得出（本实验按决策 D 不执行 `summarize.py`，故无 `success_summary.csv`）。
 > 注 2：Goal 的 M0 值取自前序单 suite 实验（同 checkpoint、同配置、`src/` 零改动），属**跨轮引用**；其余三 suite 的 M0 均为本轮产出。
 > 注 3：FP baseline 的原始产出在 `outputs/table2_repro_audit/06_simulator/mj332_A_na10_ep10_*`（只有 videos 与日志，无 `result.json`）；per-task 数据已从其日志解析（见 §3.1）。该运行 `pretrained_revision=None`（未钉 checkpoint 版本），可信度限制见 §5。
@@ -185,6 +191,18 @@ FP baseline → M0 对照：
 - Linear 的 element 稀疏极低（VLM/Expert 约 0.019%）：A/O 走 per-site scale，e4m3 下恰好取到 0 的元素很少；稀疏主要体现在 exponent 场（bit 口径，约 48.6%–52.3%）。
 - MatMul element 稀疏（4.81%–7.51%）显著高于 Linear，与 09-23 / 09-25 前序 MatMul 通路结论一致。
 
+#### 按部件汇总的 activation / weight 稀疏度
+
+![Activation sparsity by component](figures/phaseK_sparsity_activation_bars.png)
+
+![Static weight sparsity by component](figures/phaseK_sparsity_weight_bars.png)
+
+两张图横轴为 suite，每 suite 内三根 bar 依次是 Encoder / VLM / Expert；**色相固定表示部件**（Encoder 蓝 / VLM 橙 / Expert 绿）。
+
+- **activation 图**只统计 `tensor_role == "activation"`（Linear 的输入张量），**不含** output role、MatMul 的 A/B/O 与静态权重，因此其数字与上表 all-role pooled **不可互相比**（例：Spatial vision 上表为 6.3433 / 54.6951，activation-only 为 8.03 / 49.35）。跨 suite 均值：Encoder **49.35%**、VLM **52.93%**、Expert **52.95%**（极差 ≤ 0.05 pp）。
+- **weight 图**用 sign-aware 整数口径、两个格式分开报告：INT8（Encoder 63.16%、VLM 63.50%）、INT4（Expert 73.72%）；四个 suite **逐位完全相同**（同一份权重与 scale），图中可直接目视验证。
+- 生成脚本：`scripts/plot_phaseK_sparsity_bars.py`。
+
 ### 3.4 static weight 稀疏（sign-aware，INT8/INT4 分开报告）
 
 三个正式 suite（Spatial / Object / Long）**逐位完全相同**（同一份权重、同一 scale，仅 rollout 数据不同；前序 Goal 实验亦相同）：
@@ -211,7 +229,7 @@ INT4 Expert 的 element 零率（8.68%）比 INT8（0.76%）高一个量级，bi
 
 ### 3.6 dense-equivalent 计算量
 
-每 generation 的算法计算量由网络结构决定，**两 suite、两组完全一致**：**598.43 GFLOPs/generation**。
+每 generation 的算法计算量由网络结构决定，**三个本轮 suite、两组完全一致**：**598.43 GFLOPs/generation**。
 
 | 组件 | FLOPs / generation | 占比 |
 |---|---:|---:|
@@ -231,10 +249,35 @@ INT4 Expert 的 element 零率（8.68%）比 INT8（0.76%）高一个量级，bi
 | Long | 3291 | **1969.44** | 1407.29 | 189.58 | 357.37 | 9.94 | 5.27 |
 
 > Long 的 generations 最高（3291），因为 libero_10 轨迹最长（280→520 步上限）且任务难度导致重试更多；但**每 generation 的 598.43 GFLOPs 与 suite 无关**。
-
-> ⚠️ 上表 Vision / VLM / Vision+VLM / Expert 四列**不可相加**：`Vision+VLM` 是前两列的和、`all` 是全部含 connector/other 的和。正式 FLOPs 仅取自 `compute.csv` / `compute_summary.json`，**禁止直接累加 `workload.csv` 的 MACs**（其 Linear activation/output、MatMul A/B/O 是重复的角色行）。
+>
+> **Goal 无计算量数据**：前序单 suite 实验的脚手架尚无 `compute.py`（该脚本是本轮才引入的），故 Goal 行没有 `compute.csv`。其 `generations` 也无从得知。
+>
+> ⚠️ 上表各列含义不同：`Vision` / `VLM` / `Expert` / `connector` / `other` 互斥，其和等于 `all`；**不要**把 `Vision` 与 `VLM` 相加后再与 `all` 比（那会漏掉 connector/other，也会重复计入）。`compute_summary.json` 里另有一个 `vision_vlm` 行，它是 `Vision + VLM` 的和，**与上面两行不可同时相加**。正式 FLOPs 仅取自 `compute.csv` / `compute_summary.json`，**禁止直接累加 `workload.csv` 的 MACs**（其 Linear activation/output、MatMul A/B/O 是重复的角色行）。
 >
 > 这是**算术密集算子的 dense-equivalent 算法计算量**，不含 bias/softmax/norm/elementwise/embedding/data-movement/量化统计开销/outlier 额外 GEMM；**不是 GPU 实际指令数，也不是稀疏后剩余计算量或硬件加速比**。
+
+`compute.csv` 位置：`outputs/2026-09-25_phaseK_mixed-full-libero/<suite>/<arm>/compute.csv`（每 (module, phase, flow_step) 一行，是唯一可累加的 MAC 来源）；生成代码 `scripts/compute.py` 的 `ComputeCounter`（forward hook，仅读 shape）。
+
+#### 算子级 MAC 与 activation 稀疏度
+
+![Encoder operator MACs and activation sparsity](figures/phaseK_operator_macs_encoder.png)
+
+![VLM operator MACs and activation sparsity](figures/phaseK_operator_macs_vlm.png)
+
+![Expert operator MACs and activation sparsity](figures/phaseK_operator_macs_expert.png)
+
+取自 `libero_spatial` 的 quant 运行（1412 generations）。每图横轴是该部件**实际存在**的算子（Encoder 的 MLP 实为 `fc1`/`fc2`，不是 gate/up/down，故按实际命名）；**柱高 = 算子总 MAC**，柱底部另一颜色的区域 = 该算子 activation 稀疏度对应的比例（示例：`fc1` 高 81.87 TMAC、稀疏 53.12%，则底部 43.49 TMAC 涂色）。
+
+| 部件 | 已绘制 | 未绘制 | MAC 加权 activation 零位率 |
+|---|---:|---:|---:|
+| Encoder | 300.19 TMAC | 1.71 TMAC（patch embedding Conv2d，无 S\|MMM 统计） | 52.40% |
+| VLM | 40.67 TMAC | 0 | 53.16% |
+| Expert | 76.66 TMAC | 0 | 53.30% |
+
+> **只统计 activation 侧**：Linear 取 `tensor_role == activation`；MatMul 取 **A 和 B** 两个操作数（QKᵀ 的 Q/K 或 P@V 的 P/V，均为运行时激活）；**不含** MatMul 的 `O` role。
+>
+> ⚠️ **涂色比例用的是 S\|MMM 位稀疏率，不是 element 零率**。图内 `el x.xx` 小字给出 element 零率，而它才是零值跳过硬件真正可作用的部分——Linear 算子的 element 零率仅 ~0.003–0.07%（Expert 73.72% 这类高值只出现在 INT4 静态权重）。因此涂色区域**不能**读作「可省下 53% 的 MAC」。
+> 生成脚本：`scripts/plot_phaseK_operator_macs.py`。
 
 ### 3.7 分析
 
@@ -254,8 +297,9 @@ INT4 Expert 的 element 零率（8.68%）比 INT8（0.76%）高一个量级，bi
 1. Phase K 混合精度配置在 Spatial / Object / Long 三个 suite 上均跑通全部 Gate（384 sites / 1152 scales / 3736 runtime rows / 296 weight rows / 5040 outlier rows / scale 审计逐项一致 / 精度路由逐 module 断言），**无工程性问题**。
 2. **成功率（以 FP baseline 为参照）**：Spatial **85→81**（−4.0 pp）、Object **95→94**（−1.0 pp）、Long **69→74**（**+5.0 pp**）；三 suite 合计 **249→249，Δ = 0.0 pp（600 episodes）**。
 3. 因此**既不声称「无损」，也不否决该配置**：在当前 100 ep/task、单 seed 协议下，该配置的 SR 差异与同 checkpoint 的采样波动同量级，**没有可检测的系统性掉点**。
-4. **工作负载特征**：runtime S\|MMM bit 稀疏 Vision+VLM ≈ **54.7%**、Expert ≈ **54.1%**（跨 suite 稳定）；static weight 稀疏 INT8 ≈ **63.4%**、INT4 ≈ **73.7%**；outlier 浮点旁路实测 ≈ **1.52%**；算法计算量 **598.43 GFLOPs/generation**，其中 Vision 占 71.5%。
-5. 该结果可作为后续**多 seed 复现**与 **component-wise 消融**的对照基线；本实验本身不足以支撑统计显著性结论。
+4. **工作负载特征**：runtime S\|MMM bit 稀疏 Vision+VLM ≈ **54.7%**、Expert ≈ **54.1%**（四 suite 极差 ≤ 0.15 pp）；**仅 activation 口径**下 Encoder **49.35%** / VLM **52.93%** / Expert **52.95%**；static weight 稀疏 INT8 ≈ **63.4%**、INT4 ≈ **73.7%**；outlier 浮点旁路实测 ≈ **1.52%**；算法计算量 **598.43 GFLOPs/generation**，其中 Vision 占 71.5%。
+5. **工程可行性**：本轮新增的 `compute.py` shape-based 钩子未扰动 SR（与无该统计时同配置的 Goal 结果一致），且首次实现了算子级 MAC × activation 稀疏度的可视化。
+6. 该结果可作为后续**多 seed 复现**与 **component-wise 消融**的对照基线；本实验本身不足以支撑统计显著性结论。
 
 ## 5. 问题与后续
 
@@ -274,3 +318,4 @@ INT4 Expert 的 element 零率（8.68%）比 INT8（0.76%）高一个量级，bi
 | 2026-09-25 | 创建文档 | |
 | 2026-09-29 | 回填 Spatial（86→81）与 Object（89→94）结果（当时以本轮 in-house baseline 为参照） | lfwang |
 | 2026-09-29 | **改为统一采用前序 FP baseline（`mj332_A_na10_ep10`）为主参照**；补全 Long（69→74）结果；重算四 suite 逐 task/翻转、合计口径与计算量；因基准变更，Spatial/Object 的 Δ 更新为 −4.0 / −1.0 pp（合计仍 0.0 pp） | lfwang |
+| 2026-09-29 | 新增 7 张图（SR 四 suite 柱状图 ×1、Goal 阶梯 ×1、按部件 activation/weight 稀疏度 ×2、按部件算子级 MAC×activation ×3）并回填至 §2/§3.3/§3.6；补充 `compute.csv` 位置与生成代码、activation 口径与位稀疏率的读图警告 | lfwang |
