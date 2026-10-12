@@ -1,0 +1,21 @@
+cmake_minimum_required(VERSION 3.16)
+project(vla_systemc_examples LANGUAGES CXX)
+
+find_package(SystemCLanguage CONFIG REQUIRED)
+# Match the standard used to build SystemC; its API-version symbol encodes it.
+set(CMAKE_CXX_STANDARD ${SystemC_CXX_STANDARD})
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+include(CTest)
+foreach(example IN ITEMS counter tlm_memory)
+    add_executable(${example} examples/${example}.cpp)
+    target_link_libraries(${example} PRIVATE SystemC::systemc)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    if(BUILD_TESTING)
+        add_test(NAME ${example} COMMAND ${example})
+        set_tests_properties(${example} PROPERTIES TIMEOUT 10)
+    endif()
+endforeach()
