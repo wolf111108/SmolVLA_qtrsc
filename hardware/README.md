@@ -1,11 +1,24 @@
 # FPGA/HDL 硬件开发入口
 
-根目录 `hardware/` 放置 HDL 行为模型、testbench 和仿真运行脚本。
+根目录 `hardware/` 放置 HDL 行为模型、testbench、SystemC/TLM 示例和仿真运行脚本。
 现有 [`src/vla_tcs2/hardware/`](../src/vla_tcs2/hardware/) 继续负责 Python
 算子事件采集与性能估算。两者当前没有自动连接。
 
-本次加入的是 **DMA 命令/响应协议入门示例**，不是可上板的 DMA 实现。
+HDL 部分是 **DMA 命令/响应协议入门示例**，不是可上板的 DMA 实现。
 当前没有 AXI 主接口、DDR/BRAM 数据搬运、矩阵计算或量化数值验证。
+
+## SystemC/TLM（Linux）
+
+环境安装、编译命令和模型讲解见 [`systemc/README.md`](systemc/README.md)。
+该目录提供时钟计数器（含 VCD 波形）和 TLM 内存读写两个独立的自检查 C++ 示例。
+按教程安装 SystemC 后，从仓库根目录执行：
+
+```bash
+bash hardware/systemc/scripts/run_examples.sh
+```
+
+验证记录见 [`systemc/VALIDATION.md`](systemc/VALIDATION.md)。这些示例与下方 HDL DMA
+模型分别运行，当前均未自动连接 Python 算子采集框架。
 
 ## 文件
 

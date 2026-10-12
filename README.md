@@ -46,6 +46,7 @@ VLA_tcs2/
 ├── configs/experiments/     # Phase D/E 时期的 YAML（不再新增；新配置放 experiments/<exp>/configs/）
 ├── scripts/                 # 仓库级通用脚本（评测 / 审计 / 汇总 / 绘图）
 ├── tests/                   # 单元测试
+├── hardware/                # HDL 行为模型与 SystemC/TLM 独立仿真示例
 ├── checkpoints/             # 本地模型 checkpoint（大文件，不纳入文档）
 ├── lerobot_current/         # 主 LeRobot（LIBERO 评测环境，固定 commit；提供 `lerobot` 包）
 ├── envs/                    # 环境冻结文件（pip freeze / conda yml）
@@ -53,6 +54,10 @@ VLA_tcs2/
 ```
 
 ### 2.2 文档目录 `doc/`
+
+Linux SystemC/TLM 环境搭建与可运行示例见
+[`hardware/systemc/README.md`](hardware/systemc/README.md)，硬件开发入口见
+[`hardware/README.md`](hardware/README.md)。
 
 ```text
 doc/
