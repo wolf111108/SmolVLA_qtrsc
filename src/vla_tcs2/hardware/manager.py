@@ -9,17 +9,22 @@ from .backends import create_backend
 from .capture import make_event
 from .report import ASSUMPTIONS, accumulate, new_totals
 from .schema import HardwareSpec, MappingSpec, SCHEMA_VERSION
+from .timeloop import SearchSpec, TimeloopMapper
 
 
 class HardwareManager:
     def __init__(self, output_dir, *, backend="dense_analytic", hardware=None,
-                 mapping=None, max_events=10000, provenance=None):
+                 mapping=None, mapping_search=None, max_events=10000, provenance=None):
         self.output_dir = Path(output_dir)
         self.backend = create_backend(backend)
         if not self.backend.required_features <= {"metadata"}:
             raise ValueError("This capture version provides metadata only; backend requires unavailable features")
         self.hardware = HardwareSpec(**(hardware or {}))
         self.mapping = MappingSpec(**(mapping or {}))
+        self.mapping_search = SearchSpec(**(mapping_search or {}))
+        if self.mapping_search.enabled and backend != "dense_analytic":
+            raise ValueError("mapping_search currently requires backend=dense_analytic")
+        self.mapper = TimeloopMapper(self.hardware, self.mapping_search) if self.mapping_search.enabled else None
         if type(max_events) is not int or max_events < 0:
             raise ValueError("max_events must be a nonnegative integer (0 = unlimited)")
         self.max_events = max_events
@@ -54,7 +59,10 @@ class HardwareManager:
             raise RuntimeError("Use a fresh manager for each capture/replay session")
         self.output_dir.mkdir(parents=True, exist_ok=True)
         # A trace is evidence: never silently overwrite a previous capture.
-        for name in ("trace.jsonl", "operators.csv", "summary.json"):
+        names = ["trace.jsonl", "operators.csv", "summary.json"]
+        if self.mapper:
+            names.append("mappings.jsonl")
+        for name in names:
             if (self.output_dir / name).exists():
                 raise FileExistsError(self.output_dir / name)
         try:
@@ -66,11 +74,17 @@ class HardwareManager:
                 "event_id", "module_id", "component", "phase", "flow_step", "generation_id", "op_type",
                 "m", "n", "k", "batch", "status", "reason", "dense_macs", "compute_cycles",
                 "dram_read_bytes", "dram_write_bytes", "peak_buffer_bytes", "latency_seconds", "pe_utilization",
+                "activation_read_bytes", "weight_read_bytes", "partial_sum_read_bytes", "partial_sum_write_bytes",
+                "memory_seconds", "tile_m", "tile_n", "tile_k", "dataflow",
             ])
             self._csv.writeheader()
+            if self.mapper:
+                self._mappings = open(self.output_dir / "mappings.jsonl", "x", encoding="utf-8")
+                self._streams.append(self._mappings)
             self.manifest = dict(record_type="manifest", schema_version=SCHEMA_VERSION,
                                  backend=self.backend.name, backend_version=self.backend.version,
                                  hardware=asdict(self.hardware), mapping=asdict(self.mapping),
+                                 mapping_search=asdict(self.mapping_search),
                                  max_events=self.max_events, available_features=["metadata"],
                                  provenance=self.provenance, assumptions=ASSUMPTIONS)
             self._trace.write(json.dumps(self.manifest) + "\n")
@@ -89,11 +103,23 @@ class HardwareManager:
             return
         if event.event_id != self.totals["calls"]:
             raise ValueError("Submitted event IDs must be contiguous from zero")
-        estimate = self.backend.estimate(event, self.hardware, self.mapping)
+        selected = self.mapping
+        if self.mapper:
+            result = self.mapper.map_event(event)
+            selected, estimate = result.mapping, result.estimate
+            self._mappings.write(json.dumps(dict(
+                event_id=event.event_id, module_id=event.module_id, component=event.component,
+                phase=event.phase, flow_step=event.flow_step, generation_id=event.generation_id,
+                m=event.m, n=event.n, k=event.k, batch=event.batch,
+                activation_bits=event.a.bits, weight_bits=event.b.bits, output_bits=event.output.bits,
+                **result.to_dict())) + "\n")
+        else:
+            estimate = self.backend.estimate(event, self.hardware, selected)
         if estimate.status not in {"estimated", "unsupported"} or estimate.event_id != event.event_id:
             raise ValueError("Backend returned an invalid estimate")
         self._trace.write(json.dumps(dict(record_type="operator", **event.to_dict())) + "\n")
         row = asdict(estimate)
+        row.update(asdict(selected) if selected else {})
         row.update({name: getattr(event, name) for name in (
             "module_id", "component", "phase", "flow_step", "generation_id", "op_type", "m", "n", "k", "batch")})
         self._csv.writerow(row)
@@ -171,6 +197,10 @@ class HardwareManager:
                 schema_version=SCHEMA_VERSION, status="failed" if exc_type else "completed",
                 error_type=exc_type.__name__ if exc_type else None,
                 manifest=self.manifest, totals=self.totals,
+                mapping_search=dict(enabled=self.mapping_search.enabled,
+                                    unique_workloads=len(self.mapper._cache) if self.mapper else 0,
+                                    cache_hits=self.mapper.cache_hits if self.mapper else 0,
+                                    results_file="mappings.jsonl" if self.mapper else None),
                 captured_generation_count=len(self.generations),
                 unknown_generation_calls=self.unknown_generation_calls,
                 capture_truncated=bool(self.skipped_limit), skipped_limit=self.skipped_limit,

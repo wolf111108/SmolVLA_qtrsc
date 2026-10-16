@@ -118,6 +118,11 @@ class HardwareSpec:
     # No automatic INT8-vs-FP32 throughput multiplier.
     pipeline_cycles: int = 0
     overlap_compute_memory: bool = False
+    # Shared: serialized service on one link. Independent: ideal parallel
+    # activation/weight/other streams (psum/output use dram_bytes_per_second).
+    dram_mode: str = "shared"
+    activation_read_bytes_per_second: float | None = None
+    weight_read_bytes_per_second: float | None = None
 
     def __post_init__(self):
         for name in ("pe_rows", "pe_cols", "sram_bytes", "accumulator_bits"):
@@ -132,6 +137,15 @@ class HardwareSpec:
             raise ValueError("pipeline_cycles must be a nonnegative integer")
         if type(self.overlap_compute_memory) is not bool:
             raise ValueError("overlap_compute_memory must be bool")
+        if self.dram_mode not in {"shared", "independent"}:
+            raise ValueError("dram_mode must be shared or independent")
+        for name in ("activation_read_bytes_per_second", "weight_read_bytes_per_second"):
+            value = getattr(self, name)
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
+                                      or not isfinite(value) or value <= 0):
+                raise ValueError(f"{name} must be None or finite and positive")
+            if self.dram_mode == "independent" and value is None:
+                raise ValueError(f"Independent streams require explicit {name}")
 
 
 @dataclass(frozen=True)
@@ -142,8 +156,8 @@ class MappingSpec:
     dataflow: str = "output_stationary"
 
     def __post_init__(self):
-        if self.dataflow != "output_stationary":
-            raise ValueError("Only output_stationary is implemented")
+        if self.dataflow not in {"output_stationary", "weight_stationary", "input_stationary"}:
+            raise ValueError("Unknown dataflow")
         if any(type(v) is not int or v <= 0 for v in (self.tile_m, self.tile_n, self.tile_k)):
             raise ValueError("Tile sizes must be positive integers")
 
@@ -160,3 +174,8 @@ class OpEstimate:
     peak_buffer_bytes: int | None = None
     latency_seconds: float | None = None
     pe_utilization: float | None = None
+    activation_read_bytes: int | None = None
+    weight_read_bytes: int | None = None
+    partial_sum_read_bytes: int | None = None
+    partial_sum_write_bytes: int | None = None
+    memory_seconds: float | None = None

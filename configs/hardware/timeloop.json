@@ -1,0 +1,21 @@
+{
+  "backend": "dense_analytic",
+  "hardware": {
+    "pe_rows": 16,
+    "pe_cols": 16,
+    "frequency_hz": 1000000000,
+    "sram_bytes": 1048576,
+    "accumulator_bits": 32,
+    "dram_bytes_per_second": 32000000000,
+    "dram_mode": "shared",
+    "activation_read_bytes_per_second": 32000000000,
+    "weight_read_bytes_per_second": 32000000000,
+    "overlap_compute_memory": false
+  },
+  "mapping_search": {
+    "enabled": true,
+    "objective": "memory_time",
+    "candidate_policy": "powers_of_two",
+    "dataflows": ["output_stationary", "weight_stationary", "input_stationary"]
+  }
+}

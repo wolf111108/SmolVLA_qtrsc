@@ -23,8 +23,9 @@ def main():
     records = read_trace(args.trace)
     try:
         source = next(records)
-        for key in ("backend", "hardware", "mapping"):
-            options.setdefault(key, source[key])
+        for key in ("backend", "hardware", "mapping", "mapping_search"):
+            if key in source:
+                options.setdefault(key, source[key])
         with HardwareManager(args.output_dir, provenance={
             "source_trace_sha256": digest.hexdigest(), "source_manifest": source,
             "note": "Replay completion only covers stored events; see source summary for capture truncation/failure",

@@ -376,6 +376,12 @@ bash experiments/new_experiment.sh 2026-09-27 phaseL my-topic
 unsupported。完整接口、公式、覆盖边界与运行命令见
 [硬件框架实验设置](experiments/2026-09-22_phaseJ_hardware-framework/docs/experiment_setup.md)。
 
+逐层自动选择 tile/dataflow：设置 `hardware.mapping_search.enabled: true`，在 global buffer
+容量约束下搜索 OS/WS/IS，并保存 `mappings.jsonl`；支持独立配置 activation/weight 读取速度。
+解析搜索器位于 `src/vla_tcs2/hardware/timeloop.py`，使用项目成本模型，最优范围限定为所声明
+候选集合。配置与公式见 [mapping 搜索说明](docs/hardware_mapping.md)，离线配置示例为
+[`configs/hardware/timeloop.json`](configs/hardware/timeloop.json)。
+
 ---
 
 ## 7. 修订记录
