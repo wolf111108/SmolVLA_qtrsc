@@ -1,17 +1,4 @@
-"""Scope and assumptions travel with every estimate, including offline reports."""
-ASSUMPTIONS = [
-    "Hypothetical uniform 1 MAC/PE/cycle; no measured chip timing or precision speedup.",
-    "GEMM core only; OS/WS/IS describe single-buffer temporal mappings, not PE-level dataflow.",
-    "OS retains output over K; WS retains B over M; IS retains A over N. WS/IS include accumulator-precision spills.",
-    "No cross-batch/inter-operator weight/KV residency; excludes bias, scale storage/application, quantization and non-GEMM work.",
-    "DRAM bytes are mapping traffic, not unique tensor bytes; SRAM bandwidth/interconnect are not modeled.",
-    "Sequential sum across captured calls; not end-to-end policy latency or per-action latency.",
-    "Outlier, token mixed precision and BitNet events retain logical MACs but have no latency estimate.",
-    "Only registered Linear and QuantizedMatMul modules are captured; functional matmul/SDPA, convolution and other operators are excluded.",
-    "No sparse speedup, energy or area estimate. Logical low-bit packing assumes a matching storage format.",
-    "Shared DRAM service is serialized; independent streams and compute/memory overlap are ideal lower bounds, not scheduled simulation.",
-    "Mapping search is project analytic code, not official Timeloop; optimal only over the recorded candidate sets.",
-]
+"""Aggregate per-operator component simulation estimates."""
 
 
 def new_totals():

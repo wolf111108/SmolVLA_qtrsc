@@ -1,14 +1,124 @@
 {
-  "backend": "dense_analytic",
-  "hardware": {
-    "pe_rows": 32,
-    "pe_cols": 32,
-    "frequency_hz": 1000000000,
-    "dram_bytes_per_second": 32000000000,
-    "sram_bytes": 262144,
-    "accumulator_bits": 32,
-    "pipeline_cycles": 0,
-    "overlap_compute_memory": false
+  "backend": "component_sim",
+  "backend_config": {
+    "architecture": {
+      "schema_version": 1,
+      "clock_hz": 1000000000.0,
+      "components": {
+        "dram": {
+          "type": "dram",
+          "bandwidth_bytes_per_second": 32000000000,
+          "efficiency": 1.0,
+          "latency_cycles": 0,
+          "burst_bytes": 1
+        },
+        "dma": {
+          "type": "dma",
+          "bytes_per_cycle": 256
+        },
+        "noc": {
+          "type": "link",
+          "bytes_per_cycle": 256
+        },
+        "operand_link": {
+          "type": "link",
+          "bytes_per_cycle": 256
+        },
+        "accumulator_link": {
+          "type": "link",
+          "bytes_per_cycle": 256
+        },
+        "gb": {
+          "type": "sram",
+          "capacity_bytes": 262144,
+          "read_bytes_per_cycle": 256,
+          "write_bytes_per_cycle": 256
+        },
+        "local": {
+          "type": "sram",
+          "capacity_bytes": 262144,
+          "read_bytes_per_cycle": 256,
+          "write_bytes_per_cycle": 256
+        },
+        "acc": {
+          "type": "sram",
+          "capacity_bytes": 262144,
+          "read_bytes_per_cycle": 256,
+          "write_bytes_per_cycle": 256
+        },
+        "array": {
+          "type": "compute_array",
+          "rows": 32,
+          "cols": 32,
+          "pipeline_cycles": 0,
+          "accumulator_bits": 32,
+          "supported_formats": [
+            "int4",
+            "int8",
+            "int12",
+            "int16",
+            "float16",
+            "bfloat16",
+            "float32",
+            "e2m1",
+            "e4m3",
+            "e4m3fn",
+            "e5m2",
+            "e5m10"
+          ]
+        }
+      },
+      "roles": {
+        "dram": "dram",
+        "global": "gb",
+        "local": "local",
+        "accumulator": "acc",
+        "array": "array"
+      },
+      "connections": [
+        {
+          "from": "dram.data",
+          "to": "gb.data",
+          "via": "dma"
+        },
+        {
+          "from": "gb.data",
+          "to": "dram.data",
+          "via": "dma"
+        },
+        {
+          "from": "gb.data",
+          "to": "local.data",
+          "via": "noc"
+        },
+        {
+          "from": "acc.data",
+          "to": "gb.data",
+          "via": "noc"
+        },
+        {
+          "from": "local.data",
+          "to": "array.data",
+          "via": "operand_link"
+        },
+        {
+          "from": "array.data",
+          "to": "acc.data",
+          "via": "accumulator_link"
+        },
+        {
+          "from": "acc.data",
+          "to": "array.data",
+          "via": "accumulator_link"
+        },
+        {
+          "from": "gb.data",
+          "to": "acc.data",
+          "via": "noc"
+        }
+      ]
+    },
+    "double_buffer": false
   },
   "mapping": {
     "tile_m": 32,

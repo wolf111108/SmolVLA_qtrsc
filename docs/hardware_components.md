@@ -3,6 +3,7 @@
 本模块将硬件能力、算子数据流与资源调度分开。它复用已有 `OperatorEvent`、
 `HardwareManager` 和 JSONL trace，在 `component_sim` 后端中提供可组合的 tile 级仿真。
 这是**假设硬件上的 GEMM 核心模型**，结果不代表整次 SmolVLA 推理的端到端延迟。
+支持 OS、WS、IS 三种时间数据流，由同一套组件资源调度器评分。
 
 ## 快速运行
 
@@ -43,14 +44,15 @@ python scripts/demo_hardware_components.py \
 | `modeling/components/compute.py` | 稠密阵列与显式理想跳零模型 |
 | `modeling/components/__init__.py` | 组件工厂注册 |
 | `modeling/architecture.py` | 配置装配、端口连接、共享资源和容量校验 |
-| `modeling/planner.py` | OS 分块、依赖、GB/local 双缓冲槽与 accumulator 驻留 |
-| `modeling/mapper.py` | 复用现有 tile 候选规则，用事件模拟器搜索 |
+| `modeling/planner.py` | OS/WS/IS 分块、依赖、驻留、双缓冲与部分和溢出 |
+| `modeling/mapper.py` | 定义 SearchSpec、tile 候选规则，用事件模拟器搜索 |
 | `modeling/runtime.py` | tensor-free 在线统计及可选 raw 输入零值采集器 |
 | `modeling/simulator.py` | 确定性事件驱动调度；每次调用创建全新状态 |
-| `backends/component.py` | 适配旧 capture/report API |
+| `modeling/backend.py` | 连接 capture/report 与组件规划和调度 |
 
-旧 `dense_analytic` 及 `timeloop.py` 保持可用。项目的 `timeloop.py` 是自研解析 mapper，
-不是官方 Timeloop 的 Python 包。它原有的 WS/IS 策略尚未移植到组件 planner。
+所有在线采集与离线重放统一调用组件后端。旧解析后端和自研 `timeloop.py` 搜索器已移除；
+其数据流策略现由组件 Planner 生成执行计划。
+早期解析报告仍可作为历史产物读取，其数值与本版结果不能直接混用。
 
 ## 组件文件规范
 
@@ -123,7 +125,7 @@ register_component("my_sram", lambda name, params, clock_hz:
 - 所有内核资源服务率采用架构时钟。DRAM 的 B/s 在装配时换算到 B/cycle。
 - GB、local、accumulator 是三个独立容量预算；结果分别报告预留容量。
 
-示例路径包括 DRAM↔GB、GB→local、local→array、array↔accumulator、accumulator→GB。
+示例路径包括 DRAM↔GB、GB→local、GB→accumulator、local→array、array↔accumulator、accumulator→GB。
 连接可以共享同一 link 实例，届时自然产生资源竞争。计算阶段的本地读、阵列工作和
 累加器访问合并为一个同步阶段，相关链路也占用到阶段结束。
 
@@ -132,26 +134,38 @@ accumulator 64 KiB；各聚合 SRAM 读写端口和 link 为 256 B/cycle。
 数值是待扫描的实验假设，不对应已校准芯片。配置中声明支持的格式均假设 1 MAC/PE/cycle，
 不自动根据 INT8/FP8/FP32 位宽改变算力。
 
-不传显式架构时，后端用旧 `HardwareSpec` 生成默认组件。此时 GB、local、accumulator
-**各自**拥有 `hardware.sram_bytes` 容量；要严格控制总 SRAM 面积应使用显式架构。
-显式架构的 clock/array/storage 参数优先，旧 `hardware` 对应参数不参与计算。
+不传显式架构时，后端使用 `default_architecture()` 的固定参考参数：32×32 阵列、
+1 GHz、GB 4 MiB、local 128 KiB、accumulator 64 KiB、102.4 GB/s × 0.7 的 DRAM。
+实验请显式配置 `backend_config.architecture`，将所有硬件参数集中在一个位置。
 
 ## 算子与 mapping
 
 `OperatorEvent` 继续作为算子协议，包含 Linear/MatMul 形状、精度、batch、phase、flow_step。
-Planner v1 使用 output-stationary 的 `batch→M→N→K` 循环：
+Planner 使用以下时间循环：
+
+| mapping | 循环 | 局部驻留 | K 分块时的部分和 |
+|---|---|---|---|
+| OS | batch→M→N→K | 输出 tile | 一直留在 accumulator |
+| WS | batch→N→K→M | weight tile | 多个 M tile 时写回／恢复 DRAM |
+| IS | batch→M→K→N | activation tile | 多个 N tile 时写回／恢复 DRAM |
+
+以 OS 为例：
 
 1. A/B 从 DRAM 经 DMA 进入 GB operand slot。
 2. 通过 NoC 搬入 local slot。
 3. local 经 operand link 向阵列提供数据；一次 K tile 的部分和保存在 accumulator。
 4. 全部 K tile 完成后，accumulator 经 NoC 写 GB output slot，再经 DMA 写 DRAM。
 
-一个输出 tile 的部分和始终驻留。不同输出 tile 串行执行；不跨 batch、算子或 denoise step
-保存权重/KV。`double_buffer=True` 给 GB/local 各分配两个 operand slot，容量真实增加。
+OS 的一个输出 tile 的部分和始终驻留。WS/IS 在 K pass 之间对部分和执行
+`acc→GB→DRAM` 和 `DRAM→GB→acc`；仅有一个内层输出 tile 时跨 K 保持驻留。
+不同输出 tile 串行执行；不跨 batch、算子或 denoise step 保存权重/KV。
+`double_buffer=True` 给 OS 的 GB/local 各分配两个 operand slot，容量真实增加；
+WS/IS 当前为顺序执行，报告中的 `double_buffer` 标记为 false。
 槽复用依赖前一次消费者完成，避免预取覆盖未使用的数据。
 
 容量预留是整个算子期间的静态上界，结果中的 `reservations` 不代表动态分配追踪。
-不够容量时返回 `unsupported`，不隐式 spill。尾块按真实大小计流量，阵列按行列波次计周期。
+不够容量时返回 `unsupported`，不隐式添加容量 spill。WS/IS 的部分和 spill 属于其明确
+定义的数据流。尾块按真实大小计流量，阵列按行列波次计周期。
 
 直接调用：
 
@@ -219,8 +233,9 @@ provider 签名为 `(event, module, args, kwargs, output) -> RuntimeStats`。
 
 ## 搜索与结果解释
 
-组件搜索复用 `SearchSpec` 和候选生成规则，但调用组件 simulator 评分。
-仅允许 `dataflows=["output_stationary"]`；默认最多 256 个候选、每候选最多 200000 个事件。
+组件搜索由 `modeling/mapper.py` 独立提供 `SearchSpec`、候选生成与 simulator 评分。
+默认搜索 OS/WS/IS，最多 256 个候选、每候选最多 200000 个事件；
+需要限制搜索范围时设置 `mapping_search.dataflows` 与显式 tile 候选。
 超预算明确拒绝；容量或事件预算不满足的候选不在可行集合中。
 
 - `latency`：完成时间。
@@ -231,27 +246,43 @@ provider 签名为 `(event, module, args, kwargs, output) -> RuntimeStats`。
 与具体分块绑定的 tile 统计仅用于固定 mapping，搜索不接受它；不同候选需要不同的 tile 测量。
 搜索结果记录候选集、评价数、可行数、目标值和最优性范围。
 
+直接搜索给定矩阵形状：
+
+```python
+from vla_tcs2.hardware.modeling import ComponentMapper, SearchSpec, default_architecture
+
+mapper = ComponentMapper(default_architecture(), SearchSpec(
+    tile_m_candidates=(16, 32), tile_n_candidates=(32, 64), tile_k_candidates=(64, 128)))
+choice = mapper.map_gemm(50, 129, 70, activation_bits=8, weight_bits=8,
+                         output_bits=8, activation_format="int8", weight_format="int8",
+                         output_format="int8", save_path="outputs/mapping.json")
+print(choice.mapping, choice.simulation.latency_seconds)
+```
+
+`map_gemm(M,K,N)` 将线性层 B 的记录 shape 设为 `[N,K]`；保存文件包含架构、
+候选配置、算子及组件仿真结果，已存在的文件不会覆盖。
+
 `simulations.jsonl` 每个算子一条，包含 mapping、timeline、counters、resource_busy_cycles、
 utilization、reservations、runtime_stats 和 assumptions。等待周期是各阶段 ready 后排队时间之和，
 并行事件的等待可以重叠，不能拿它与 compute 时间直接相加推导总延迟。
 `compute_cycles` 为阵列服务需求，资源 busy 包含被存储/链路拖长的占用，两者含义不同。
 
-`operators.csv/summary.json` 沿用旧协议，其中 `peak_buffer_bytes` 是各独立片内预留容量之和；
+`operators.csv/summary.json` 保留简洁聚合字段，其中 `peak_buffer_bytes` 是各独立片内预留容量之和；
 `memory_seconds` 是 DRAM 占用时间；`pe_utilization` 使用实际调度 MAC 数除以阵列计算服务容量。
-细分 activation/weight CSV 字段在新后端留空；总读写和各层流量以 simulations 为准。
+CSV 分别报告 activation/weight 物理读取和 psum 物理读写；它们包含 burst padding。
+总读写及各层访问量以 `simulations.jsonl` 为准。
 不支持的算子保留 MAC 数和原因，延迟字段为空，绝不当作零延迟成功。
 
 ## 验证和后续扩展
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -p 'test_hardware*.py' -v
-PYTHONPATH=src python -m unittest discover -s tests -p 'test_timeloop.py' -v
 ```
 
 包含手算时间线、容量、尾块与广播流量、资源互斥、burst padding、双缓冲、统计语义、
 插件、多阶段、搜索和 trace 重放测试。PyTorch 不可用时，GPU/真实 module hook 测试会跳过。
 
-后续可以增加 banked SRAM、分组稀疏阵列、vector unit、codec、WS/IS planner 和跨算子驻留。
+后续可以增加 banked SRAM、分组稀疏阵列、vector unit、codec、WS/IS 双缓冲和跨算子驻留。
 新增复杂队列/背压时可接 SimPy 后端，保留 ExecutionPlan 与结果协议。
 目前没有能耗/面积参数；访问计数可以作为后续能耗模型的输入。
 
@@ -262,3 +293,20 @@ PYTHONPATH=src python -m unittest discover -s tests -p 'test_timeloop.py' -v
 
 初版选择标准库事件引擎，因为计划已展开为静态 DAG、需求仅为非抢占资源服务；未引入
 完整 SimPy 或官方 Timeloop 依赖，也未宣称与其模型结果等价。
+
+## 从解析版迁移
+
+`backend: dense_analytic`、`hardware: {pe_rows, sram_bytes, ...}`、`timeloop.py` 和
+`mappings.jsonl` 均属于已移除的旧执行路径。新配置使用 `backend: component_sim`，
+把 DRAM/SRAM/PE 参数放到 `backend_config.architecture.components`；
+`mapping_search` 的候选 tile 和 objective 保持同名，搜索结果写到 `simulations.jsonl`。
+历史 `trace.jsonl` 的 `OperatorEvent` 内容可复用，但须传入组件配置重放：
+
+```bash
+PYTHONPATH=src python -m vla_tcs2.hardware \
+  --trace old/hardware/trace.jsonl \
+  --config configs/hardware/components.json \
+  --output-dir outputs/component_replay
+```
+
+旧 trace 的解析结果和旧硬件参数不会自动套入新模型；旧历史报告保留原来的计算口径。

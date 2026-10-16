@@ -9,12 +9,12 @@ import unittest
 from dataclasses import replace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from vla_tcs2.hardware import HardwareManager, HardwareSpec, MappingSpec, OperatorEvent, TensorDesc
+from vla_tcs2.hardware import HardwareManager, MappingSpec, OperatorEvent, TensorDesc
 from vla_tcs2.hardware.modeling import (
     Action, ActionModel, Architecture, ComponentMapper, EventSimulator, ExecutionPlan,
     MatmulPlanner, Phase, PlanEvent, ResourceDemand, ResourceSpec, RuntimeStats,
     UnsupportedModel, default_architecture, register_component)
-from vla_tcs2.hardware.timeloop import SearchSpec
+from vla_tcs2.hardware.modeling.mapper import SearchSpec
 from vla_tcs2.hardware.trace import read_trace
 
 
@@ -26,8 +26,11 @@ def op(m=2, n=2, k=2, **extra):
 
 
 def arch(**changes):
-    config = default_architecture(HardwareSpec(pe_rows=2, pe_cols=2, frequency_hz=1000,
-                                  dram_bytes_per_second=1000000)).config
+    config = default_architecture().config
+    config["clock_hz"] = 1000
+    config["components"]["dram"].update(bandwidth_bytes_per_second=1000000, efficiency=1.0,
+                                           latency_cycles=0, burst_bytes=1)
+    config["components"]["array"].update(rows=2, cols=2)
     for name in ("gb", "local", "acc"):
         config["components"][name].update(read_bytes_per_cycle=1000, write_bytes_per_cycle=1000)
     for name in ("dma", "noc"):
@@ -141,7 +144,7 @@ class ComponentTests(unittest.TestCase):
         with self.assertRaises(UnsupportedModel): MatmulPlanner().lower(op(), MappingSpec(2, 2, 2), Architecture(c))
         with self.assertRaises(UnsupportedModel): MatmulPlanner(max_plan_events=1).lower(op(), MappingSpec(), arch())
         with self.assertRaises(UnsupportedModel): MatmulPlanner().lower(op(), MappingSpec(), arch(supported_formats=['e4m3']))
-        with self.assertRaises(UnsupportedModel): MatmulPlanner().lower(op(), MappingSpec(dataflow='weight_stationary'), arch())
+        with self.assertRaises(ValueError): MappingSpec(dataflow='unknown')
 
     def test_burst_padding_is_physical_traffic(self):
         c = arch().config
@@ -152,6 +155,59 @@ class ComponentTests(unittest.TestCase):
         self.assertEqual(r.counters['dram.read_bytes'], 128)
         self.assertEqual(r.counters['dram.write_bytes'], 64)
         self.assertEqual(r.counters['dma.transfer_bytes'], 192)
+
+    def test_stationary_flows_reuse_operands_and_spill_partial_sums(self):
+        e, a = op(m=3, n=5, k=7), arch()
+        expected = {"output_stationary": (112, 15),
+                    "weight_stationary": (137, 75),
+                    "input_stationary": (151, 75)}
+        for flow, traffic in expected.items():
+            with self.subTest(flow=flow):
+                plan = MatmulPlanner().lower(e, MappingSpec(2, 4, 4, flow), a)
+                result = EventSimulator().run(plan, a)
+                self.assertEqual((result.counters['dram.read_bytes'],
+                                  result.counters['dram.write_bytes']), traffic)
+                self.assertEqual(result.counters['array.dense_macs'], e.macs)
+        for mapping in (MappingSpec(3, 4, 4, 'weight_stationary'),
+                        MappingSpec(2, 5, 4, 'input_stationary')):
+            result = EventSimulator().run(MatmulPlanner().lower(e, mapping, a), a)
+            self.assertEqual(result.counters['dram.write_bytes'], 15)
+        with tempfile.TemporaryDirectory() as d:
+            with HardwareManager(d, backend_config={'architecture': a.config},
+                                 mapping={'tile_m': 2, 'tile_n': 4, 'tile_k': 4,
+                                          'dataflow': 'weight_stationary'}) as manager:
+                manager.submit(e)
+            import csv
+            with (Path(d)/'operators.csv').open() as stream:
+                row = next(csv.DictReader(stream))
+            self.assertEqual(tuple(int(row[name]) for name in (
+                'activation_read_bytes', 'weight_read_bytes',
+                'partial_sum_read_bytes', 'partial_sum_write_bytes')), (42, 35, 60, 60))
+
+    def test_search_can_choose_weight_and_input_stationary(self):
+        e, a = op(m=3, n=5, k=7), arch()
+        search = SearchSpec(enabled=True, objective='dram_bytes',
+                            tile_m_candidates=(2,), tile_n_candidates=(4,), tile_k_candidates=(4,))
+        result = ComponentMapper(a, search).map_event(e)
+        self.assertEqual(result.evaluated_candidates, 3)
+        self.assertEqual(result.mapping.dataflow, 'output_stationary')
+        self.assertEqual(result.simulation.counters['dram.read_bytes'], 112)
+
+    def test_direct_gemm_search_saves_component_provenance(self):
+        with tempfile.TemporaryDirectory() as d:
+            search = SearchSpec(tile_m_candidates=(2,), tile_n_candidates=(2,), tile_k_candidates=(2,))
+            mapper = ComponentMapper(arch(), search)
+            path = Path(d)/'mapping.json'
+            result = mapper.map_gemm(2, 2, 2, activation_bits=8, weight_bits=8,
+                                     output_bits=8, activation_format='int8',
+                                     weight_format='int8', output_format='int8', save_path=path)
+            saved = json.loads(path.read_text())
+            self.assertEqual(saved['operator']['k'], 2)
+            self.assertEqual(saved['simulation']['total_cycles'], result.simulation.total_cycles)
+            with self.assertRaises(FileExistsError):
+                mapper.map_gemm(2, 2, 2, activation_bits=8, weight_bits=8,
+                                output_bits=8, activation_format='int8',
+                                weight_format='int8', output_format='int8', save_path=path)
 
     def test_sparse_dense_and_explicit_estimate(self):
         e, t = op(k=16), MappingSpec(2, 2, 16)
@@ -222,27 +278,34 @@ class ComponentTests(unittest.TestCase):
             self.assertEqual(record['simulation']['metadata']['search']['evaluated_candidates'], 2)
 
 
-    def test_replay_backend_switch_does_not_inherit_incompatible_settings(self):
+    def test_legacy_trace_requires_component_configuration(self):
         with tempfile.TemporaryDirectory() as d:
             source, target = Path(d)/"source", Path(d)/"target"
-            with HardwareManager(source, mapping_search={"enabled": True}) as manager:
+            with HardwareManager(source) as manager:
                 manager.submit(op())
-            config = Path(d)/"config.json"
-            config.write_text(json.dumps({"backend": "component_sim", "backend_config": {"architecture": arch().config},
-                                          "mapping": {"tile_m": 2, "tile_n": 2, "tile_k": 2}}))
+            trace = source/"trace.jsonl"
+            lines = trace.read_text().splitlines()
+            manifest = json.loads(lines[0])
+            manifest["backend"] = "dense_analytic"
+            trace.write_text(json.dumps(manifest) + "\n" + "\n".join(lines[1:]) + "\n")
             env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]/"src"))
-            subprocess.run([sys.executable, "-m", "vla_tcs2.hardware", "--trace", str(source/"trace.jsonl"),
-                            "--config", str(config), "--output-dir", str(target)], check=True, env=env, capture_output=True)
-            summary = json.loads((target/"summary.json").read_text())
-            self.assertFalse(summary["manifest"]["mapping_search"]["enabled"])
-            self.assertEqual(summary["totals"]["estimated_calls"], 1)
+            args = [sys.executable, "-m", "vla_tcs2.hardware", "--trace", str(trace),
+                    "--output-dir", str(target)]
+            failed = subprocess.run(args, env=env, capture_output=True, text=True)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("require --config", failed.stderr)
+            config = Path(d)/"config.json"
+            config.write_text(json.dumps({"backend_config": {"architecture": arch().config},
+                                          "mapping": {"tile_m": 2, "tile_n": 2, "tile_k": 2}}))
+            subprocess.run(args + ["--config", str(config)], check=True, env=env, capture_output=True)
+            self.assertEqual(json.loads((target/"summary.json").read_text())["totals"]["estimated_calls"], 1)
 
     def test_stats_roundtrip_keeps_oracle_and_estimation_labels(self):
         with tempfile.TemporaryDirectory() as d:
             stats = RuntimeStats(0, activation_zero_fraction=.5, allow_uniform_estimate=True)
             event = replace(op(k=8), metadata={"runtime_stats": stats.to_dict()})
             with HardwareManager(d, backend="component_sim", backend_config={"architecture": arch(mode="ideal_mac_skip").config},
-                                 mapping_search={"enabled": True, "objective": "latency", "dataflows": ["output_stationary"],
+                                 mapping_search={"enabled": True, "objective": "latency",
                                                  "tile_m_candidates": [2], "tile_n_candidates": [2], "tile_k_candidates": [4, 8]}) as manager:
                 manager.submit(event)
             recovered = list(read_trace(Path(d)/"trace.jsonl"))[1]
@@ -256,12 +319,22 @@ class ComponentTests(unittest.TestCase):
         c["connections"] = [x for x in c["connections"] if x["from"] != "local.data"]
         with self.assertRaisesRegex(ValueError, "No route"):
             MatmulPlanner().lower(op(), MappingSpec(), Architecture(c))
+        c = arch().config
+        c["connections"] = [x for x in c["connections"] if not (
+            x["from"] == "gb.data" and x["to"] == "acc.data")]
+        with self.assertRaisesRegex(UnsupportedModel, "restore partial sums"):
+            MatmulPlanner().lower(op(m=3, n=5, k=7),
+                                  MappingSpec(2, 4, 4, "weight_stationary"), Architecture(c))
+        result = ComponentMapper(Architecture(c), SearchSpec(
+            tile_m_candidates=(2,), tile_n_candidates=(4,), tile_k_candidates=(4,))).map_event(
+                op(m=3, n=5, k=7))
+        self.assertEqual(result.mapping.dataflow, "output_stationary")
         a = arch(mode="ideal_mac_skip")
         stats = RuntimeStats(0, scope="tile", tile_active_macs={"0:0:0:0:2:2:2": 9})
         with self.assertRaisesRegex(ValueError, "exceed"):
             MatmulPlanner().lower(op(), MappingSpec(2, 2, 2), a, stats)
         with self.assertRaisesRegex(ValueError, "fixed mapping"):
-            ComponentMapper(a, SearchSpec(dataflows=("output_stationary",))).map_event(op(), stats)
+            ComponentMapper(a, SearchSpec()).map_event(op(), stats)
 
     def test_slow_bandwidth_stalls_without_changing_work(self):
         a = arch()

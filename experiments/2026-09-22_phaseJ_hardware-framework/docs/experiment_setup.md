@@ -7,7 +7,10 @@
 
 ## 1. 实验目的
 
-建立 `HardwareManager + OperatorEvent + dense_analytic + JSONL replay`。
+历史实验最初建立 `HardwareManager + OperatorEvent + dense_analytic + JSONL replay`。
+本文后续公式与结果描述记录原始解析模型，不代表当前组件仿真器。
+同目录下可运行配置已迁移到 `component_sim`，当前协议见
+[`docs/hardware_components.md`](../../../docs/hardware_components.md)。
 保留 stat_manager 的独立生命周期，模型输出不变；不把 fake quant 的 GPU 执行时间作为目标芯片延迟。
 
 ## 2. 环境与版本
@@ -111,6 +114,8 @@ estimated_core_macs与dense_macs分开；unsupported时latency/cycles为空，�
 - 真实模型GPU验证待运行，无真实芯片校准结果。
 
 ## 9. 代码与扩展约定
+
+以下记录当时的解析版代码结构与接口，相关文件和接口已由组件框架替代。
 
 | 文件 | 职责 |
 |---|---|

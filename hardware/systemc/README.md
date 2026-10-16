@@ -242,15 +242,15 @@ PASS: tlm_memory transactions=9 time=30 ns
 ## 7. 与本仓库硬件框架的关系
 
 现有 [`src/vla_tcs2/hardware/`](../../src/vla_tcs2/hardware/) 负责 Python 算子事件采集、
-JSONL trace 和解析式性能估算。`HardwareSpec` 描述 PE 数量、频率、带宽、SRAM 等假设，
-它自身不会创建 SystemC 模块或运行事件调度。
+JSONL trace，以及由组件架构、映射计划和事件调度器组成的性能仿真。
+`backend_config.architecture` 描述 PE、DRAM、SRAM 和互连；组件事件调度器不创建 SystemC 模块。
 
 今后接入 SystemC 时，可分阶段实现：
 
 1. 将 `OperatorEvent` 的 `m/n/k/batch` 与张量位宽转换为任务；检查 trace manifest 的 schema 版本。
 2. 加入片外内存、DMA、片上缓冲和 GEMM 模块；明确数据搬运量、tile 和计算延迟。
-3. 用小矩阵验证数值和时序，再与现有 dense backend 的估算对照。
-4. 引入资源竞争、缓冲限制、重叠和调度，再开展完整 workload 性能实验。
+3. 用小矩阵验证数值和时序，再与组件后端的事件、访问计数和延迟对照。
+4. 对照并逐步加入更细的资源竞争、缓冲限制与背压，开展完整 workload 性能实验。
 
 这些是扩展路线，当前示例没有实现 trace adapter、DMA 或 GEMM。
 需要注意现有 trace 的 `TensorDesc` 是张量描述，**不携带实际张量数值**；

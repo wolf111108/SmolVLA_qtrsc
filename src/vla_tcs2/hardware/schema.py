@@ -1,6 +1,6 @@
 """Versioned, tensor-free hardware workload contracts (standard library only)."""
 from dataclasses import asdict, dataclass, field
-from math import isfinite, prod
+from math import prod
 from typing import Any
 
 SCHEMA_VERSION = 1
@@ -104,48 +104,6 @@ def broadcast_shape(a, b):
             raise ValueError(f"Incompatible batch dimensions: {a}, {b}")
         result.append(max(x, y))
     return tuple(reversed(result))
-
-
-@dataclass(frozen=True)
-class HardwareSpec:
-    pe_rows: int = 16
-    pe_cols: int = 16
-    frequency_hz: float = 1e9
-    dram_bytes_per_second: float = 32e9
-    sram_bytes: int = 262144
-    accumulator_bits: int = 32
-    # Uniform 1 MAC/PE/cycle is an explicit hypothetical hardware assumption.
-    # No automatic INT8-vs-FP32 throughput multiplier.
-    pipeline_cycles: int = 0
-    overlap_compute_memory: bool = False
-    # Shared: serialized service on one link. Independent: ideal parallel
-    # activation/weight/other streams (psum/output use dram_bytes_per_second).
-    dram_mode: str = "shared"
-    activation_read_bytes_per_second: float | None = None
-    weight_read_bytes_per_second: float | None = None
-
-    def __post_init__(self):
-        for name in ("pe_rows", "pe_cols", "sram_bytes", "accumulator_bits"):
-            value = getattr(self, name)
-            if type(value) is not int or value <= 0:
-                raise ValueError(f"{name} must be a positive integer")
-        for name in ("frequency_hz", "dram_bytes_per_second"):
-            value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value) or value <= 0:
-                raise ValueError(f"{name} must be finite and positive")
-        if type(self.pipeline_cycles) is not int or self.pipeline_cycles < 0:
-            raise ValueError("pipeline_cycles must be a nonnegative integer")
-        if type(self.overlap_compute_memory) is not bool:
-            raise ValueError("overlap_compute_memory must be bool")
-        if self.dram_mode not in {"shared", "independent"}:
-            raise ValueError("dram_mode must be shared or independent")
-        for name in ("activation_read_bytes_per_second", "weight_read_bytes_per_second"):
-            value = getattr(self, name)
-            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
-                                      or not isfinite(value) or value <= 0):
-                raise ValueError(f"{name} must be None or finite and positive")
-            if self.dram_mode == "independent" and value is None:
-                raise ValueError(f"Independent streams require explicit {name}")
 
 
 @dataclass(frozen=True)

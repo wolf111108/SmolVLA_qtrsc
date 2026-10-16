@@ -5,41 +5,30 @@ from contextlib import contextmanager
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from .backends import create_backend
 from .capture import make_event
-from .report import ASSUMPTIONS, accumulate, new_totals
-from .schema import HardwareSpec, MappingSpec, SCHEMA_VERSION
-from .timeloop import SearchSpec, TimeloopMapper
+from .report import accumulate, new_totals
+from .schema import MappingSpec, SCHEMA_VERSION
+from .modeling.backend import ComponentBackend
+from .modeling.mapper import SearchSpec
 
 
 class HardwareManager:
-    def __init__(self, output_dir, *, backend="dense_analytic", hardware=None,
+    def __init__(self, output_dir, *, backend="component_sim",
                  mapping=None, mapping_search=None, max_events=10000, provenance=None,
                  backend_config=None, runtime_stats_provider=None):
         self.output_dir = Path(output_dir)
-        self.backend = create_backend(backend)
-        if not self.backend.required_features <= {"metadata"}:
-            raise ValueError("This capture version provides metadata only; backend requires unavailable features")
+        if backend != "component_sim":
+            raise ValueError("Only component_sim is supported; replay old traces with a component configuration")
+        self.backend = ComponentBackend()
         self.backend_config = dict(backend_config or {})
         self.runtime_stats_provider = runtime_stats_provider
         if runtime_stats_provider is not None and not callable(runtime_stats_provider):
             raise ValueError("runtime_stats_provider must be callable")
-        if self.backend_config and not hasattr(self.backend, "configure"):
-            raise ValueError("This backend does not accept backend_config")
-        if hasattr(self.backend, "configure"):
-            self.backend.configure(**self.backend_config)
-        self.assumptions = getattr(self.backend, "assumptions", ASSUMPTIONS)
-        self.hardware = HardwareSpec(**(hardware or {}))
+        self.backend.configure(**self.backend_config)
+        self.assumptions = self.backend.assumptions
         self.mapping = MappingSpec(**(mapping or {}))
         self.mapping_search = SearchSpec(**(mapping_search or {}))
-        if self.mapping_search.enabled and backend not in {"dense_analytic", "component_sim"}:
-            raise ValueError("mapping_search requires dense_analytic or component_sim")
-        self.mapper = (TimeloopMapper(self.hardware, self.mapping_search)
-                       if self.mapping_search.enabled and backend == "dense_analytic" else None)
-        if backend == "component_sim":
-            self.backend.search = self.mapping_search
-            if self.mapping_search.enabled and self.mapping_search.dataflows != ("output_stationary",):
-                raise ValueError("component_sim mapping_search requires dataflows=['output_stationary']")
+        self.backend.search = self.mapping_search
         if type(max_events) is not int or max_events < 0:
             raise ValueError("max_events must be a nonnegative integer (0 = unlimited)")
         self.max_events = max_events
@@ -74,11 +63,7 @@ class HardwareManager:
             raise RuntimeError("Use a fresh manager for each capture/replay session")
         self.output_dir.mkdir(parents=True, exist_ok=True)
         # A trace is evidence: never silently overwrite a previous capture.
-        names = ["trace.jsonl", "operators.csv", "summary.json"]
-        if self.mapper:
-            names.append("mappings.jsonl")
-        if self.backend.name == "component_sim":
-            names.append("simulations.jsonl")
+        names = ["trace.jsonl", "operators.csv", "summary.json", "simulations.jsonl"]
         for name in names:
             if (self.output_dir / name).exists():
                 raise FileExistsError(self.output_dir / name)
@@ -95,15 +80,11 @@ class HardwareManager:
                 "memory_seconds", "tile_m", "tile_n", "tile_k", "dataflow",
             ])
             self._csv.writeheader()
-            if self.mapper:
-                self._mappings = open(self.output_dir / "mappings.jsonl", "x", encoding="utf-8")
-                self._streams.append(self._mappings)
-            if self.backend.name == "component_sim":
-                self._simulations = open(self.output_dir / "simulations.jsonl", "x", encoding="utf-8")
-                self._streams.append(self._simulations)
+            self._simulations = open(self.output_dir / "simulations.jsonl", "x", encoding="utf-8")
+            self._streams.append(self._simulations)
             self.manifest = dict(record_type="manifest", schema_version=SCHEMA_VERSION,
                                  backend=self.backend.name, backend_version=self.backend.version,
-                                 hardware=asdict(self.hardware), mapping=asdict(self.mapping),
+                                 mapping=asdict(self.mapping),
                                  mapping_search=asdict(self.mapping_search),
                                  max_events=self.max_events, available_features=["metadata"],
                                  provenance=self.provenance, assumptions=self.assumptions,
@@ -125,21 +106,9 @@ class HardwareManager:
             return
         if event.event_id != self.totals["calls"]:
             raise ValueError("Submitted event IDs must be contiguous from zero")
-        selected = self.mapping
-        if self.mapper:
-            result = self.mapper.map_event(event)
-            selected, estimate = result.mapping, result.estimate
-            self._mappings.write(json.dumps(dict(
-                event_id=event.event_id, module_id=event.module_id, component=event.component,
-                phase=event.phase, flow_step=event.flow_step, generation_id=event.generation_id,
-                m=event.m, n=event.n, k=event.k, batch=event.batch,
-                activation_bits=event.a.bits, weight_bits=event.b.bits, output_bits=event.output.bits,
-                **result.to_dict())) + "\n")
-        else:
-            estimate = self.backend.estimate(event, self.hardware, selected)
-            if self.backend.name == "component_sim":
-                selected = self.backend.last_mapping
-                self._simulations.write(json.dumps(self.backend.last_record) + "\n")
+        estimate = self.backend.estimate(event, self.mapping)
+        selected = self.backend.last_mapping
+        self._simulations.write(json.dumps(self.backend.last_record) + "\n")
         if estimate.status not in {"estimated", "unsupported"} or estimate.event_id != event.event_id:
             raise ValueError("Backend returned an invalid estimate")
         self._trace.write(json.dumps(dict(record_type="operator", **event.to_dict())) + "\n")
@@ -229,9 +198,7 @@ class HardwareManager:
                 error_type=exc_type.__name__ if exc_type else None,
                 manifest=self.manifest, totals=self.totals,
                 mapping_search=dict(enabled=self.mapping_search.enabled,
-                                    unique_workloads=len(self.mapper._cache) if self.mapper else 0,
-                                    cache_hits=self.mapper.cache_hits if self.mapper else 0,
-                                    results_file="mappings.jsonl" if self.mapper else None),
+                                    results_file="simulations.jsonl" if self.mapping_search.enabled else None),
                 captured_generation_count=len(self.generations),
                 unknown_generation_calls=self.unknown_generation_calls,
                 capture_truncated=bool(self.skipped_limit), skipped_limit=self.skipped_limit,

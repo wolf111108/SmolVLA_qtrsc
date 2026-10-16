@@ -8,8 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from vla_tcs2.hardware import HardwareManager, HardwareSpec, MappingSpec, OperatorEvent, TensorDesc
-from vla_tcs2.hardware.backends.dense import DenseAnalytic
+from vla_tcs2.hardware import HardwareManager, MappingSpec, OperatorEvent, TensorDesc
 from vla_tcs2.hardware.capture import make_event, describe
 from vla_tcs2.hardware.trace import read_trace
 
@@ -30,48 +29,7 @@ class FakeTensor:
 
 
 class HardwareTests(unittest.TestCase):
-    def test_tail_tiles_by_hand(self):
-        e = event()
-        h = HardwareSpec(pe_rows=2, pe_cols=4, frequency_hz=100, dram_bytes_per_second=10)
-        t = MappingSpec(tile_m=2, tile_n=4, tile_k=4)
-        r = DenseAnalytic().estimate(e, h, t)
-        self.assertEqual((r.dense_macs, r.compute_cycles), (105, 28))
-        self.assertEqual((r.dram_read_bytes, r.dram_write_bytes), (112, 15))
-        self.assertEqual(r.peak_buffer_bytes, 56)
-        self.assertAlmostEqual(r.latency_seconds, .28 + 12.7)
-        self.assertAlmostEqual(r.pe_utilization, 105 / 224)
-
-    def test_overlap_double_buffers(self):
-        r = DenseAnalytic().estimate(event(), HardwareSpec(pe_rows=2, pe_cols=4,
-            frequency_hz=100, dram_bytes_per_second=10, overlap_compute_memory=True),
-            MappingSpec(tile_m=2, tile_n=4, tile_k=4))
-        self.assertEqual(r.peak_buffer_bytes, 80)
-        self.assertEqual(r.latency_seconds, 12.7)
-
-    def test_sram_overflow_is_not_zero_cost(self):
-        r = DenseAnalytic().estimate(event(), HardwareSpec(sram_bytes=1), MappingSpec())
-        self.assertEqual(r.status, "unsupported")
-        self.assertIsNone(r.latency_seconds)
-
-    def test_outlier_and_mixed_paths_have_no_fake_latency(self):
-        for e in (event(mode="quant_forward", method="pot_fp8_outlier"),
-                  event(metadata={"mixed_precision": True}), event(metadata={"is_bitnet": True}),
-                  event(mode="test_forward")):
-            r = DenseAnalytic().estimate(e, HardwareSpec(), MappingSpec())
-            self.assertEqual(r.dense_macs, 105)
-            self.assertEqual(r.status, "unsupported")
-            self.assertIsNone(r.latency_seconds)
-
-    def test_quantized_per_tensor_core(self):
-        r = DenseAnalytic().estimate(event(mode="quant_forward", method="per_tensor"),
-                                    HardwareSpec(), MappingSpec())
-        self.assertEqual(r.status, "estimated")
-
     def test_bad_specs(self):
-        for config in ({"frequency_hz": 0}, {"frequency_hz": float("nan")},
-                       {"dram_bytes_per_second": float("inf")}, {"pe_rows": True},
-                       {"pipeline_cycles": -1}, {"overlap_compute_memory": "false"}):
-            with self.assertRaises(ValueError): HardwareSpec(**config)
         with self.assertRaises(ValueError): MappingSpec(tile_k=0)
         with self.assertRaises(ValueError): MappingSpec(dataflow="unknown")
 
@@ -141,7 +99,7 @@ class HardwareTests(unittest.TestCase):
     def test_offline_replay_same_configuration(self):
         with tempfile.TemporaryDirectory() as d:
             src, dst = Path(d) / "src", Path(d) / "dst"
-            with HardwareManager(src, hardware={"pe_rows": 3}, mapping={"tile_k": 2}) as hw:
+            with HardwareManager(src, mapping={"tile_k": 2}) as hw:
                 hw.submit(event())
                 hw.submit(event(1, mode="quant_forward", method="outlier"))
             import os

@@ -376,11 +376,10 @@ bash experiments/new_experiment.sh 2026-09-27 phaseL my-topic
 unsupported。完整接口、公式、覆盖边界与运行命令见
 [硬件框架实验设置](experiments/2026-09-22_phaseJ_hardware-framework/docs/experiment_setup.md)。
 
-逐层自动选择 tile/dataflow：设置 `hardware.mapping_search.enabled: true`，在 global buffer
-容量约束下搜索 OS/WS/IS，并保存 `mappings.jsonl`；支持独立配置 activation/weight 读取速度。
-解析搜索器位于 `src/vla_tcs2/hardware/timeloop.py`，使用项目成本模型，最优范围限定为所声明
-候选集合。配置与公式见 [mapping 搜索说明](docs/hardware_mapping.md)，离线配置示例为
-[`configs/hardware/timeloop.json`](configs/hardware/timeloop.json)。
+逐层自动选择 tile：设置 `hardware.mapping_search.enabled: true`，组件模型对候选
+OS/WS/IS tile 构建事件计划并按目标评分，搜索结果和时间线保存到
+`simulations.jsonl`。配置和限制见 [组件建模协议](docs/hardware_components.md)；
+搜索配置示例为 [`configs/hardware/components_search.json`](configs/hardware/components_search.json)。
 
 ---
 
@@ -392,7 +391,7 @@ unsupported。完整接口、公式、覆盖边界与运行命令见
 
 ### Component hardware protocol (v1)
 
-`component_sim` adds configurable DRAM/SRAM/DMA/link/array components, output-stationary
+`component_sim` provides configurable DRAM/SRAM/DMA/link/array components, output-stationary
 execution plans, deterministic resource scheduling, runtime-statistics adapters and
 trace replay. Run `python scripts/demo_hardware_components.py --output-dir outputs/component_demo`.
 See [component modeling protocol](docs/hardware_components.md) and

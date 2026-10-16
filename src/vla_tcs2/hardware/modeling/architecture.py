@@ -129,32 +129,32 @@ class Architecture:
                 raise UnsupportedModel(f"{name} needs {size} bytes; capacity is {capacity}")
 
 
-def default_architecture(hardware=None):
-    """Legacy hardware settings seed explicit components; no hidden state."""
-    from ..schema import HardwareSpec
-    h = hardware or HardwareSpec(pe_rows=32, pe_cols=32, sram_bytes=4 * 1024**2,
-                                 dram_bytes_per_second=71.68e9, overlap_compute_memory=True)
-    if h.dram_mode != "shared":
-        raise ValueError("Component simulator requires shared DRAM; configure separate components explicitly")
-    memory = {"type": "sram", "capacity_bytes": h.sram_bytes,
+def default_architecture():
+    """Explicit baseline for direct API calls; production runs should configure components."""
+    memory = {"type": "sram", "capacity_bytes": 4 * 1024**2,
               "read_bytes_per_cycle": 256, "write_bytes_per_cycle": 256}
     return Architecture({
-        "schema_version": 1, "clock_hz": h.frequency_hz,
+        "schema_version": 1, "clock_hz": 1e9,
         "components": {
-            "dram": {"type": "dram", "bandwidth_bytes_per_second": h.dram_bytes_per_second,
-                     "efficiency": 1.0, "latency_cycles": 0, "burst_bytes": 1},
+            "dram": {"type": "dram", "bandwidth_bytes_per_second": 102.4e9,
+                     "efficiency": 0.7, "latency_cycles": 100, "burst_bytes": 64},
             "dma": {"type": "dma", "bytes_per_cycle": 256},
             "noc": {"type": "link", "bytes_per_cycle": 256},
             "operand_link": {"type": "link", "bytes_per_cycle": 256},
             "accumulator_link": {"type": "link", "bytes_per_cycle": 256},
-            "gb": memory, "local": dict(memory), "acc": dict(memory),
-            "array": {"type": "compute_array", "rows": h.pe_rows, "cols": h.pe_cols,
-                      "pipeline_cycles": h.pipeline_cycles, "accumulator_bits": h.accumulator_bits,
+            "gb": memory,
+            "local": {"type": "sram", "capacity_bytes": 128 * 1024,
+                      "read_bytes_per_cycle": 256, "write_bytes_per_cycle": 256},
+            "acc": {"type": "sram", "capacity_bytes": 64 * 1024,
+                    "read_bytes_per_cycle": 256, "write_bytes_per_cycle": 256},
+            "array": {"type": "compute_array", "rows": 32, "cols": 32,
+                      "pipeline_cycles": 0, "accumulator_bits": 32,
                       "supported_formats": ["int4", "int8", "int12", "int16", "float16", "bfloat16", "float32",
                                             "e2m1", "e4m3", "e4m3fn", "e5m2", "e5m10"]}},
         "roles": {"dram": "dram", "global": "gb", "local": "local", "accumulator": "acc", "array": "array"},
         "connections": [{"from": f"{a}.data", "to": f"{b}.data", "via": link} for a, b, link in
                         [("dram", "gb", "dma"), ("gb", "dram", "dma"),
                          ("gb", "local", "noc"), ("acc", "gb", "noc"),
+                         ("gb", "acc", "noc"),
                          ("local", "array", "operand_link"), ("array", "acc", "accumulator_link"),
                          ("acc", "array", "accumulator_link")]]})

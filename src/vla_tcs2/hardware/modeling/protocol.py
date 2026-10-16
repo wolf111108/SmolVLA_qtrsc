@@ -6,6 +6,11 @@ from typing import Any, Mapping, Protocol
 PROTOCOL_VERSION = 1
 
 
+def packed_bytes(elements, bits):
+    """Bytes needed for a packed logical tile, rounded once per transfer."""
+    return (elements * bits + 7) // 8
+
+
 def integer(value, name, minimum=0):
     if type(value) is not int or value < minimum:
         raise ValueError(f"{name} must be an integer >= {minimum}")

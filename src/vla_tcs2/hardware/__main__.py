@@ -11,7 +11,7 @@ def main():
     parser = argparse.ArgumentParser(description="Replay a tensor-free hardware trace (no torch required)")
     parser.add_argument("--trace", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--config", type=Path, help="JSON object with backend/hardware/mapping settings")
+    parser.add_argument("--config", type=Path, help="JSON object with backend_config/mapping/mapping_search settings")
     args = parser.parse_args()
     options = json.loads(args.config.read_text()) if args.config else {}
     # Replay all recorded events by default, even if source capture was bounded.
@@ -23,13 +23,14 @@ def main():
     records = read_trace(args.trace)
     try:
         source = next(records)
-        switching_backend = options.get("backend", source["backend"]) != source["backend"]
-        for key in ("backend", "hardware", "mapping", "mapping_search", "backend_config"):
-            # Backend-specific settings are not portable to another model.
-            if switching_backend and key in {"mapping_search", "backend_config"}:
-                continue
-            if key in source:
+        legacy_source = source.get("backend") != "component_sim"
+        for key in ("mapping", "mapping_search", "backend_config"):
+            if key in source and not legacy_source:
                 options.setdefault(key, source[key])
+        if legacy_source and not args.config:
+            raise ValueError("Legacy analytical traces require --config with a component architecture")
+        if legacy_source:
+            options.pop("backend", None)
         with HardwareManager(args.output_dir, provenance={
             "source_trace_sha256": digest.hexdigest(), "source_manifest": source,
             "note": "Replay completion only covers stored events; see source summary for capture truncation/failure",
