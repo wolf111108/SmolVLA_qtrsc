@@ -7,3 +7,7 @@
 *.log
 /xsim.dir/
 /.Xil/
+xcelium.d/
+INCA_libs/
+.history*
+*.history

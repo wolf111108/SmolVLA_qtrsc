@@ -13,7 +13,7 @@ struct Counter : sc_core::sc_module {
     }
 
     void tick() { count.write(++value); }
-};
+};          
 
 struct Monitor : sc_core::sc_module {
     sc_core::sc_in<unsigned> count{"count"};
