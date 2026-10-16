@@ -23,7 +23,11 @@ def main():
     records = read_trace(args.trace)
     try:
         source = next(records)
-        for key in ("backend", "hardware", "mapping", "mapping_search"):
+        switching_backend = options.get("backend", source["backend"]) != source["backend"]
+        for key in ("backend", "hardware", "mapping", "mapping_search", "backend_config"):
+            # Backend-specific settings are not portable to another model.
+            if switching_backend and key in {"mapping_search", "backend_config"}:
+                continue
             if key in source:
                 options.setdefault(key, source[key])
         with HardwareManager(args.output_dir, provenance={

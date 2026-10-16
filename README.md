@@ -389,3 +389,11 @@ unsupported。完整接口、公式、覆盖边界与运行命令见
 | 日期 | 修改内容 |
 |---|---|
 | 2026-09-26 | 校正量化范围（QK/PV MatMul 已实现、384 sites 清单、精度矩阵、`module_id` 命名）；新增稀疏度/计算量统计口径与实验索引；修正环境变量说明与失效文档链接 |
+
+### Component hardware protocol (v1)
+
+`component_sim` adds configurable DRAM/SRAM/DMA/link/array components, output-stationary
+execution plans, deterministic resource scheduling, runtime-statistics adapters and
+trace replay. Run `python scripts/demo_hardware_components.py --output-dir outputs/component_demo`.
+See [component modeling protocol](docs/hardware_components.md) and
+[example architecture](configs/hardware/components.json) for APIs, assumptions and extensions.

@@ -2,7 +2,7 @@
 import csv
 import json
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from .backends import create_backend
@@ -14,17 +14,32 @@ from .timeloop import SearchSpec, TimeloopMapper
 
 class HardwareManager:
     def __init__(self, output_dir, *, backend="dense_analytic", hardware=None,
-                 mapping=None, mapping_search=None, max_events=10000, provenance=None):
+                 mapping=None, mapping_search=None, max_events=10000, provenance=None,
+                 backend_config=None, runtime_stats_provider=None):
         self.output_dir = Path(output_dir)
         self.backend = create_backend(backend)
         if not self.backend.required_features <= {"metadata"}:
             raise ValueError("This capture version provides metadata only; backend requires unavailable features")
+        self.backend_config = dict(backend_config or {})
+        self.runtime_stats_provider = runtime_stats_provider
+        if runtime_stats_provider is not None and not callable(runtime_stats_provider):
+            raise ValueError("runtime_stats_provider must be callable")
+        if self.backend_config and not hasattr(self.backend, "configure"):
+            raise ValueError("This backend does not accept backend_config")
+        if hasattr(self.backend, "configure"):
+            self.backend.configure(**self.backend_config)
+        self.assumptions = getattr(self.backend, "assumptions", ASSUMPTIONS)
         self.hardware = HardwareSpec(**(hardware or {}))
         self.mapping = MappingSpec(**(mapping or {}))
         self.mapping_search = SearchSpec(**(mapping_search or {}))
-        if self.mapping_search.enabled and backend != "dense_analytic":
-            raise ValueError("mapping_search currently requires backend=dense_analytic")
-        self.mapper = TimeloopMapper(self.hardware, self.mapping_search) if self.mapping_search.enabled else None
+        if self.mapping_search.enabled and backend not in {"dense_analytic", "component_sim"}:
+            raise ValueError("mapping_search requires dense_analytic or component_sim")
+        self.mapper = (TimeloopMapper(self.hardware, self.mapping_search)
+                       if self.mapping_search.enabled and backend == "dense_analytic" else None)
+        if backend == "component_sim":
+            self.backend.search = self.mapping_search
+            if self.mapping_search.enabled and self.mapping_search.dataflows != ("output_stationary",):
+                raise ValueError("component_sim mapping_search requires dataflows=['output_stationary']")
         if type(max_events) is not int or max_events < 0:
             raise ValueError("max_events must be a nonnegative integer (0 = unlimited)")
         self.max_events = max_events
@@ -62,6 +77,8 @@ class HardwareManager:
         names = ["trace.jsonl", "operators.csv", "summary.json"]
         if self.mapper:
             names.append("mappings.jsonl")
+        if self.backend.name == "component_sim":
+            names.append("simulations.jsonl")
         for name in names:
             if (self.output_dir / name).exists():
                 raise FileExistsError(self.output_dir / name)
@@ -81,12 +98,17 @@ class HardwareManager:
             if self.mapper:
                 self._mappings = open(self.output_dir / "mappings.jsonl", "x", encoding="utf-8")
                 self._streams.append(self._mappings)
+            if self.backend.name == "component_sim":
+                self._simulations = open(self.output_dir / "simulations.jsonl", "x", encoding="utf-8")
+                self._streams.append(self._simulations)
             self.manifest = dict(record_type="manifest", schema_version=SCHEMA_VERSION,
                                  backend=self.backend.name, backend_version=self.backend.version,
                                  hardware=asdict(self.hardware), mapping=asdict(self.mapping),
                                  mapping_search=asdict(self.mapping_search),
                                  max_events=self.max_events, available_features=["metadata"],
-                                 provenance=self.provenance, assumptions=ASSUMPTIONS)
+                                 provenance=self.provenance, assumptions=self.assumptions,
+                                 backend_config=self.backend_config,
+                                 runtime_stats_provider_enabled=self.runtime_stats_provider is not None)
             self._trace.write(json.dumps(self.manifest) + "\n")
             self._opened = self._used = True
             return self
@@ -115,6 +137,9 @@ class HardwareManager:
                 **result.to_dict())) + "\n")
         else:
             estimate = self.backend.estimate(event, self.hardware, selected)
+            if self.backend.name == "component_sim":
+                selected = self.backend.last_mapping
+                self._simulations.write(json.dumps(self.backend.last_record) + "\n")
         if estimate.status not in {"estimated", "unsupported"} or estimate.event_id != event.event_id:
             raise ValueError("Backend returned an invalid estimate")
         self._trace.write(json.dumps(dict(record_type="operator", **event.to_dict())) + "\n")
@@ -155,6 +180,12 @@ class HardwareManager:
                     return
                 event = make_event(self.totals["calls"], module_id, kind, module,
                                    args, kwargs, output, get_runtime_context())
+                if self.runtime_stats_provider is not None:
+                    from .modeling.runtime import RuntimeStats
+                    stats = self.runtime_stats_provider(event, module, args, kwargs, output)
+                    if not isinstance(stats, RuntimeStats) or stats.event_id != event.event_id:
+                        raise ValueError("Runtime provider must return matching RuntimeStats")
+                    event = replace(event, metadata=dict(event.metadata, runtime_stats=stats.to_dict()))
                 self.submit(event)
                 # Returning None preserves the original output object.
             return collect

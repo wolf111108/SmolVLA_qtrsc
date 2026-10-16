@@ -1,7 +1,15 @@
 """Small explicit registry; additional backends register a zero-argument factory."""
 from .dense import DenseAnalytic
 
-_FACTORIES = {"dense_analytic": DenseAnalytic}
+
+def _component_factory():
+    # Lazy import avoids a cycle through the mapping module and permits
+    # dependency-free use of the legacy backend.
+    from .component import ComponentBackend
+    return ComponentBackend()
+
+
+_FACTORIES = {"dense_analytic": DenseAnalytic, "component_sim": _component_factory}
 
 
 def register_backend(name, factory):
