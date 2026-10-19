@@ -27,6 +27,7 @@ entries in scale_methods:
 from __future__ import annotations
 
 from typing import Callable, Optional
+from vla_tcs2.hardware.quant_observer import emit_quantized_operands
 
 import torch
 import torch.nn.functional as F
@@ -259,6 +260,7 @@ def quant_forward_per_tensor(layer, x, stat_collector=None) -> torch.Tensor:
         out_code = torch.div(out_code, LINEAR_SHIFT_NUM, rounding_mode="floor")
 
         out = out_code.mul(layer.o_interval).to(x.dtype)
+        emit_quantized_operands(layer, x, layer.weight, x_code, w_code, out, out_code, linear=True)
         _collect_linear_runtime(
             layer,
             stat_collector,
@@ -890,6 +892,7 @@ def matmul_quant_forward_per_tensor(layer, A, B, stat_collector=None) -> torch.T
         )
 
         out = out_code.mul(layer.O_interval).to(A.dtype)
+        emit_quantized_operands(layer, A, B, A_sim, B_sim, out, out_code, linear=False)
         _collect_matmul_runtime(
             layer, stat_collector, O_code=out_code, O_spec=layer.O_spec,
         )

@@ -1,0 +1,134 @@
+# Paper core facts + explicit system assumptions. See docs/experiment_setup.md.
+output_dir: outputs/2026-10-19_phaseM_paper-bipolar-vlm-expert/int8_w4
+model:
+  type: smolvla
+  path: lerobot/smolvla_libero
+  revision: a24f1f380461b665158d52acd140152c79e8b36d
+  device: cuda
+  overrides:
+    n_action_steps: 50
+    num_steps: 10
+quantization:
+  enabled: true
+  mode: quant_forward
+  method: per_tensor
+  scale_dir: scales/2026-10-19_phaseM_paper-bipolar-vlm-expert/int8_w4
+  outlier_ratio: 0.0
+  mixed_precision: false
+  dynamic_activation: false
+  quantize_matmul: true
+  matmul_scale_granularity: per_site
+  linear_scale_granularity: per_site
+  weight_quant_granularity: per_tensor
+  calibration_policy:
+    default: recalibrate
+  q_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    p: 4
+    outlier_ratio: 0.0
+  k_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    p: 4
+    outlier_ratio: 0.0
+  v_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    p: 4
+    outlier_ratio: 0.0
+  o_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    p: 4
+    outlier_ratio: 0.0
+  gate_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    p: 4
+    outlier_ratio: 0.0
+  up_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    p: 4
+    outlier_ratio: 0.0
+  down_proj:
+    a_bit: 8
+    w_bit: 8
+    o_bit: 8
+    d_bit: 4
+    p: 4
+    outlier_ratio: 0.0
+  qk_matmul:
+    A_bit: 8
+    B_bit: 8
+    O_bit: 8
+    d_bit: 4
+    p: 4
+    outlier_ratio: 0.0
+  pv_matmul:
+    A_bit: 8
+    B_bit: 8
+    O_bit: 8
+    d_bit: 4
+    p: 4
+    outlier_ratio: 0.0
+  vision:
+    enabled: false
+    matmul:
+      enabled: false
+  connector:
+    enabled: false
+  linear:
+    enabled: true
+    include:
+    - vlm.*
+    - expert.*
+    exclude:
+    - vision.*
+    - connector.*
+    overrides:
+    - name: expert_int4_weights
+      target:
+        component: expert
+      config:
+        a_bit: 8
+        w_bit: 4
+        o_bit: 8
+        method: per_tensor
+        outlier_ratio: 0.0
+sparsity:
+  enabled: false
+experiment:
+  seed: 42
+  prompt: Pick up the black bowl and place it on the plate.
+paper_hardware:
+  clock_hz: 390000000
+  dram_bytes_per_second: 12000000000
+  dram_latency_ns: 100
+  dram_burst_bytes: 64
+  dma_outstanding: 8
+  input_bytes: 16384
+  weight_bytes: 131072
+  metadata_bytes: 8192
+  accumulator_bytes: 8192
+  input_bytes_per_cycle: 32
+  weight_bytes_per_cycle: 128
+  metadata_bytes_per_cycle: 16
+  auxiliary_elements_per_cycle: 32
+  auxiliary_special_latency: 8
+  memory_block_bytes: 1024
+  k_tile: 128
+  group: D3
