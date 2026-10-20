@@ -39,6 +39,10 @@ class MemorySystem:
         self.peak = Counter()
         self.buffers = {}
         self.pinned = {pool: set() for pool in self.caches}
+        # Incremental per-bank occupancy tracking avoids full-cache scans on
+        # every block access; parity cache avoids recomputing bank bases.
+        self.bank_totals = {pool: Counter() for pool in self.caches}
+        self._bank_base = {}
 
     def buffer(self, ident, size, category, *, initialized=True):
         if ident in self.buffers:
@@ -130,21 +134,27 @@ class MemorySystem:
         return result
 
     def bank(self, b, index, pool):
-        return (
-            (self.addresses[b.id] // self.c.memory_block_bytes + index) % 2
-            if pool != "metadata"
-            else 0
-        )
+        if pool == "metadata":
+            return 0
+        base = self._bank_base.get(b.id)
+        if base is None:
+            base = self.addresses[b.id] // self.c.memory_block_bytes
+            self._bank_base[b.id] = base
+        return (base + index) % 2
 
     def action(self, pool, kind, b, index, size):
-        amounts = {kind: size}
-        if pool != "metadata":
-            amounts[f"bank{self.bank(b,index,pool)}"] = 1
-        return work(pool, kind, **amounts)
+        if pool == "metadata":
+            return work(pool, kind, **{kind: size})
+        base = self._bank_base.get(b.id)
+        if base is None:
+            base = self.addresses[b.id] // self.c.memory_block_bytes
+            self._bank_base[b.id] = base
+        return work(pool, kind, **{kind: size, f"bank{(base + index) % 2}": 1})
 
     def _evict(self, pool, key):
         entry = self.caches[pool].pop(key)
         b, off, size, dirty, ready, used = entry
+        self.bank_totals[pool][self.bank(b, off // self.c.memory_block_bytes, pool)] -= size
         if dirty:
             read = self.s.issue(
                 f"{pool}.evict",
@@ -161,6 +171,7 @@ class MemorySystem:
             raise ValueError("SRAM access exceeds backing buffer")
         blocksize = self.c.memory_block_bytes
         cache = self.caches[pool]
+        bank_totals = self.bank_totals[pool]
         results = []
         for index in range(offset // blocksize, ceil((offset + size) / blocksize)):
             key = (b.id, index)
@@ -178,10 +189,10 @@ class MemorySystem:
                     return [
                         (q, e)
                         for q, e in cache.items()
-                        if self.bank(e[0], q[1], pool) == bank
+                        if (0 if pool == "metadata" else self.bank(e[0], q[1], pool)) == bank
                     ]
 
-                while sum(e[2] for _, e in same_bank()) + stored > limit:
+                while bank_totals[bank] + stored > limit:
                     # Wait for both dirty writeback and the last use before replacement.
                     candidates = [
                         q for q, _ in same_bank() if q not in self.pinned[pool]
@@ -199,12 +210,13 @@ class MemorySystem:
                 if full_write:
                     loaded = max([self.s.floor, *dependencies], key=lambda t: t.end)
                 else:
+                    backing = self.backing.get(key)
                     transfer = self.dma(
                         b,
                         off,
                         stored,
                         "read",
-                        (*dependencies, self.backing.get(key, Completion())),
+                        (*dependencies, backing) if backing is not None else tuple(dependencies),
                     )
                     loaded = self.s.issue(
                         f"{pool}.fill",
@@ -213,19 +225,18 @@ class MemorySystem:
                         (transfer,),
                     )
                 cache[key] = [b, off, stored, False, loaded, loaded]
+                bank_totals[bank] += stored
                 self.counts[f"{pool}.miss_bytes"] += stored
             else:
                 self.counts[f"{pool}.hit_bytes"] += amount
             entry = cache[key]
             cache.move_to_end(key)
-            self.peak[pool] = max(self.peak[pool], sum(e[2] for e in cache.values()))
+            self.peak[pool] = max(
+                self.peak[pool], sum(bank_totals.values())
+            )
             self.peak[f"{pool}.bank{self.bank(b,index,pool)}"] = max(
                 self.peak[f"{pool}.bank{self.bank(b,index,pool)}"],
-                sum(
-                    e[2]
-                    for q, e in cache.items()
-                    if self.bank(e[0], q[1], pool) == self.bank(b, index, pool)
-                ),
+                bank_totals[self.bank(b, index, pool)],
             )
             if not service:
                 self.pinned[pool].add(key)

@@ -16,6 +16,15 @@ from math import ceil
 from ..modeling.protocol import Action, PlanEvent
 
 
+def _freeze(value):
+    """Recursively convert nested dicts/lists into hashable tuples."""
+    if isinstance(value, dict):
+        return tuple(sorted((k, _freeze(v)) for k, v in value.items()))
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(v) for v in value)
+    return value
+
+
 @dataclass
 class Completion:
     id: int = -1
@@ -24,8 +33,14 @@ class Completion:
 
 
 class TimelineSink:
-    def __init__(self, root, clock_hz):
+    """Detailed transaction exporter. If window is set, only transactions whose
+    interval intersects [window_start, window_end) cycles are written; counters
+    and occupancy bins still cover the whole replay via the simulator."""
+
+    def __init__(self, root, clock_hz, window=None):
         root.mkdir(parents=True, exist_ok=True)
+        self.window = window  # (start_cycle, end_cycle) or None for everything
+        self.written = 0
         self.events = gzip.open(root / "events.csv.gz", "wt", newline="")
         self.writer = csv.DictWriter(
             self.events,
@@ -59,6 +74,11 @@ class TimelineSink:
         self.trace.write(json.dumps(item, separators=(",", ":")))
 
     def write(self, row):
+        if self.window is not None:
+            lo, hi = self.window
+            if row["end"] <= lo or row["start"] >= hi:
+                return
+        self.written += 1
         self.writer.writerow(
             {
                 k: (
@@ -105,9 +125,17 @@ class TimelineSink:
 
 
 class StreamingEventSimulator:
-    def __init__(self, architecture, sink=None):
+    def __init__(self, architecture, sink=None, occupancy_bins=1000):
         self.architecture, self.sink = architecture, sink
+        # Online occupancy bins over an elastic horizon: when an event exceeds
+        # the horizon the bins are re-scaled (doubles amortize to O(1)/event).
+        self.bin_count = occupancy_bins
+        self._horizon = 1
+        self._occ = {r: [0] * occupancy_bins for r in architecture.resources}
         self.calendars = {r: [] for r in architecture.resources}
+        # Parallel start lists keep interval lookup O(log n) without rebuilding
+        # a key list on every issue() call.
+        self.calendar_starts = {r: [] for r in architecture.resources}
         self.serial = 0
         self.busy = Counter()
         self.service = Counter()
@@ -116,6 +144,9 @@ class StreamingEventSimulator:
         self.context = {}
         self.floor = Completion()
         self.last = Completion()
+        # Repeated identical actions (same target/kind/params) dominate large
+        # GEMM replays; cache their lowered demands, duration and counters.
+        self._lower_cache = {}
 
     def issue(self, kind, category, actions=(), deps=(), metadata=None):
         ds = [self.floor, *deps]
@@ -123,21 +154,34 @@ class StreamingEventSimulator:
         ready = start = ready_token.end
         pred = ready_token
         blockers = {}
-        event = PlanEvent(str(self.serial), tuple(actions))
         if actions:
-            model = self.architecture.lower_event(event)
-            if len(model.phases) != 1:
-                raise ValueError("Split pipelined actions into single-stage events")
-            phase = model.phases[0]
-            demands = {d.resource: d.amount for d in phase.demands}
-            duration = phase.fixed_cycles + max(
-                (
-                    ceil(n / self.architecture.resources[r].units_per_cycle)
-                    for r, n in demands.items()
-                ),
-                default=0,
-            )
-            self.counters.update(model.counters)
+            if len(actions) == 1:
+                a = actions[0]
+                cache_key = (a.target, a.kind, _freeze(a.params))
+            else:
+                cache_key = tuple(
+                    (a.target, a.kind, _freeze(a.params)) for a in actions
+                )
+            cached = self._lower_cache.get(cache_key)
+            if cached is None:
+                event = PlanEvent(str(self.serial), tuple(actions))
+                model = self.architecture.lower_event(event)
+                if len(model.phases) != 1:
+                    raise ValueError("Split pipelined actions into single-stage events")
+                phase = model.phases[0]
+                demands = {d.resource: d.amount for d in phase.demands}
+                duration = phase.fixed_cycles + max(
+                    (
+                        ceil(n / self.architecture.resources[r].units_per_cycle)
+                        for r, n in demands.items()
+                    ),
+                    default=0,
+                )
+                cached = (tuple(demands.items()), duration, tuple(model.counters.items()))
+                self._lower_cache[cache_key] = cached
+            demands = dict(cached[0])
+            duration = cached[1]
+            self.counters.update(cached[2])
         else:
             demands, duration = {}, 0
         resources = tuple(demands)
@@ -147,7 +191,7 @@ class StreamingEventSimulator:
                 for r in resources:
                     intervals = self.calendars[r]
                     # Calendars are ordered and never overlapping.
-                    idx = bisect_left([x[0] for x in intervals], start)
+                    idx = bisect_left(self.calendar_starts[r], start)
                     if idx and intervals[idx - 1][1].end > start:
                         idx -= 1
                     while idx < len(intervals) and intervals[idx][0] < start + duration:
@@ -167,9 +211,12 @@ class StreamingEventSimulator:
         token = Completion(self.serial, start + duration, dict(critical))
         for r in resources:
             intervals = self.calendars[r]
-            idx = bisect_left([x[0] for x in intervals], start)
+            idx = bisect_left(self.calendar_starts[r], start)
             if duration:
                 intervals.insert(idx, (start, token))
+                self.calendar_starts[r].insert(idx, start)
+                for rr in resources:
+                    self._bin_add(rr, start, token.end)
             self.busy[r] += duration
             self.service[r] += ceil(
                 demands[r] / self.architecture.resources[r].units_per_cycle
@@ -201,14 +248,56 @@ class StreamingEventSimulator:
             self.last = token
         return token
 
+    def _bin_add(self, resource, start, end):
+        """Integrate [start, end) into the bin array, rescaling on overflow.
+
+        The horizon starts at 1 cycle and doubles when exceeded; rescaling
+        merges pairs of adjacent bins so total occupancy is preserved exactly.
+        """
+        if end > self._horizon:
+            while end > self._horizon:
+                self._horizon *= 2
+            half = self.bin_count // 2
+            for bins in self._occ.values():
+                merged = [bins[i] + bins[i + half] for i in range(half)]
+                bins[:] = merged + [0] * half
+        bins = self._occ[resource]
+        n, h = self.bin_count, self._horizon
+        b0 = start * n // h
+        if b0 >= n:
+            return
+        b1 = end * n // h
+        if b1 <= b0:
+            b1 = b0 + 1
+        width = h // n
+        for b in range(b0, min(b1, n)):
+            s = b * width if b * width > start else start
+            e = (b + 1) * width if (b + 1) * width < end else end
+            if e > s:
+                bins[b] += e - s
+
+    def occupancy_bins(self):
+        """Per-resource occupancy cycles per bin over the final horizon."""
+        return {r: list(bins) for r, bins in self._occ.items()}
+
     def barrier(self):
         self.floor = self.last
         for r in self.calendars:
-            self.calendars[r] = [
-                (s, t) for s, t in self.calendars[r] if t.end > self.floor.end
-            ]
+            kept = [(s, t) for s, t in self.calendars[r] if t.end > self.floor.end]
+            self.calendars[r] = kept
+            self.calendar_starts[r] = [s for s, _ in kept]
         return self.floor
 
 
 def work(target, kind, **amounts):
-    return Action(target, kind, {"work": amounts})
+    # Cached factory: identical work actions recur millions of times in large
+    # GEMM replays; interning them also speeds up the issue() cache key.
+    key = (target, kind, tuple(sorted(amounts.items())))
+    action = _WORK_CACHE.get(key)
+    if action is None:
+        action = Action(target, kind, {"work": dict(amounts)})
+        _WORK_CACHE[key] = action
+    return action
+
+
+_WORK_CACHE = {}

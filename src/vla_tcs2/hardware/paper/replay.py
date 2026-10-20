@@ -75,7 +75,8 @@ def validate_workload(root, *, complete=True):
     return manifest
 
 
-def replay(workload, output, config=None, *, complete=True, timeline=True):
+def replay(workload, output, config=None, *, complete=True, timeline=True,
+           timeline_window=None, progress_every=25):
     root = Path(workload)
     output = Path(output)
     manifest = validate_workload(root, complete=complete)
@@ -86,7 +87,11 @@ def replay(workload, output, config=None, *, complete=True, timeline=True):
     (output / "resolved_hardware.json").write_text(
         json.dumps(asdict(c), indent=2) + "\n"
     )
-    sink = TimelineSink(output / "timeline", c.clock_hz) if timeline else None
+    sink = (
+        TimelineSink(output / "timeline", c.clock_hz, window=timeline_window)
+        if timeline
+        else None
+    )
     s = StreamingEventSimulator(paper_architecture(c), sink)
     mem = MemorySystem(s, c)
     planner = PaperPlanner(s, mem, c, root)
@@ -190,9 +195,16 @@ def replay(workload, output, config=None, *, complete=True, timeline=True):
                 work=delta(planner.stats, pb),
             )
             operators.append(row)
-            if rec["id"] % 100 == 0:
+            rid = rec["id"]
+            if rid % progress_every == 0:
+                rate = (rid + 1) / (time.monotonic() - start)
+                remain = (manifest["records"] - rid - 1) / rate if rate else 0
                 print(
-                    f'[replay {c.group}] operator {rec["id"]}/{manifest["records"]}; events={s.serial}; elapsed={time.monotonic()-start:.1f}s',
+                    f'[replay {c.group}] operator {rid}/{manifest["records"]} '
+                    f"({rid * 100 // manifest["records"]}%) "
+                    f"events={s.serial} elapsed={time.monotonic()-start:.0f}s "
+                    f"rate={rate:.1f}op/s eta={remain/60:.0f}m "
+                    f"last={rec['module_id'][:40]}",
                     flush=True,
                 )
         before = s.floor
@@ -251,6 +263,15 @@ def replay(workload, output, config=None, *, complete=True, timeline=True):
             host_replay_seconds=time.monotonic() - start,
             output_overflow_elements=manifest["output_overflow_elements"],
         )
+        summary["occupancy"] = {
+            "horizon_cycles": s._horizon,
+            "bins": s.bin_count,
+            "resources": s.occupancy_bins(),
+        }
+        if sink is not None:
+            summary["timeline_events_written"] = sink.written
+            if sink.window is not None:
+                summary["timeline_window"] = list(sink.window)
         (output / "operators.json").write_text(
             json.dumps(operators, separators=(",", ":")) + "\n"
         )
