@@ -368,6 +368,7 @@ bash experiments/new_experiment.sh 2026-09-27 phaseL my-topic
 | [`2026-09-25_phaseI_vision-joint-smoke`](experiments/2026-09-25_phaseI_vision-joint-smoke/docs/results.md) | Vision 72 Linear + 24 QK/PV 联合启用的一次跑通验证 | done |
 | [`2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal`](experiments/2026-09-25_phaseK_vlm-vision-w8-expert-w4-goal/docs/results.md) | 混合精度（Vision+VLM W8 / Expert W4）Goal 100 ep 的精度与稀疏度 | done |
 | [`2026-09-25_phaseK_mixed-full-libero`](experiments/2026-09-25_phaseK_mixed-full-libero/docs/experiment_setup.md) | 同一配置扩展到四 suite（各 400 ep）+ 元素/位稀疏度 + dense-equivalent 计算量 | running |
+| [`2026-11-09_phaseL_int8-goal`](experiments/2026-11-09_phaseL_int8-goal/docs/experiment_setup.md) | Goal baseline / VLM+Expert A8W8O8 / VLM A8W8O8 + Expert A8W4O8（含 QK/PV INT8），分组件 activation/weight bit sparsity | implemented / pending GPU run |
 
 ### 6.1 硬件建模（Phase J）
 
