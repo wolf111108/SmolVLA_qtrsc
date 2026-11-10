@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 from vla_tcs2.hardware.quant_observer import emit_quantized_operands
+from vla_tcs2.stats.bit_group import emit_activation_code
 
 import torch
 import torch.nn.functional as F
@@ -357,7 +358,6 @@ def quant_forward_with_outlier(layer, x, stat_collector=None) -> torch.Tensor:
         )
 
     del w_channel_mask
-    del x_channel_mask
 
     M_q = torch.tensor(layer.o_interval)
     M_q = layer.round(M_q * (2 ** 16))
@@ -379,6 +379,8 @@ def quant_forward_with_outlier(layer, x, stat_collector=None) -> torch.Tensor:
         out_dtype=torch.float32,
         chunk_size=1_048_576,
     )
+    emit_activation_code(layer, "activation", x_sim, x_channel_mask)
+    del x_channel_mask
     w_sim = quant_awo(
         w_normal_fp,
         layer.w_interval,
@@ -986,8 +988,6 @@ def matmul_quant_forward_with_outlier(layer, A, B, stat_collector=None) -> torch
             spec=layer.B_spec,
         )
 
-    del A_channel_mask, B_channel_mask
-
     M_q = torch.tensor(layer.O_interval)
     M_q = layer.round(M_q * (2 ** 16))
 
@@ -1015,6 +1015,10 @@ def matmul_quant_forward_with_outlier(layer, A, B, stat_collector=None) -> torch
         out_dtype=B.dtype,
         chunk_size=1_048_576,
     )
+
+    emit_activation_code(layer, "A", A_sim, A_channel_mask)
+    emit_activation_code(layer, "B", B_sim, B_channel_mask)
+    del A_channel_mask, B_channel_mask
 
     in_features = A.size(-1)
     out_features = B.size(-1)

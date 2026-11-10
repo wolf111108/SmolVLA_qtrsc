@@ -370,6 +370,7 @@ bash experiments/new_experiment.sh 2026-09-27 phaseL my-topic
 | [`2026-09-25_phaseK_mixed-full-libero`](experiments/2026-09-25_phaseK_mixed-full-libero/docs/experiment_setup.md) | 同一配置扩展到四 suite（各 400 ep）+ 元素/位稀疏度 + dense-equivalent 计算量 | running |
 | [`2026-10-19_phaseM_paper-bipolar-vlm-expert`](experiments/2026-10-19_phaseM_paper-bipolar-vlm-expert/docs/experiment_setup.md) | 论文双极性稀疏架构，VLM W8 / expert W4 单次推理，EMA/关键路径/时间线 | 软件验证完成；完整 inference 待本地运行 |
 | [`2026-11-09_phaseL_int8-goal`](experiments/2026-11-09_phaseL_int8-goal/docs/experiment_setup.md) | Goal baseline / VLM+Expert A8W8O8 / VLM A8W8O8 + Expert A8W4O8（含 QK/PV INT8），分组件 activation/weight bit sparsity | implemented / pending GPU run |
+| [`2026-11-10_phaseN_bg-p-sweep`](experiments/2026-11-10_phaseN_bg-p-sweep/docs/experiment_setup.md) | 原码幅值 2-bit BG，p=2…128，VLM A8W8O8 + Expert A8W4O8，Goal task 0 × 1 episode | CPU 验证完成 / pending GPU run |
 
 ### 6.1 硬件建模（Phase J）
 
