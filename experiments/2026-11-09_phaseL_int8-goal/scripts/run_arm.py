@@ -1,10 +1,8 @@
 """Pinned, isolated calibration and Goal evaluation for three matched arms."""
 import argparse
 import json
-import math
 import os
 from pathlib import Path
-import pickle
 import subprocess
 import sys
 
@@ -14,6 +12,7 @@ from common import (ARMS, QUANT_ARMS, ROOT, OUT, digest, expected_ids, load_conf
                     require, source_fingerprint, weight_bits, write)
 
 sys.path.insert(0, str(ROOT / 'src'))
+from vla_tcs2.stats.goal_protocol import audit_scales
 
 
 def prepare():
@@ -42,22 +41,6 @@ def check_prepared():
     require({a: digest(OUT / f'{a}_resolved.yaml') for a in ARMS} == prepared['resolved_configs'],
             'Resolved configs changed since prepare')
     return prepared
-
-
-def audit_scales(modules, scale_dir):
-    entries = []
-    for m in sorted(modules, key=lambda x: x.module_id):
-        for filename in m._scale_file_paths():
-            path = Path(filename)
-            with path.open('rb') as f:
-                value = float(pickle.load(f))
-            require(math.isfinite(value) and value > 0, f'Invalid scale: {path}')
-            entries.append({'file': path.name, 'module_id': m.module_id,
-                            'value': value, 'sha256': digest(path)})
-    names = {e['file'] for e in entries}
-    require(len(entries) == len(names) == 864, 'Expected 864 independent scales')
-    require({p.name for p in scale_dir.glob('*.p')} == names, 'Missing/extra scale files')
-    return entries
 
 
 def run(stage, arm):
