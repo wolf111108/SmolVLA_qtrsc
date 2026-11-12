@@ -1,29 +1,17 @@
 """Experiment constants and lightweight validation (no Torch dependency)."""
-import hashlib
 import json
+import sys
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / 'src'))
+from vla_tcs2.stats.goal_protocol import digest, expected_ids, require, write
 EXP = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'outputs' / EXP.name
 ARMS = ('baseline', 'a8w8', 'a8w4_expert')
 QUANT_ARMS = ARMS[1:]
-
-
-def require(condition, message):
-    if not condition:
-        raise ValueError(message)
-
-
-def write(path, obj):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj, indent=2, allow_nan=False) + '\n')
-
-
-def digest(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def source_fingerprint():
@@ -33,19 +21,6 @@ def source_fingerprint():
                                (EXP / 'scripts', '*.py'), (EXP / 'configs', '*.yaml')):
         files.extend(directory.rglob(pattern))
     return {str(p.relative_to(ROOT)): digest(p) for p in sorted(files)}
-
-
-def expected_ids():
-    linear, mm = {}, {}
-    for comp in ('vlm', 'expert'):
-        for i in range(16):
-            for group, ops in (('self_attn', ('q_proj', 'k_proj', 'v_proj', 'o_proj')),
-                               ('mlp', ('gate_proj', 'up_proj', 'down_proj'))):
-                for op in ops:
-                    linear[f'{comp}.layers.{i}.{group}.{op}'] = comp
-            for op in ('qk', 'pv'):
-                mm[f'{comp}.layer.{i}.{op}'] = comp
-    return linear, mm
 
 
 def weight_bits(arm, comp):
